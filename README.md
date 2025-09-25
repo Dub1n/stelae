@@ -21,7 +21,9 @@ This document specifies a production‑quality, *WSL‑native* MCP stack that ex
 - Orchestrator: **TBXark/**`mcp-proxy` — single HTTP/SSE endpoint, merges tools/prompts/resources; supports upstream **stdio / SSE / streamable HTTP**
 - Progressive discovery: **Klavis Strata** — open‑source MCP that scales beyond 40–50 tools via *discover → details → execute*
 - Discovery/Install engine: **particlefuture/**`1mcpserver` — off‑path helper that searches, selects, and outputs config needed to add servers to the proxy
-- Essentials (initial): Filesystem, ripgrep/Everything search, **mcp-shell** (command exec) *or* **terminal-controller-mcp**, docs fetch (Docy), sequential thinking, tasks/memory
+- Essentials (initial): Filesystem, ripgrep/Everything search, **mcp-shell** (command exec) *or* **terminal-controller-mcp**, docs fetch (Docy), sequential thinking, memory (tasks will be promoted later via `1mcpserver` once the stack is stable)
+
+> **Implementation status:** Manual boot confirms `fs/rg/sh/docs/mem/strata` via `mcp-proxy` with direct binaries. PM2 orchestration, per-tool startup banner capture, and the reconciler-driven promotion path (including re‑adding `mcp-tasks`) remain outstanding—see `TODO.md` before treating this as production-ready.
 
 ---
 
@@ -30,14 +32,14 @@ This document specifies a production‑quality, *WSL‑native* MCP stack that ex
 ```mermaid
 flowchart LR
   subgraph ChatGPT Cloud
-    C[ChatGPT Connector \(single MCP URL)]
+    C["ChatGPT Connector <br>(single MCP URL)"]
   end
-  subgraph WSL2 (Ubuntu)
-    P{{mcp-proxy\nHTTP/SSE @ :9090}}
-    E[Essential MCPs\n(FS / ripgrep / Everything / Shell / Docy / Tasks / Memory / Strata)]
-    S[Strata MCP\n(progressive)]
-    D1[1mcpserver\n(discover/install)]
-    R[Reconciler\n(promote → proxy config)]
+  subgraph "WSL2 (Ubuntu)"
+    P{"{mcp-proxy<br>HTTP/SSE @ :9090}"}
+    E["Essential MCPs<br>(FS / ripgrep / Everything / Shell / Docy / Memory / Strata\n(+ tasks promoted later))"]
+    S["Strata MCP<br>(progressive)"]
+    D1["1mcpserver<br>(discover/install)"]
+    R["Reconciler<br>(promote → proxy config)"]
   end
   C --> P
   P --> E
@@ -59,43 +61,44 @@ flowchart LR
 > All links are to public GitHub or official docs.
 
 - **Orchestrator:** TBXark/**mcp-proxy** — Go proxy that aggregates *tools/prompts/resources* from many MCP servers, serving one HTTP/SSE endpoint. Supports upstream **stdio**, **SSE**, and **streamable HTTP**. Remote config URL supported.
-  [https://github.com/TBXark/mcp-proxy](https://github.com/TBXark/mcp-proxy)
+  [mcp-proxy](https://github.com/TBXark/mcp-proxy)
 
 - **Progressive discovery router:** Klavis‑AI/**klavis** (Strata) — open‑source MCP; “intent → details → execute” to avoid tool overload and scale beyond 40–50 tools.
-  [https://github.com/Klavis-AI/klavis](https://github.com/Klavis-AI/klavis)
+  [klavis](https://github.com/Klavis-AI/klavis)
 
 - **Discovery & install (off‑path):** particlefuture/**1mcpserver** — “MCP of MCPs”; auto‑discovers and outputs config info to add/connect MCP servers locally or remotely.
-  [https://github.com/particlefuture/1mcpserver](https://github.com/particlefuture/1mcpserver)
+  [1mcpserver](https://github.com/particlefuture/1mcpserver)
 
 - **Command execution (pick one):**
   • sonirico/**mcp-shell** — shell actuator MCP with allow/deny control; Go backend.
-  [https://github.com/sonirico/mcp-shell](https://github.com/sonirico/mcp-shell)
+  [mcp-shell](https://github.com/sonirico/mcp-shell)
   • GongRzhe/**terminal-controller-mcp** — secure terminal exec + FS ops; Python backend.
-  [https://github.com/GongRzhe/terminal-controller-mcp](https://github.com/GongRzhe/terminal-controller-mcp)
+  [terminal-controller-mcp](https://github.com/GongRzhe/terminal-controller-mcp)
 
 - **Filesystem & search:**
   • Filesystem MCP (choose a conservative, path‑scoped server; TS or Rust variants exist)
   • erniebrodeur/**mcp-grep** (ripgrep‑like) — content search in repos.
-  [https://github.com/erniebrodeur/mcp-grep](https://github.com/erniebrodeur/mcp-grep)
+  [mcp-grep](https://github.com/erniebrodeur/mcp-grep)
   • mamertofabian/**mcp-everything-search** (Windows Everything) — filename search.
-  [https://github.com/mamertofabian/mcp-everything-search](https://github.com/mamertofabian/mcp-everything-search)
+  [mcp-everything-search](https://github.com/mamertofabian/mcp-everything-search)
 
 - **Docs fetch:** oborchers/**mcp-server-docy** — fetch/scrape docs to Markdown.
-  [https://github.com/oborchers/mcp-server-docy](https://github.com/oborchers/mcp-server-docy)
+  [mcp-server-docy](https://github.com/oborchers/mcp-server-docy)
 
 - **Reasoning:** modelcontextprotocol/**servers** → `src/sequentialthinking` — “plan/think” tools.
-  [https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking)
+  [sequentialthinking](https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking)
 
-- **Memory/Tasks:**
-  • basicmachines‑co/**basic-memory** — markdown/graph memory.
-  [https://github.com/basicmachines-co/basic-memory](https://github.com/basicmachines-co/basic-memory)
-  • hungryrobot1/**MCP-PIF** — prompt‑indexed files.
-  [https://github.com/hungryrobot1/MCP-PIF](https://github.com/hungryrobot1/MCP-PIF)
+- **Memory:**
+  • basicmachines-co/**basic-memory** — markdown/graph memory.
+  [basic-memory](https://github.com/basicmachines-co/basic-memory)
+  • hungryrobot1/**MCP-PIF** — prompt-indexed files.
+  [MCP-PIF](https://github.com/hungryrobot1/MCP-PIF)
+- **Queued for promotion (via 1mcpserver once baseline is stable):**
   • flesler/**mcp-tasks** — local tasks list.
-  [https://github.com/flesler/mcp-tasks](https://github.com/flesler/mcp-tasks)
+  [mcp-tasks](https://github.com/flesler/mcp-tasks)
 
 - **Public URL (for ChatGPT):** Cloudflare Tunnel (free) — `cloudflared tunnel --url http://localhost:9090`
-  [https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/trycloudflare/](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/trycloudflare/)
+  [trycloudflare](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/trycloudflare/)
 
 ---
 
@@ -103,10 +106,10 @@ flowchart LR
 
 - **Least privilege**: Filesystem root path allowlist; deny writes outside repo; `.mcpignore` or equivalent for secrets.
 - **Command exec**: allowlist commands; working‑dir scoping; timeouts; non‑root user; optional containerized **code‑sandbox** MCP for untrusted code.
-  [https://github.com/Automata-Labs-team/code-sandbox-mcp](https://github.com/Automata-Labs-team/code-sandbox-mcp)
+  [code-sandbox-mcp](https://github.com/Automata-Labs-team/code-sandbox-mcp)
 - **Auditability**: proxy & servers log all tool calls (timestamped); MCP Inspector optional for live tracing.
 - **Approvals**: human‑in‑the‑loop prompts for destructive ops (diff previews; confirm flags) or integrate a HITL MCP if desired.
-  [https://github.com/GongRzhe/Human-In-the-Loop-MCP-Server](https://github.com/GongRzhe/Human-In-the-Loop-MCP-Server)
+  [Human-In-the-Loop-MCP-Server](https://github.com/GongRzhe/Human-In-the-Loop-MCP-Server)
 
 ---
 
@@ -155,10 +158,10 @@ npm i -g mcp-server-docy
 # Sequential thinking (official)
 pipx install mcp-sequentialthinking  # or uvx per README
 
-# Memory/Tasks
-npm i -g @flesler/mcp-tasks
+# Memory
 pipx install basic-memory
 pipx install mcp-pif
+# (Tasks will be promoted later via 1mcpserver; hold off on installation for now)
 
 # Strata (progressive discovery)
 pipx install strata-mcp
@@ -190,21 +193,21 @@ Create `~/dev/stelae/config/proxy.json`:
       "name": "fs",
       "type": "stdio",
       "command": "mcp-filesystem-server",
-      "args": ["--root", "/home/USER/dev/Phoenix"],
+      "args": ["--root", "~/dev/stelae"],
       "namespace": "fs"
     },
     {
       "name": "rg",
       "type": "stdio",
       "command": "mcp-grep",
-      "args": ["--root", "/home/USER/dev/Phoenix"],
+      "args": ["--root", "~/dev/stelae"],
       "namespace": "rg"
     },
     {
       "name": "shell",
       "type": "stdio",
       "command": "terminal-controller-mcp",
-      "args": ["--workdir", "/home/USER/dev/Phoenix", "--allow", "npm,pytest,make,python,git"],
+      "args": ["--workdir", "~/dev/stelae", "--allow", "npm,pytest,make,python,git"],
       "namespace": "sh"
     },
     {
@@ -215,17 +218,10 @@ Create `~/dev/stelae/config/proxy.json`:
       "namespace": "docs"
     },
     {
-      "name": "tasks",
-      "type": "stdio",
-      "command": "mcp-tasks",
-      "args": ["--db", "/home/USER/dev/Phoenix/.ai/tasks.json"],
-      "namespace": "tasks"
-    },
-    {
       "name": "memory",
       "type": "stdio",
       "command": "basic-memory",
-      "args": ["--store", "/home/USER/dev/Phoenix/.ai/memory"],
+      "args": ["--store", "~/dev/stelae/.ai/memory"],
       "namespace": "mem"
     },
     {
@@ -239,6 +235,8 @@ Create `~/dev/stelae/config/proxy.json`:
 }
 ```
 
+> Tasks MCP intentionally omitted from the baseline config; plan to promote `mcp-tasks` via `1mcpserver` once the reconciler pipeline is operational.
+
 ---
 
 ## 6. Using the system (from ChatGPT)
@@ -247,7 +245,7 @@ Create `~/dev/stelae/config/proxy.json`:
 
 1. **Open a Phoenix chat** in ChatGPT and enable the connector.
 2. Ask for a task (e.g., "scan repo for TODOs, propose a refactor plan, run tests").
-3. The agent calls **typed tools** (fs/rg/sh/docs/tasks/mem/strata) via `mcp-proxy`.
+3. The agent calls **typed tools** (fs/rg/sh/docs/mem/strata) via `mcp-proxy`; additional surfaces such as tasks will be promoted later via `1mcpserver`.
 4. For rare or new capabilities, the agent triggers the **Reconciler** (below) to search/install via **1mcpserver**, then promotes the chosen server into **`mcp-proxy`** (core) or **Strata** (peripheral). After promotion, the tool appears as first‑class.
 
 ### 6.2 Approvals & safety
@@ -327,7 +325,6 @@ module.exports = {
     { name: 'mcp-proxy', script: './build/mcp-proxy', args: '--config /home/USER/apps/mcp-proxy/config.json' },
     { name: 'strata', script: 'strata-mcp' },
     { name: 'docy', script: 'mcp-server-docy' },
-    { name: 'tasks', script: 'mcp-tasks', args: '--db /home/USER/dev/Phoenix/.ai/tasks.json' },
     { name: 'memory', script: 'basic-memory', args: '--store /home/USER/dev/Phoenix/.ai/memory' },
     { name: 'shell', script: 'terminal-controller-mcp', args: '--workdir /home/USER/dev/Phoenix --allow npm,pytest,make,python,git' },
     { name: '1mcp', script: 'python', args: '-m one_mcp_server', cwd: '/home/USER/apps/1mcpserver' }
@@ -383,7 +380,7 @@ WantedBy=multi-user.target
 ## 11. Phoenix repo integration
 
 - Set Filesystem/grep working roots to the Phoenix repo path
-- Provide task seeds in `./.ai/tasks.json` and knowledge seeds in `./.ai/memory/` (patterns, decisions)
+- Keep knowledge seeds in `./.ai/memory/` (patterns, decisions); task seeds can wait until the dedicated MCP is promoted
 - Expose `npm`, `pytest`, `make`, `git` via shell allowlist
 - Document any Phoenix‑specific MCPs (e.g., custom build or generators) as promotion candidates
 
@@ -453,4 +450,3 @@ make promote CAPABILITY="browser automation" TARGET=core
 - MCP-PIF — [https://github.com/hungryrobot1/MCP-PIF](https://github.com/hungryrobot1/MCP-PIF)
 - code-sandbox-mcp — [https://github.com/Automata-Labs-team/code-sandbox-mcp](https://github.com/Automata-Labs-team/code-sandbox-mcp)
 - Cloudflared quick tunnels — [https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/trycloudflare/](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/trycloudflare/)
-# stelae

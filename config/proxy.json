@@ -1,0 +1,58 @@
+{
+  "mcpProxy": {
+    "baseURL": "http://localhost:9090",
+    "addr": ":9090",
+    "name": "Stelae MCP Proxy",
+    "version": "1.0.0",
+    "type": "streamable-http",
+    "options": {
+      "panicIfInvalid": true,
+      "logEnabled": true
+    }
+  },
+  "mcpServers": {
+    "fs": {
+      "command": "/home/gabri/.local/bin/rust-mcp-filesystem",
+      "args": [
+        "--root",
+        "/home/gabri/dev/stelae"
+      ]
+    },
+    "rg": {
+      "command": "/home/gabri/.local/bin/mcp-grep-server",
+      "args": [
+        "--stdio",
+        "--root",
+        "/home/gabri/dev/stelae"
+      ]
+    },
+    "sh": {
+      "command": "/home/gabri/.local/bin/terminal_controller",
+      "args": [
+        "--workdir",
+        "/home/gabri/dev/Phoenix",
+        "--allow",
+        "npm,pytest,make,python,git"
+      ]
+    },
+    "docs": {
+      "command": "/home/gabri/.local/bin/mcp-server-docy",
+      "args": [
+        "--stdio"
+      ]
+    },
+    "mem": {
+      "command": "/home/gabri/.local/bin/basic-memory",
+      "args": [
+        "--project",
+        "stelae",
+        "mcp",
+        "--transport",
+        "stdio"
+      ]
+    },
+    "strata": {
+      "command": "/home/gabri/.local/bin/strata"
+    }
+  }
+}

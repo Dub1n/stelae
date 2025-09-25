@@ -1,0 +1,36 @@
+# Node.js dependencies and diagnostics
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Runtime artifacts
+logs/
+*.log
+.docy.cache/
+.ai/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Editor and OS noise
+.DS_Store
+.idea/
+.vscode/
+
+# Package manager caches
+.npm/
+.pnpm-store/

@@ -2,7 +2,7 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
 
 # Phase 0 — Prep & Conventions
 
-- [ ] **Enable systemd in WSL**
+- [x] **Enable systemd in WSL**
 
   - Edit `/etc/wsl.conf` →
 
@@ -14,12 +14,12 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
      `wsl --shutdown` (from Windows), re-enter WSL
   - ✅ *Acceptance:* `systemctl is-system-running` returns not `offline`
 
-- [ ] **Create base dirs**
+- [x] **Create base dirs**
 
   - `mkdir -p ~/dev/stelae/{config,reconciler,logs} ~/apps/{mcp-proxy,vendor}`
   - ✅ *Acceptance:* folders exist and are writable by your user
 
-- [ ] **Install dependencies**
+- [x] **Install dependencies**
 
   - `sudo apt-get update && sudo apt-get install -y golang python3-pip python3-venv ripgrep make`
   - Node/NPM: install latest (nvm or distro); `npm -v` ok
@@ -32,19 +32,19 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
 
 # Phase 1 — Core Orchestrator (mcp-proxy)
 
-- [ ] **Clone & build `mcp-proxy`**
+- [x] **Clone & build `mcp-proxy`**
 
   - `cd ~/apps && git clone https://github.com/TBXark/mcp-proxy.git`
   - `cd ~/apps/mcp-proxy && make build`
   - ✅ *Acceptance:* `~/apps/mcp-proxy/build/mcp-proxy` is executable
 
-- [ ] **Create proxy config**
+- [x] **Create proxy config**
 
   - File: `~/dev/stelae/config/proxy.json`
-  - Include essentials: filesystem (root=Phoenix repo), ripgrep, shell exec MCP, docs, tasks, memory, Strata
+  - Include essentials: filesystem (root=Phoenix repo), ripgrep, shell exec MCP, docs, memory, Strata *(tasks deferred; will be promoted later via 1mcpserver)*
   - ✅ *Acceptance:* JSON validates (`jq . proxy.json`), paths exist
 
-- [ ] **First boot (manual)**
+- [x] **First boot (manual)**
 
   - `~/apps/mcp-proxy/build/mcp-proxy --config ~/dev/stelae/config/proxy.json`
   - ✅ *Acceptance:* process starts; logs show connected clients; `curl localhost:9090/health` (if available) or observe startup log
@@ -53,30 +53,31 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
 
 # Phase 2 — Essential MCPs
 
-- [ ] **Install essential servers**
+- [x] **Install essential servers**
 
   - Filesystem MCP (choice you selected) → `npm i -g <package>` or build per README
-  - ripgrep MCP → `npm i -g mcp-grep`
+  - ripgrep MCP → `npm i -g mcp-grep` **used: `pip install mcp-grep`**
   - Shell MCP → **pick one**:
 
     - `pipx install terminal-controller-mcp` **(recommended)**, or
     - build/install `mcp-shell`
   - Docs → `npm i -g mcp-server-docy`
-  - Tasks → `npm i -g @flesler/mcp-tasks`
   - Memory → `pipx install basic-memory` (and/or `pipx install mcp-pif`)
   - Strata → `pipx install strata-mcp`
+  - *(Tasks MCP deferred; schedule via 1mcpserver promotion once baseline stack is stable)*
   - ✅ *Acceptance:* each tool responds to `--help` or starts in a terminal and prints a startup banner
+  - [ ] Capture the banner/`--help` output for each installed MCP and stash the command list for troubleshooting
 
-- [ ] **Wire proxy clients to essentials**
+- [x] **Wire proxy clients to essentials**
 
   - Ensure each client stanza in `proxy.json` matches the binary name + args
-  - ✅ *Acceptance:* Start proxy; logs show each client initialized without error
+  - ✅ *Acceptance:* Start proxy; logs show each client (minus deferred tasks MCP) initialized without error
 
 ---
 
 # Phase 3 — Process Management (pm2)
 
-- [ ] **Drop `ecosystem.config.js`**
+- [x] **Drop `ecosystem.config.js`**
 
   - Place the file you generated at `~/dev/stelae/ecosystem.config.js`
   - Ensure log dir exists: `mkdir -p ~/dev/stelae/logs`
@@ -88,6 +89,7 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
 - `pm2 save`
 - `pm2 startup systemd` → run the printed command once
 - ✅ *Acceptance:* `pm2 status` shows all services online; `reboot` WSL → services auto-start
+  - [ ] Record `pm2 status` and tail key logs (`pm2 logs --lines 50`) to confirm each service stays up for >60s
 
 ---
 
@@ -103,7 +105,7 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
 
 - ChatGPT → Settings → Connectors → Add → paste the tunnel URL
 - Start a new chat and enable the connector
-- ✅ *Acceptance:* In the chat, the agent can list available tools (fs/rg/sh/docs/tasks/memory/strata) and call a simple one (e.g., read a file)
+- ✅ *Acceptance:* In the chat, the agent can list available tools (fs/rg/sh/docs/memory/strata) and call a simple one (e.g., read a file); tasks will be promoted later
 
 ---
 
@@ -144,6 +146,11 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
 - **Core**: after reconcile, `pm2 restart mcp-proxy`
 - **Strata**: no proxy restart required
 - ✅ *Acceptance:* `make promote CAPABILITY="browser automation" TARGET=core` updates `proxy.json` with a new client and restarts proxy
+
+- [ ] **Reintroduce tasks MCP via promotion**
+
+- First successful promotion should target `tasks` via 1mcpserver (core surface)
+- ✅ *Acceptance:* `make promote CAPABILITY="task manager" TARGET=core` adds the tasks MCP stanza and restarts the proxy cleanly
 
 ---
 
@@ -210,7 +217,7 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
 
 - [ ] **Connector verification**
 
-- New chat → enable connector → “List available tools” → call `tasks.list`, `mem.list`, `rg.search` on Phoenix
+- New chat → enable connector → “List available tools” → call `mem.list` and `rg.search` on Phoenix *(add `tasks.list` after promoting the tasks MCP)*
 - ✅ *Acceptance:* Tools are visible and working
 
 - [ ] **Real Phoenix workflow**

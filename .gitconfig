@@ -1,2 +1,15 @@
-* text eol=lf
-text eol=lf
+[core]
+	autocrlf = input
+	eol = lf
+	filemode = false
+	ignorecase = false
+[merge]
+	conflictstyle = zdiff3
+[diff]
+	renames = true
+[fetch]
+	prune = true
+[pull]
+	rebase = false
+[status]
+	showUntrackedFiles = all

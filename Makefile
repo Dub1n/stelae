@@ -46,7 +46,7 @@ PUBLIC_PORT     ?= 9090
 
 # pm2 binary + service list (must match ecosystem.config.js names)
 PM2             ?= pm2
-PM2_SERVICES_CORE ?= mcp-proxy strata docy tasks memory shell 1mcp
+PM2_SERVICES_CORE ?= mcp-proxy strata docy memory shell 1mcp
 
 # ---- Defaults for promote target ----
 # CAPABILITY = the semantic capability to search (e.g., "playwright", "browser automation", "sql client")
