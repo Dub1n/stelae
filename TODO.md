@@ -38,11 +38,11 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
   - `cd ~/apps/mcp-proxy && make build`
   - ✅ *Acceptance:* `~/apps/mcp-proxy/build/mcp-proxy` is executable
 
-- [x] **Create proxy config**
+- [x] **Create proxy config (templated)**
 
-  - File: `~/dev/stelae/config/proxy.json`
-  - Include essentials: filesystem (root=Phoenix repo), ripgrep, shell exec MCP, docs, memory, Strata *(tasks deferred; will be promoted later via 1mcpserver)*
-  - ✅ *Acceptance:* JSON validates (`jq . proxy.json`), paths exist
+  - Maintain `config/proxy.template.json` with placeholders sourced from `.env`
+  - Render concrete JSON via `make render-proxy`
+  - ✅ *Acceptance:* Generated `config/proxy.json` matches current environment values
 
 - [x] **First boot (manual)**
 
@@ -64,7 +64,7 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
   - Docs → `npm i -g mcp-server-docy`
   - Memory → `pipx install basic-memory` (and/or `pipx install mcp-pif`)
   - Strata → `pipx install strata-mcp`
-  - *(Tasks MCP deferred; schedule via 1mcpserver promotion once baseline stack is stable)*
+  - *(Tasks MCP deferred; schedule via 1mcp promotion once baseline stack is stable)*
   - ✅ *Acceptance:* each tool responds to `--help` or starts in a terminal and prints a startup banner
   - [ ] Capture the banner/`--help` output for each installed MCP and stash the command list for troubleshooting
 
@@ -83,19 +83,19 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
   - Ensure log dir exists: `mkdir -p ~/dev/stelae/logs`
   - ✅ *Acceptance:* `node -e "require('./ecosystem.config.js')"` runs without error (from that folder)
 
-- [ ] **Start & persist**
+- [x] **Start & persist**
 
-- `pm2 start ~/dev/stelae/ecosystem.config.js`
-- `pm2 save`
-- `pm2 startup systemd` → run the printed command once
-- ✅ *Acceptance:* `pm2 status` shows all services online; `reboot` WSL → services auto-start
-  - [ ] Record `pm2 status` and tail key logs (`pm2 logs --lines 50`) to confirm each service stays up for >60s
+  - [x] `pm2 start ~/dev/stelae/ecosystem.config.js`
+  - [x] `pm2 save`
+  - [x] `pm2 startup systemd` → run the printed command once (requires sudo password)
+  - ✅ *Acceptance:* `pm2 status` shows all services online; `reboot` WSL → services auto-start
+  - [x] Record `pm2 status` and tail key logs (`pm2 logs --lines 50`) to confirm each service stays up for >60s
 
 ---
 
 # Phase 4 — Single Public URL (Tunnel)
 
-- [ ] **Run cloudflared**
+- [x] **Run cloudflared**
 
 - `cloudflared tunnel --url http://localhost:9090`
 - Copy the HTTPS URL
@@ -109,19 +109,18 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
 
 ---
 
-# Phase 5 — Discovery/Install Sidecar (1mcpserver)
+# Phase 5 — Discovery/Install Sidecar (1mcp agent)
 
-- [ ] **Install / clone**
+- [ ] **Install globally**
 
-- `cd ~/apps/vendor && git clone https://github.com/particlefuture/1mcpserver.git`
-  (or `pipx install one-mcp-server` if available; adjust ecosystem accordingly)
-- ✅ *Acceptance:* `python3 -m one_mcp_server --help` succeeds (or your chosen start command works)
+- `npm install -g @1mcp/agent`
+- ✅ *Acceptance:* `1mcp --version` succeeds from a new shell
 
 - [ ] **Add to pm2**
 
-- Make sure `ecosystem.config.js` includes the 1mcp process entry (module form)
+- Ensure `ecosystem.config.js` launches the binary via stdio (e.g. `script: "1mcp"`, `args: "--transport stdio"`)
 - `pm2 restart 1mcp`
-- ✅ *Acceptance:* `pm2 logs 1mcp` shows it started and is responsive
+- ✅ *Acceptance:* `pm2 logs 1mcp` stays quiet (stdio idle) and `pm2 describe 1mcp` points to the npm binary
 
 ---
 
@@ -133,7 +132,7 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
 - Responsibilities:
 
   - Accept `--capability` and `--target core|strata`
-  - Query 1mcpserver for candidates (capability → servers)
+  - Query 1mcp for candidates (capability → servers)
   - Resolve connection: `stdio` (command/args) or `sse/http` (url)
   - **If core:** append a `clients[]` stanza to `proxy.json`
    -*If strata:** register under Strata (method: either tell Strata to include it or keep it external—doc note in code)
@@ -149,7 +148,7 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
 
 - [ ] **Reintroduce tasks MCP via promotion**
 
-- First successful promotion should target `tasks` via 1mcpserver (core surface)
+- First successful promotion should target `tasks` via 1mcp (core surface)
 - ✅ *Acceptance:* `make promote CAPABILITY="task manager" TARGET=core` adds the tasks MCP stanza and restarts the proxy cleanly
 
 ---
@@ -162,7 +161,7 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
 - Test cases:
 
   - Parses and validates `--capability` & `--target`
-  - Maps 1mcpserver response → correct client stanza (stdio vs http/sse)
+  - Maps 1mcp response → correct client stanza (stdio vs http/sse)
   - Writes JSON atomically; preserves formatting; rejects duplicates
   - Idempotency: promoting the same tool twice doesn’t duplicate
   - Error handling: bad server data raises clear exceptions
@@ -196,8 +195,9 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
 
 - [ ] **README update (stelae)**
 
-- Overview, architecture diagram, one-liner to start, safety guidelines, promotion workflow, rollback
-- ✅ *Acceptance:* A new dev can bootstrap the stack following the README only
+  - [x] Document `.env.example` workflow and refresh pm2 launch example
+  - [ ] Reconcile remaining sections (promotion workflow, rollback) before GA
+  - ✅ *Acceptance:* A new dev can bootstrap the stack following the README only
 
 - [ ] **Makefile finishing touches**
 
@@ -245,6 +245,16 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
 - Keep `proxy.json.bak` and a `proxy.json.prev` snapshot on each promotion
 - Rollback = copy prev → `proxy.json`, `make restart-proxy`
 - ✅ *Acceptance:* Tool surface returns to prior state cleanly
+
+---
+
+## Further Enhancements
+
+- [ ] Serve distinct manifests for local versus remote clients to avoid duplicating endpoints in a single response.
+
+  - Remote: keep `/.well-known/mcp/manifest.json` on `mcp.infotopology.xyz` with public SSE URLs only.
+  - Local: expose a second manifest (e.g. `http://localhost:9090/.well-known/mcp/local-manifest.json`) that lists loopback endpoints, so desktop agents can autodiscover without seeing tunnel hosts.
+  - Requires host-aware routing in `http.go` and an extra renderer toggle in the template, but trims manifest size and removes duplicated entries once implemented.
 
 ---
 

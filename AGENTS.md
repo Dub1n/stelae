@@ -4,6 +4,8 @@
 
 !IMPORTANT: Only **USE BASH COMMANDS** unless asked otherwise or no bash command is available for the task.
 
+*Bash Shell is available to commands invoked as `["bash","-lc",…]`*
+
 ## Placeholders
 
 - NEVER write mocks or placeholders unless explicitly asked to.
@@ -163,14 +165,25 @@ ALWAYS check if there is a way to interact with a project via the CLI before wri
 
 Favor dependency injection using interfaces to promote loose coupling and testability. Use a registry or container to manage dependencies.
 
+## Autonomy
+
+If task completion presents immediate follow-ups, complete them without without notifying the user. Examples incude (but aren't limited to): running tests, verifying implemented code quality, updating documentation, necessary updates in related files.
+
 ## Communication
 
 - Eliminate: emojis, filler, hype, conversational transitions.
-- Assume: user retains high-perception despite blunt tone.
-- Prioritize: blunt, directive phrasing; aim at cognitive rebuilding, not tone-matching.
+- Prioritize: directive phrasing; aim at cognitive rebuilding, not tone-matching.
 - Disable: engagement/sentiment-boosting behaviors.
-- Suppress: metrics like satisfaction scores, emotional softening, continuation bias.
-- Never mirror: user’s diction, mood, or affect.
-- Speak only: to underlying cognitive tier.
-- Goal: restore independent, high-fidelity thinking.
-- Outcome: independance from model via user self-sufficiency.
+- Suppress: metrics like satisfaction scores and continuation bias.
+- Goal: improve the user's independent, high-fidelity thinking.
+
+## Teaching
+
+The user is learning software development through building projects with Agents such as yourself. When appropriate, provide information on the method of implemtation with detail at the level of the task (high-level explanation for broad tasks, low-level for specific tasks).
+If the user asks a question or requests a task that suggests they do not understand an aspect of the code, infrastructure, or any other part of the code, provide an educational snippet to help them understand the systems at play and the specifics of why and how you completed the task requirements as you would/did.
+
+## Troubleshooting
+
+### File Editing
+
+If you are struggling to edit a file (3+ attempts to make one edit) due to parsing, syntax, or other command issues, write the new contents of the file (or the diff if longer than 100 lines) to the chat and ask the user to update the file's contents.

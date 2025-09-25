@@ -32,6 +32,10 @@ VENDOR_DIR      ?= $(APPS_DIR)/vendor
 PROXY_DIR       ?= $(APPS_DIR)/mcp-proxy
 PROXY_BIN       ?= $(PROXY_DIR)/build/mcp-proxy
 PROXY_CONFIG    ?= $(STELAE_DIR)/config/proxy.json
+PROXY_TEMPLATE  ?= $(STELAE_DIR)/config/proxy.template.json
+PROXY_RENDERER  ?= $(STELAE_DIR)/scripts/render_proxy_config.py
+PROXY_FALLBACK_ENV ?= $(STELAE_DIR)/.env.example
+ENV_FILE        ?= $(STELAE_DIR)/.env
 
 # pm2 ecosystem file (alongside Makefile in stelae)
 PM2_ECOSYSTEM   ?= $(STELAE_DIR)/ecosystem.config.js
@@ -56,7 +60,7 @@ TARGET              ?= core
 # =========================================================================
 # Phony targets
 # =========================================================================
-.PHONY: up down restart-proxy logs status tunnel promote help
+.PHONY: up down restart-proxy logs status tunnel promote help render-proxy
 
 help:
 	@echo "Targets:"
@@ -76,11 +80,21 @@ help:
 	@echo "  PUBLIC_PORT=$(PUBLIC_PORT)"
 
 # Start everything and persist across WSL reboots (requires systemd enabled, then 'pm2 startup systemd' one-time)
-up:
+.PHONY: up down restart-proxy logs status tunnel promote help render-proxy
+
+up: render-proxy
 	@if [ ! -f "$(PM2_ECOSYSTEM)" ]; then echo "ERROR: Missing $(PM2_ECOSYSTEM)"; exit 1; fi
 	$(PM2) start "$(PM2_ECOSYSTEM)"
 	$(PM2) save
 	@echo "Tip (one-time): run 'pm2 startup systemd' and follow instructions to auto-start on boot."
+
+render-proxy:
+	@if [ ! -f "$(PROXY_TEMPLATE)" ]; then echo "ERROR: Missing $(PROXY_TEMPLATE)"; exit 1; fi
+	$(PYTHON) "$(PROXY_RENDERER)" \
+	  --template "$(PROXY_TEMPLATE)" \
+	  --output "$(PROXY_CONFIG)" \
+	  --env-file "$(ENV_FILE)" \
+	  --fallback-env "$(PROXY_FALLBACK_ENV)"
 
 down:
 	-$(PM2) stop $(PM2_SERVICES_CORE) || true
@@ -117,6 +131,10 @@ promote:
 	else \
 	  echo ">> Promoted under Strata (no proxy restart required)."; \
 	fi
+
+render-proxy:
+	@if [ ! -f "$(PROXY_TEMPLATE)" ]; then echo "ERROR: Missing $(PROXY_TEMPLATE)"; exit 1; fi
+	$(PYTHON) "$(PROXY_RENDERER)" --template "$(PROXY_TEMPLATE)" --output "$(PROXY_CONFIG)" --env-file "$(ENV_FILE)"
 
 # =========================================================================
 # Optional: Blue/Green deployment helpers for zero-downtime proxy swaps

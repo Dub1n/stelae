@@ -7,6 +7,7 @@ const APPS_DIR     = process.env.APPS_DIR     || `${HOME}/apps`;
 const VENDOR_DIR   = process.env.VENDOR_DIR   || `${APPS_DIR}/vendor`;
 
 const LOCAL_BIN    = `${HOME}/.local/bin`;
+const NVM_BIN      = process.env.NVM_BIN || `${HOME}/.nvm/versions/node/v22.19.0/bin`;
 const PROXY_BIN    = process.env.PROXY_BIN    || `${APPS_DIR}/mcp-proxy/build/mcp-proxy`;
 const PROXY_CONFIG = process.env.PROXY_CONFIG || `${STELAE_DIR}/config/proxy.json`;
 
@@ -21,7 +22,7 @@ const MEMORY_BIN   = process.env.MEMORY_BIN   || `${LOCAL_BIN}/basic-memory`;
 const SHELL_BIN    = process.env.SHELL_BIN    || `${LOCAL_BIN}/terminal_controller`;
 
 // Ensure PATH includes pipx and npm global bins (common WSL gotcha)
-const ENV_PATH = `${process.env.PATH}:${LOCAL_BIN}:${HOME}/.npm-global/bin`;
+const ENV_PATH = `${process.env.PATH}:${LOCAL_BIN}:${HOME}/.npm-global/bin:${NVM_BIN}`;
 
 module.exports = {
   apps: [
@@ -102,14 +103,13 @@ module.exports = {
       time: true
     },
 
-    // 7) 1mcpserver (discovery/install sidecar)
-    //    If you installed via pipx, 'one_mcp_server' may be directly available.
-    //    Using module form is robust across envs; adjust cwd if you cloned the repo.
+    // 7) 1mcp agent (discovery/install sidecar)
+    //    Installed globally via `npm install -g @1mcp/agent`
     {
       name: "1mcp",
-      script: "python3",
-      args: "-m one_mcp_server",
-      cwd: `${VENDOR_DIR}/1mcpserver`,
+      script: process.env.ONE_MCP_BIN || "1mcp",
+      interpreter: "none",
+      args: "--transport stdio",
       env: { PATH: ENV_PATH },
       autorestart: true,
       max_restarts: 10,

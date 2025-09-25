@@ -1,6 +1,6 @@
 {
   "mcpProxy": {
-    "baseURL": "https://mcp.infotopology.xyz",
+    "baseURL": "{{PUBLIC_BASE_URL}}",
     "addr": ":9090",
     "name": "Stelae MCP Proxy",
     "version": "1.0.0",
@@ -15,65 +15,64 @@
     "name": "Stelae MCP Proxy",
     "version": "1.0.0",
     "description": "Local MCP stack",
-    "publicBaseURL": "https://mcp.infotopology.xyz",
-    "sseEndpoint": "https://mcp.infotopology.xyz/stream",
+    "publicBaseURL": "{{PUBLIC_BASE_URL}}",
+    "sseEndpoint": "{{PUBLIC_SSE_URL}}",
     "resources": []
   },
   "mcpServers": {
     "fs": {
-      "command": "/home/gabri/.local/bin/rust-mcp-filesystem",
+      "command": "{{FILESYSTEM_BIN}}",
       "args": [
         "--root",
-        "/home/gabri/dev/stelae"
+        "{{STELAE_DIR}}"
       ]
     },
     "rg": {
-      "command": "/home/gabri/.local/bin/mcp-grep-server",
+      "command": "{{RG_BIN}}",
       "args": [
         "--stdio",
         "--root",
-        "/home/gabri/dev/stelae"
+        "{{STELAE_DIR}}"
       ]
     },
     "sh": {
-      "command": "/home/gabri/.local/bin/terminal_controller",
+      "command": "{{SHELL_BIN}}",
       "args": [
         "--workdir",
-        "/mnt/c/Users/gabri/Documents/Infotopology/VDL_Vault",
+        "{{PHOENIX_ROOT}}",
         "--allow",
         "npm,pytest,make,python,git"
       ]
     },
     "docs": {
-      "command": "/home/gabri/.local/bin/mcp-server-docy",
+      "command": "{{DOCY_BIN}}",
       "args": [
         "--stdio"
       ]
     },
     "mem": {
-      "command": "/home/gabri/.local/bin/basic-memory",
+      "command": "{{MEMORY_BIN}}",
       "args": [
         "--project",
-        "stelae",
+        "{{BASIC_MEMORY_PROJECT}}",
         "mcp",
         "--transport",
         "stdio"
       ]
     },
     "search": {
-      "command": "/home/gabri/.venvs/stelae-search/bin/python",
-      "args": ["/home/gabri/dev/stelae/scripts/stelae_search_mcp.py"],
+      "command": "{{SEARCH_PYTHON_BIN}}",
+      "args": ["{{STELAE_DIR}}/scripts/stelae_search_mcp.py"],
       "env": {
-        "STELAE_SEARCH_ROOT": "/mnt/c/Users/gabri/Documents/Infotopology/VDL_Vault",
+        "STELAE_SEARCH_ROOT": "{{SEARCH_ROOT}}",
         "STELAE_RG_BIN": "rg"
       }
     },
     "fetch": {
-      "command": "/home/gabri/.local/bin/mcp-server-fetch"
+      "command": "{{LOCAL_BIN}}/mcp-server-fetch"
     },
     "strata": {
-      "command": "/home/gabri/.local/bin/strata"
+      "command": "{{STRATA_BIN}}"
     }
   }
 }
-
