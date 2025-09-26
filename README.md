@@ -16,7 +16,7 @@ A WSL-native deployment of [mcp-proxy](https://github.com/TBXark/mcp-proxy) that
 | Basic Memory MCP | stdio | `${MEMORY_BIN}` | Persistent project memory. |
 | Strata MCP | stdio | `${STRATA_BIN}` | Progressive discovery / intent routing. |
 | 1mcp agent | stdio | `${ONE_MCP_BIN} --transport stdio` | Discovery/promotion sidecar serving capability lookups. |
-| Search shim | stdio | `${SEARCH_PYTHON_BIN} ${STELAE_DIR}/scripts/stelae_search_mcp.py` | Wraps ripgrep tools and exposes canonical `search`. |
+| Search shim (inactive) | — | — | Retired while `mcp-grep` remains the primary search surface; see TODO for potential revival. |
 | Fetch MCP | stdio | `${LOCAL_BIN}/mcp-server-fetch` | Official MCP providing canonical `fetch`. |
 
 Path placeholders expand from `.env`; see setup below.
@@ -36,7 +36,7 @@ Path placeholders expand from `.env`; see setup below.
 
 1. Copy `.env.example` → `.env` and update absolute paths:
    - Project roots: `STELAE_DIR`, `APPS_DIR`, `PHOENIX_ROOT`, `SEARCH_ROOT`.
-   - Binaries: `FILESYSTEM_BIN`, `RG_BIN`, `SHELL_BIN`, `DOCY_BIN`, `MEMORY_BIN`, `STRATA_BIN`, `ONE_MCP_BIN`, `SEARCH_PYTHON_BIN`, `LOCAL_BIN/mcp-server-fetch`.
+   - Binaries: `FILESYSTEM_BIN`, `RG_BIN`, `SHELL_BIN`, `DOCY_BIN`, `MEMORY_BIN`, `STRATA_BIN`, `ONE_MCP_BIN`, `LOCAL_BIN/mcp-server-fetch`.
    - Public URLs: `PUBLIC_BASE_URL=https://mcp.infotopology.xyz`, `PUBLIC_SSE_URL=${PUBLIC_BASE_URL}/stream`.
 2. Regenerate runtime config:
    \```bash
@@ -131,11 +131,86 @@ Operational steps:
 
 ---
 
+## Future Developments
+
+- Build the stdio aggregator so desktop agents (e.g. Codex) can access the full tool surface via a single MCP entry. See `HUB.md` for the architectural plan and open questions.
+- Re-evaluate the retired `scripts/stelae_search_mcp.py` shim once we have a bounded-search strategy (or confirm it can be deleted entirely).
+
 ## Validation Checklist
 
-1. `curl -s http://localhost:9090/tools/list` confirms `search` and `fetch` are published.
-2. From ChatGPT, call `search` on the Phoenix repo and `fetch` on an external URL—both should succeed.
+1. `curl -s http://localhost:9090/.well-known/mcp/manifest.json | jq '{tools: (.tools | map(.name))}'` shows `fetch` and the upstream `rg` search tools.
+2. From ChatGPT, exercise `fetch` (canonical) and `rg/search` (ripgrep) to confirm both return JSON payloads.
 3. `pm2 status` shows `online` for proxy, each MCP, and `cloudflared`.
+
+---
+
+## Connector Readiness
+
+- **Cloudflare tunnel up:** `pm2 start "cloudflared tunnel run stelae" --name cloudflared` (or `pm2 restart cloudflared`). `curl -sk https://mcp.infotopology.xyz/.well-known/mcp/manifest.json` must return HTTP 200; a Cloudflare 1033 error indicates the tunnel is down.
+- **Manifest sanity:** `curl -s http://localhost:9090/.well-known/mcp/manifest.json | jq '{servers, tools: (.tools | map(.name))}'` verifies every essential MCP (filesystem, ripgrep, shell, docs, memory, fetch, strata, 1mcp).
+- **SSE probes:** use the Python harness under `docs/openai-mcp.md` (or the snippets in this README) to connect to `/rg/sse` and `/fetch/sse`. Confirm `grep` returns results and `fetch` succeeds when `raw: true` (Docy’s markdown extraction still needs a fix; track in TODO).
+- **Streamable HTTP gap:** mcp-proxy currently publishes per-server SSE endpoints only. A Streamable HTTP front-end (single POST/GET path) is still required for the ChatGPT connector wizard—see TODO for the planned aggregate shim.
+
+```python
+# Minimal SSE smoke test (run inside the stelae-search virtualenv)
+import anyio, json
+import httpx
+from anyio import create_memory_object_stream
+from httpx_sse import EventSource
+from urllib.parse import urlparse
+from mcp.client.session import ClientSession
+from mcp.client.sse import SessionMessage
+from mcp import types
+
+async def smoke_rg():
+    url = "http://localhost:9090/rg/sse"
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10, read=30)) as client:
+        async with client.stream("GET", url, headers={"Accept": "text/event-stream", "Cache-Control": "no-store"}) as response:
+            response.raise_for_status()
+            event_source = EventSource(response)
+            base = urlparse(url)
+
+            endpoint_ready = anyio.Event()
+            endpoint_url = {"value": None}
+            read_writer, read_stream = create_memory_object_stream(0)
+            write_stream, write_reader = create_memory_object_stream(0)
+
+            async with anyio.create_task_group() as tg:
+                async def reader():
+                    async for sse in event_source.aiter_sse():
+                        if sse.event == "endpoint":
+                            target = urlparse(sse.data.strip())._replace(scheme=base.scheme, netloc=base.netloc).geturl()
+                            endpoint_url["value"] = target
+                            endpoint_ready.set()
+                        elif sse.event == "message":
+                            message = types.JSONRPCMessage.model_validate_json(sse.data)
+                            await read_writer.send(SessionMessage(message))
+                    await read_writer.aclose()
+
+                async def writer():
+                    await endpoint_ready.wait()
+                    async with write_reader:
+                        async with httpx.AsyncClient(timeout=httpx.Timeout(10, read=30)) as poster:
+                            async for msg in write_reader:
+                                await poster.post(
+                                    endpoint_url["value"],
+                                    json=msg.message.model_dump(by_alias=True, mode="json", exclude_none=True),
+                                )
+
+                tg.start_soon(reader)
+                tg.start_soon(writer)
+
+                async with ClientSession(read_stream, write_stream) as session:
+                    await session.initialize()
+                    result = await session.call_tool(
+                        "grep",
+                        {"pattern": "Stelae", "paths": ["/home/gabri/dev/stelae"], "max_count": 3, "recursive": True},
+                    )
+                    print(json.loads(result.content[0].text))
+                    tg.cancel_scope.cancel()
+
+anyio.run(smoke_rg)
+```
 
 ---
 

@@ -1,7 +1,7 @@
 {
   "mcpProxy": {
     "baseURL": "https://mcp.infotopology.xyz",
-    "addr": ":9090",
+    "addr": ":9092",
     "name": "Stelae MCP Proxy",
     "version": "1.0.0",
     "type": "sse",
@@ -59,14 +59,6 @@
         "--transport",
         "stdio"
       ]
-    },
-    "search": {
-      "command": "/home/gabri/.venvs/stelae-search/bin/python",
-      "args": ["/home/gabri/dev/stelae/scripts/stelae_search_mcp.py"],
-      "env": {
-        "STELAE_SEARCH_ROOT": "/mnt/c/Users/gabri/Documents/Infotopology/VDL_Vault",
-        "STELAE_RG_BIN": "rg"
-      }
     },
     "fetch": {
       "command": "/home/gabri/.local/bin/mcp-server-fetch"

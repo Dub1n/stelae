@@ -1,6 +1,20 @@
-Awesome—here’s a complete, implementation-ready tasklist in “task decomposition” style, from clean machine → running system → validation → maintenance. I’ve included test items (unit + integration + security) and explicit acceptance criteria so you can tick things off confidently.
+# Task List
 
-# Phase 0 — Prep & Conventions
+## Current State
+
+README now has a dedicated “Connector Readiness” section with tunnel checks, SSE probe guidance, and a working Python smoke harness (README.md:147-213). The validation checklist just above it still keeps the essentials package front and center (README.md:139-143).
+TODO tracks the remaining connector work: stand up the Streamable HTTP front-end, keep Cloudflare’s tunnel under PM2, and repair Docy’s markdown path so non-raw fetches stop failing (TODO.md:69-73).
+Verification/observations:
+
+Public access is currently broken: timeout 15s curl -sk https://mcp.infotopology.xyz/.well-known/mcp/manifest.json returns Cloudflare 1033, which lines up with pm2 list showing no cloudflared process. The local manifest is healthy (curl -s http://localhost:9090/.well-known/mcp/manifest.json).
+The SSE harness (now documented and re-run) hits /rg/sse successfully, returning three matches for “Stelae”. Docy/fetch responds when raw: true, but the markdown simplification still dies at ExtractArticle.js, so that fix remains on the TODO.
+Next steps (suggested):
+
+pm2 start "cloudflared tunnel run stelae" --name cloudflared (and pm2 save) so the public manifest stops erroring; re-check with the curl probe.
+Build the single /mcp Streamable HTTP shim noted in TODO so ChatGPT’s connector wizard can complete without per-server SSE juggling.
+Patch Docy’s readability path or pin its dependency so canonical (non-raw) fetches succeed.
+
+## Phase 0 — Prep & Conventions
 
 - [x] **Enable systemd in WSL**
 
@@ -30,7 +44,7 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
 
 ---
 
-# Phase 1 — Core Orchestrator (mcp-proxy)
+## Phase 1 — Core Orchestrator (mcp-proxy)
 
 - [x] **Clone & build `mcp-proxy`**
 
@@ -51,7 +65,7 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
 
 ---
 
-# Phase 2 — Essential MCPs
+## Phase 2 — Essential MCPs
 
 - [x] **Install essential servers**
 
@@ -67,6 +81,10 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
   - *(Tasks MCP deferred; schedule via 1mcp promotion once baseline stack is stable)*
   - ✅ *Acceptance:* each tool responds to `--help` or starts in a terminal and prints a startup banner
   - [ ] Capture the banner/`--help` output for each installed MCP and stash the command list for troubleshooting
+  - [ ] Revisit the custom `scripts/stelae_search_mcp.py` shim once a bounded search/timeout strategy exists; until then rely solely on `mcp-grep`.
+  - [ ] Stand up a Streamable HTTP front-end (single `/mcp` POST/GET) that proxies into the existing SSE endpoints so ChatGPT’s connector wizard can complete.
+  - [ ] Keep the Cloudflare tunnel managed by PM2 (`cloudflared` process) to avoid 1033 errors when resolving `https://mcp.infotopology.xyz`.
+  - [ ] Patch Docy’s markdown extraction path so non-`raw` fetches stop failing when `readabilipy` invokes `ExtractArticle.js`.
 
 - [x] **Wire proxy clients to essentials**
 
@@ -75,7 +93,7 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
 
 ---
 
-# Phase 3 — Process Management (pm2)
+## Phase 3 — Process Management (pm2)
 
 - [x] **Drop `ecosystem.config.js`**
 
@@ -93,7 +111,7 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
 
 ---
 
-# Phase 4 — Single Public URL (Tunnel)
+## Phase 4 — Single Public URL (Tunnel)
 
 - [x] **Run cloudflared**
 
@@ -109,7 +127,7 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
 
 ---
 
-# Phase 5 — Discovery/Install Sidecar (1mcp agent)
+## Phase 5 — Discovery/Install Sidecar (1mcp agent)
 
 - [ ] **Install globally**
 
@@ -124,7 +142,7 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
 
 ---
 
-# Phase 6 — Reconciler (promotion automation)
+## Phase 6 — Reconciler (promotion automation)
 
 - [ ] **Create reconciler skeleton**
 
@@ -153,7 +171,7 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
 
 ---
 
-# Phase 7 — Testing (Unit, Integration, Security)
+## Phase 7 — Testing (Unit, Integration, Security)
 
 - [ ] **Unit tests (reconciler)**
 
@@ -191,7 +209,7 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
 
 ---
 
-# Phase 8 — Documentation & Dev Ergonomics
+## Phase 8 — Documentation & Dev Ergonomics
 
 - [ ] **README update (stelae)**
 
@@ -213,7 +231,7 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
 
 ---
 
-# Phase 9 — Acceptance in ChatGPT
+## Phase 9 — Acceptance in ChatGPT
 
 - [ ] **Connector verification**
 
@@ -232,7 +250,7 @@ Awesome—here’s a complete, implementation-ready tasklist in “task decompos
 
 ---
 
-# Phase 10 — Maintenance & Evolution
+## Phase 10 — Maintenance & Evolution
 
 - [ ] **Update cadence**
 
