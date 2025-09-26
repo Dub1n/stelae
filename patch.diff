@@ -1,91 +1,94 @@
---- a/bridge/stream_http_bridge.py
-+++ b/bridge/stream_http_bridge.py
-@@ -1,9 +1,14 @@
--import os
-+import os
-+import json
-+import logging
- from fastapi import FastAPI, Request, Response
--from fastapi.responses import JSONResponse, StreamingResponse
-+from fastapi.responses import JSONResponse, StreamingResponse
- import asyncio
- import time
--import httpx
-+import httpx
-+
-+# logger for bridge diagnostics
-+logger = logging.getLogger("bridge")
-+logger.setLevel(logging.INFO)
- 
- app = FastAPI()
- 
-@@ -18,9 +23,44 @@
- # Environment configuration
--UPSTREAM_BASE = os.environ.get("UPSTREAM_BASE", "http://127.0.0.1:9092")
--UPSTREAM_POST_PATH = os.environ.get("UPSTREAM_POST_PATH", "/mcp")
-+UPSTREAM_BASE = os.environ.get("UPSTREAM_BASE", "http://127.0.0.1:9092")
-+# allow None -> probe at startup; previously defaulted to "/mcp"
-+UPSTREAM_POST_PATH = os.environ.get("UPSTREAM_POST_PATH")
-+PATH_CANDIDATES = [
-+    p.strip()
-+    for p in os.environ.get("UPSTREAM_PATH_CANDIDATES", "/mcp,/mem").split(",")
-+    if p.strip()
-+]
-+PROBE_TIMEOUT = float(os.environ.get("UPSTREAM_PROBE_TIMEOUT", "2.5"))
-+
-+def _probe_upstream_path() -> str | None:
-+    """
-+    Try candidate JSON-RPC endpoints on UPSTREAM_BASE and return the first 2xx.
-+    Caches choice by setting module-level UPSTREAM_POST_PATH.
-+    """
-+    payload = {
-+        "jsonrpc": "2.0",
-+        "id": "probe",
-+        "method": "initialize",
-+        "params": {"protocolVersion": "2024-11-05"},
-+    }
-+    for path in PATH_CANDIDATES:
-+        url = f"{UPSTREAM_BASE}{path}"
+--- bridge/stream_http_bridge.py
++++ bridge/stream_http_bridge.py
+@@
+ async def post_mcp(request: Request) -> Response:
+@@
+-    async with httpx.AsyncClient(timeout=httpx.Timeout(30, read=30)) as client:
+-        try:
+-            r = await client.post(endpoint, json=payload)
+-        except Exception as e:
++    async with httpx.AsyncClient(timeout=httpx.Timeout(30, read=30)) as client:
 +        try:
-+            r = httpx.post(url, json=payload, timeout=PROBE_TIMEOUT)
-+            if 200 <= r.status_code < 300:
-+                logger.info(f"[bridge] upstream path OK: {path} ({r.status_code})")
-+                return path
-+            logger.info(f"[bridge] upstream path {path} returned {r.status_code}")
++            r = await client.post(
++                endpoint,
++                json=payload,
++                headers={"Accept": "application/json"},
++            )
 +        except Exception as e:
-+            logger.info(f"[bridge] upstream path {path} probe failed: {e}")
-+    return None
+             return JSONResponse(
+                 {"error": f"upstream post failed: {e}"},
+                 status_code=502,
+                 headers=resp_headers,
+             )
+ 
+-    # Proxy back error bodies to help debugging; otherwise accept
+-    if r.status_code >= 400:
++    # quick failover on 404/405 -> try other path candidates once
++    if r.status_code in (404, 405):
++        for alt in [p for p in PATH_CANDIDATES if p != UPSTREAM_POST_PATH]:
++            alt_url = urljoin(UPSTREAM_BASE, alt.lstrip("/"))
++            try:
++                r2 = await client.post(
++                    alt_url, json=payload, headers={"Accept": "application/json"}
++                )
++                if r2.status_code < 400:
++                    # promote the working path for this process
++                    resp_headers["X-Bridge-Upstream-Path"] = alt
++                    resp_headers["X-Bridge-Upstream-URL"] = alt_url
++                    # update globals so next calls go straight there
++                    global UPSTREAM_POST_PATH, UPSTREAM_POST_URL
++                    UPSTREAM_POST_PATH, UPSTREAM_POST_URL = alt, alt_url
++                    SESSION_ENDPOINTS.clear()
++                    r = r2
++                    break
++            except Exception:
++                pass
 +
-+# Choose path at import time if not provided via env
-+if not UPSTREAM_POST_PATH:
-+    chosen = _probe_upstream_path()
-+    UPSTREAM_POST_PATH = chosen or "/mcp"
-+    logger.info(f"[bridge] using UPSTREAM_POST_PATH={UPSTREAM_POST_PATH}")
++    # on error: return upstream status + body so callers can see details
++    if r.status_code >= 400:
+         resp_headers["X-Bridge-Upstream-Status"] = str(r.status_code)
+-        return JSONResponse(
+-            {"upstream": r.status_code, "body": r.text},
+-            status_code=502,
+-            headers=resp_headers,
+-        )
+-
+-    resp_headers["X-Bridge-Upstream-Status"] = str(r.status_code)
+-    # Success: the bridge typically doesn't need to return the upstream JSON-RPC body.
+-    # If you want to pass-through bodies, change this to return r.content with r.status_code.
+-    return Response(status_code=202, headers=resp_headers)
++        return Response(
++            content=r.content,
++            status_code=502,
++            headers={**resp_headers, "Content-Type": r.headers.get("content-type", "application/json")},
++        )
++    # success: pass upstream body and status through
++    resp_headers["X-Bridge-Upstream-Status"] = str(r.status_code)
++    return Response(
++        content=r.content,
++        status_code=r.status_code,
++        headers={**resp_headers, "Content-Type": r.headers.get("content-type", "application/json")},
++    )
+@@
+ async def debug_upstream(_: Request) -> Response:
+@@
+     return JSONResponse(info, status_code=200)
  
- PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "https://mcp.example.com")
- KEEPALIVE_INTERVAL = int(os.environ.get("KEEPALIVE_INTERVAL", "10"))
- 
-@@ -112,7 +152,7 @@
- async def post_mcp(request: Request):
-     """
-     Forward JSON-RPC POST to upstream single endpoint.
--    """
-+    """
-     try:
-         body = await request.body()
-         # Pass through JSON; add minimal headers
-@@ -121,7 +161,9 @@
-         )
--        upstream_url = f"{UPSTREAM_BASE}{UPSTREAM_POST_PATH}"
-+        upstream_url = f"{UPSTREAM_BASE}{UPSTREAM_POST_PATH}"
-         async with httpx.AsyncClient() as client:
-             resp = await client.post(upstream_url, content=body, headers=headers)
-         if 200 <= resp.status_code < 300:
-             return Response(content=resp.content, status_code=resp.status_code, media_type="application/json")
--        return JSONResponse({"upstream": resp.status_code, "body": resp.text}, status_code=502)
-+        # surface upstream details for fast triage
-+        return JSONResponse({"upstream": resp.status_code, "body": resp.text}, status_code=502, headers={
-+            "X-Bridge-Upstream-Path": UPSTREAM_POST_PATH, "X-Bridge-Upstream-Status": str(resp.status_code)})
-     except Exception as e:
--        return JSONResponse({"error": f"upstream post failed: {e}"}, status_code=502)
-+        return JSONResponse({"error": f"upstream post failed: {e}"}, status_code=502, headers={"X-Bridge-Upstream-Path": UPSTREAM_POST_PATH})
++async def debug_routes(_: Request) -> Response:
++    try:
++        async with httpx.AsyncClient(timeout=httpx.Timeout(2, read=2)) as client:
++            r = await client.get(urljoin(UPSTREAM_BASE, "/openapi.json"))
++        return Response(
++            content=r.content,
++            status_code=r.status_code,
++            media_type=r.headers.get("content-type", "application/json"),
++        )
++    except Exception as e:
++        return JSONResponse({"error": f"route probe failed: {e}"}, status_code=502)
+@@
+ routes = [
+@@
+     Route("/debug/upstream", debug_upstream, methods=["GET"]),
++    Route("/debug/routes", debug_routes, methods=["GET"]),
+@@
+ ]

@@ -3,26 +3,29 @@
 """
 Stelae MCP Bridge - HTTP+SSE auto-probing bridge for ChatGPT Connector compliance.
 
-Public surface:
-  GET  /mcp            -> proxy SSE to upstream /{server}/sse
-  POST /mcp            -> forward to discovered /{server}/message (or similar),
-                          trying several envelopes until the upstream accepts
-  GET  /healthz
-  GET  /version
-  GET  /debug/upstream
-  GET  /debug/routes
-  GET  /debug/scan
+- Public endpoints (behind Cloudflare):
+    GET  /mcp            -> proxy SSE to upstream /{server}/sse
+    POST /mcp            -> forward JSON-RPC to upstream discovered POST route
+    GET  /healthz        -> simple health with probe status
+    GET  /version        -> bridge + env info
+    GET  /debug/upstream -> current upstream config
+    GET  /debug/routes   -> list of bridge routes
+    GET  /debug/scan     -> run full probe & show results
 
-Upstream (local proxy) is assumed at http://127.0.0.1:9092
-Manifest at /.well-known/mcp/manifest.json defines SSE URLs like .../{name}/sse
+- Upstream (local proxy):
+    Base: http://127.0.0.1:9092
+    Manifest: /.well-known/mcp/manifest.json
+    SSE: /{server}/sse
+    POST candidates: /{server}, /{server}/, /{server}/message, /{server}/messages, /{server}/rpc, /{server}/jsonrpc, /{server}/send
+    Envelopes tried for POST:
+        - json            : body = payload (application/json)
+        - text            : body = raw json string (text/plain)
+        - ndjson          : body = json + '\n' (application/x-ndjson)
+        - wrapped         : {"message": payload} (application/json)
+        - type_wrapped    : {"type":"message","data": payload} (application/json)
+        - form            : data=urlencode({"data": json}) (application/x-www-form-urlencoded)
 
-POST discovery tries these path templates:
-  /{name}, /{name}/, /{name}/message, /{name}/messages, /{name}/rpc, /{name}/jsonrpc, /{name}/send
-
-Key improvement:
-- Treat HTTP 400 from a path as a *valid* signal that the handler exists but
-  disliked our probe payload. We mark it as "adaptive" and, on real requests,
-  try multiple envelopes in sequence to maximize acceptance.
+This bridge follows upstream redirects (3xx) during probing and does **not** leak them to clients.
 """
 
 import asyncio
@@ -40,14 +43,17 @@ from starlette.routing import Route
 # Configuration
 # ----------------------------
 
-BRIDGE_VERSION = os.environ.get("BRIDGE_VERSION", "stelae-bridge/0.4.1-adaptive")
+BRIDGE_VERSION = os.environ.get("BRIDGE_VERSION", "stelae-bridge/0.4.0-autoprobe")
 PUBLIC_BASE = os.environ.get("PUBLIC_BASE_URL", "https://mcp.infotopology.xyz")
 UPSTREAM_BASE = os.environ.get("UPSTREAM_BASE_URL", "http://127.0.0.1:9092")
 MANIFEST_PATH = "/.well-known/mcp/manifest.json"
 PROBE_TIMEOUT = float(os.environ.get("PROBE_TIMEOUT", "2.5"))
 DEFAULT_PROTOCOL_HINT = "2024-11-05"
+
+# Preferred default server for MCP post/SSE
 PREFERRED_SERVER = os.environ.get("PREFERRED_SERVER", "mem")
 
+# Candidate POST paths per server
 POST_PATH_TEMPLATES = [
     "/{name}",
     "/{name}/",
@@ -59,32 +65,38 @@ POST_PATH_TEMPLATES = [
 ]
 
 
-# Envelope builder
+# Envelope/format strategies to try (in this order)
 def build_envelopes(payload: Dict[str, Any]) -> List[Tuple[str, Dict[str, str], bytes]]:
     raw = json.dumps(payload).encode("utf-8")
     return [
+        # 1) application/json (raw JSON-RPC)
         ("json", {"Content-Type": "application/json"}, raw),
+        # 2) text/plain (raw JSON string)
+        ("text", {"Content-Type": "text/plain"}, raw),
+        # 3) NDJSON
+        ("ndjson", {"Content-Type": "application/x-ndjson"}, raw + b"\n"),
+        # 4) {"message": <jsonrpc>}
         (
             "wrapped",
             {"Content-Type": "application/json"},
             json.dumps({"message": payload}).encode("utf-8"),
         ),
+        # 5) {"type":"message","data": <jsonrpc>}
         (
             "type_wrapped",
             {"Content-Type": "application/json"},
             json.dumps({"type": "message", "data": payload}).encode("utf-8"),
         ),
-        ("ndjson", {"Content-Type": "application/x-ndjson"}, raw + b"\n"),
-        ("text", {"Content-Type": "text/plain"}, raw),
+        # 6) x-www-form-urlencoded data=<json>
         (
             "form",
             {"Content-Type": "application/x-www-form-urlencoded"},
-            b"data=" + httpx.QueryParams({"data": raw.decode()}).encode(),
+            b"data=" + httpx.QueryParams({"data": raw.decode("utf-8")}).encode(),
         ),
     ]
 
 
-# A safe probe RPC (idempotent)
+# A tiny test JSON-RPC we can safely send
 PROBE_RPC = {
     "jsonrpc": "2.0",
     "id": "probe",
@@ -93,7 +105,7 @@ PROBE_RPC = {
 }
 
 # ----------------------------
-# App state
+# App & shared state
 # ----------------------------
 
 app = FastAPI(title="Stelae MCP Bridge", version=BRIDGE_VERSION)
@@ -110,9 +122,9 @@ class UpstreamConfig:
     def __init__(self) -> None:
         self.server_names: List[str] = []
         self.default_server: Optional[str] = None
-        self.sse_path: Optional[str] = None
-        self.post_path: Optional[str] = None
-        self.post_mode: Optional[str] = None  # "json"/"wrapped"/... or "adaptive"
+        self.sse_path: Optional[str] = None  # e.g. /mem/sse
+        self.post_path: Optional[str] = None  # e.g. /mem/message
+        self.post_mode: Optional[str] = None  # which envelope worked
         self.probe_results: List[Dict[str, Any]] = []
         self.manifest_ok: bool = False
 
@@ -136,12 +148,13 @@ HTTP = httpx.AsyncClient(
 )
 
 # ----------------------------
-# Discovery / probing
+# Utilities
 # ----------------------------
 
 
 async def fetch_manifest() -> Dict[str, Any]:
-    r = await HTTP.get(f"{UPSTREAM_BASE}{MANIFEST_PATH}")
+    url = f"{UPSTREAM_BASE}{MANIFEST_PATH}"
+    r = await HTTP.get(url)
     r.raise_for_status()
     return r.json()
 
@@ -153,37 +166,38 @@ async def discover_servers() -> List[str]:
     except Exception:
         STATE.manifest_ok = False
         return []
-    names: List[str] = []
-    for s in m.get("servers", []):
+    srv_urls = []
+    servers = m.get("servers", [])
+    for s in servers:
         u = s.get("url")
         if not isinstance(u, str):
             continue
+        # Expect .../{name}/sse
+        # Extract the {name} component
         parts = u.strip("/").split("/")
         if parts and parts[-1] == "sse" and len(parts) >= 2:
-            names.append(parts[-2])
-    return sorted(set(names))
+            srv_urls.append(parts[-2])
+    return sorted(set(srv_urls))
 
 
 def choose_default_server(names: List[str]) -> Optional[str]:
     if not names:
         return None
-    return PREFERRED_SERVER if PREFERRED_SERVER in names else names[0]
+    if PREFERRED_SERVER in names:
+        return PREFERRED_SERVER
+    return names[0]
 
 
 async def probe_post_endpoint(
     server: str,
 ) -> Tuple[Optional[str], Optional[str], List[Dict[str, Any]]]:
     """
-    Try path templates and envelope modes.
-    Success if status in {200..204}; otherwise remember *first* path that returns 400
-    and mark it as "adaptive" (handler exists but wants a different envelope).
+    Try all path patterns and envelope modes; return (post_path, mode, results)
     """
     results: List[Dict[str, Any]] = []
     payload = PROBE_RPC
     envelopes = build_envelopes(payload)
-    success = {200, 201, 202, 204}
-    first_400: Optional[str] = None
-
+    success_statuses = {200, 201, 202, 204}
     for tpl in POST_PATH_TEMPLATES:
         path = tpl.format(name=server)
         url = f"{UPSTREAM_BASE}{path}"
@@ -191,33 +205,31 @@ async def probe_post_endpoint(
             try:
                 r = await HTTP.post(url, content=body, headers=headers)
                 results.append({"path": path, "mode": mode, "status": r.status_code})
-                if r.status_code in success:
+                if r.status_code in success_statuses:
                     return path, mode, results
-                if r.status_code == 400 and first_400 is None:
-                    first_400 = path
             except Exception as e:
                 results.append({"path": path, "mode": mode, "error": str(e)})
                 continue
-
-    if first_400:
-        return first_400, "adaptive", results
     return None, None, results
 
 
 async def ensure_config() -> None:
+    """
+    Populate STATE on first use; safe to call multiple times.
+    """
     if STATE.default_server and STATE.sse_path and STATE.post_path and STATE.post_mode:
         return
+
     names = await discover_servers()
     STATE.server_names = names
-    STATE.default_server = choose_default_server(names)
-    if STATE.default_server:
-        STATE.sse_path = f"/{STATE.default_server}/sse"
-        post_path, post_mode, results = await probe_post_endpoint(STATE.default_server)
-        STATE.post_path, STATE.post_mode, STATE.probe_results = (
-            post_path,
-            post_mode,
-            results,
-        )
+    default_server = choose_default_server(names)
+    STATE.default_server = default_server
+    if default_server:
+        STATE.sse_path = f"/{default_server}/sse"
+        post_path, post_mode, results = await probe_post_endpoint(default_server)
+        STATE.post_path = post_path
+        STATE.post_mode = post_mode
+        STATE.probe_results = results
     else:
         STATE.sse_path = None
         STATE.post_path = None
@@ -226,15 +238,16 @@ async def ensure_config() -> None:
 
 
 def _wrap_body(mode: str, data: bytes) -> Tuple[Dict[str, str], bytes]:
-    # Convert inbound JSON into a chosen envelope
+    # Convert incoming JSON bytes into the envelope used during probing
     try:
         payload = json.loads(data.decode("utf-8"))
     except Exception:
+        # If not JSON, pass-through text/plain
         return {"Content-Type": "text/plain"}, data
-    for m, headers, body in build_envelopes(payload):
-        if m == mode:
-            return headers, body
-    return {"Content-Type": "application/json"}, json.dumps(payload).encode("utf-8")
+
+    envelopes = dict((m, (h, b)) for (m, h, b) in build_envelopes(payload))
+    headers, body = envelopes.get(mode, envelopes["json"])
+    return headers, body
 
 
 # ----------------------------
@@ -246,12 +259,14 @@ def _wrap_body(mode: str, data: bytes) -> Tuple[Dict[str, str], bytes]:
 async def healthz():
     try:
         await ensure_config()
+        upstream_ok = bool(STATE.default_server and STATE.sse_path)
         reachable = False
-        sc = None
+        status_code = None
         if STATE.post_path:
+            # poke a HEAD/GET on post_path just to see if host is up
             try:
                 r = await HTTP.get(f"{UPSTREAM_BASE}{STATE.post_path}")
-                sc = r.status_code
+                status_code = r.status_code
                 reachable = True
             except Exception:
                 reachable = False
@@ -266,7 +281,7 @@ async def healthz():
                     "postPath": STATE.post_path,
                     "postMode": STATE.post_mode,
                     "reachable": reachable,
-                    "status": sc,
+                    "status": status_code,
                 },
                 "server": STATE.default_server,
             }
@@ -286,7 +301,7 @@ async def version():
             "publicBaseURL": PUBLIC_BASE,
             "protocolHint": DEFAULT_PROTOCOL_HINT,
             "routes": [r.path for r in app.router.routes if isinstance(r, Route)],
-            "mode": "autoprobe+adaptive",
+            "mode": "autoprobe",
             "upstreamPostPath": STATE.post_path,
             "upstreamPostMode": STATE.post_mode,
             "upstreamPathCandidates": POST_PATH_TEMPLATES,
@@ -323,9 +338,13 @@ async def debug_scan():
 
 @app.get("/mcp")
 async def mcp_sse(request: Request):
+    """
+    Proxy SSE from upstream /{server}/sse.
+    """
     await ensure_config()
     if not STATE.sse_path:
         return PlainTextResponse("SSE upstream not configured", status_code=503)
+
     upstream_url = f"{UPSTREAM_BASE}{STATE.sse_path}"
 
     async def event_stream():
@@ -333,15 +352,19 @@ async def mcp_sse(request: Request):
             async with HTTP.stream(
                 "GET", upstream_url, headers={"Accept": "text/event-stream"}
             ) as r:
+                # propagate upstream status errors
                 if r.status_code >= 400:
-                    yield f"event: error\ndata: upstream status {r.status_code}\n\n".encode()
+                    yield f"event: error\ndata: upstream status {r.status_code}\n\n".encode(
+                        "utf-8"
+                    )
                     return
                 async for chunk in r.aiter_raw():
+                    # passthrough raw SSE bytes
                     yield chunk
         except asyncio.CancelledError:
             return
         except Exception as e:
-            yield f": keep-alive\n\nevent: error\ndata: {str(e)}\n\n".encode()
+            yield f": keep-alive\n\nevent: error\ndata: {str(e)}\n\n".encode("utf-8")
 
     return StreamingResponse(
         event_stream(),
@@ -352,9 +375,15 @@ async def mcp_sse(request: Request):
 
 @app.post("/mcp")
 async def mcp_post(request: Request):
+    """
+    Accept JSON-RPC and forward using discovered upstream path & envelope.
+    """
     await ensure_config()
     if not (STATE.post_path and STATE.post_mode):
-        # one more attempt
+        # last-ditch: try probing again once
+        STATE.post_path = None
+        STATE.post_mode = None
+        STATE.probe_results = []
         if STATE.default_server:
             post_path, post_mode, results = await probe_post_endpoint(
                 STATE.default_server
@@ -364,97 +393,62 @@ async def mcp_post(request: Request):
                 post_mode,
                 results,
             )
+
     if not (STATE.post_path and STATE.post_mode):
         return PlainTextResponse("Upstream POST endpoint not found", status_code=502)
 
-    upstream_url = f"{UPSTREAM_BASE}{STATE.post_path}"
     body = await request.body()
+    headers, out_body = _wrap_body(STATE.post_mode, body)
 
-    # If we know an exact mode, try it; if "adaptive", try a sequence.
-    if STATE.post_mode != "adaptive":
-        headers, out_body = _wrap_body(STATE.post_mode, body)
-        try:
-            r = await HTTP.post(upstream_url, content=out_body, headers=headers)
+    # Forward
+    upstream_url = f"{UPSTREAM_BASE}{STATE.post_path}"
+    try:
+        r = await HTTP.post(upstream_url, content=out_body, headers=headers)
+        # Normalize: always reply with the upstream body/status, but never forward 301/302 (return 200+body)
+        sc = r.status_code
+        if 300 <= sc < 400:
+            # don't leak redirects to client
             return Response(
                 content=r.content,
                 media_type=r.headers.get("content-type", "application/json"),
-                status_code=r.status_code,
+                status_code=200,
                 headers={
                     "x-bridge-upstream-path": STATE.post_path,
-                    "x-bridge-upstream-status": str(r.status_code),
+                    "x-bridge-upstream-status": str(sc),
                     "x-bridge-upstream-url": upstream_url,
                 },
             )
-        except Exception as e:
-            return PlainTextResponse(f"Bridge upstream error: {e}", status_code=502)
-
-    # Adaptive mode: try multiple envelopes until upstream does not answer 400/404/405/415/422
-    # Order is chosen to minimize side-effects.
-    rejection = {400, 404, 405, 415, 422}
-    last_resp: Optional[httpx.Response] = None
-    last_err: Optional[str] = None
-
-    # Attempt sequence (json -> wrapped -> type_wrapped -> ndjson -> text -> form)
-    try:
-        payload = json.loads(body.decode("utf-8"))
-    except Exception:
-        payload = body  # non-JSON passthrough
-
-    for mode, headers, out_body in build_envelopes(
-        payload
-        if isinstance(payload, dict)
-        else {"message": body.decode("utf-8", "ignore")}
-    ):
-        try:
-            r = await HTTP.post(upstream_url, content=out_body, headers=headers)
-            last_resp = r
-            if r.status_code not in rejection:
-                return Response(
-                    content=r.content,
-                    media_type=r.headers.get("content-type", "application/json"),
-                    status_code=r.status_code,
-                    headers={
-                        "x-bridge-upstream-path": STATE.post_path,
-                        "x-bridge-upstream-status": str(r.status_code),
-                        "x-bridge-upstream-url": upstream_url,
-                        "x-bridge-tried-mode": mode,
-                    },
-                )
-        except Exception as e:
-            last_err = str(e)
-            continue
-
-    # If we reached here, return best-known info
-    if last_resp is not None:
         return Response(
-            content=last_resp.content,
-            media_type=last_resp.headers.get("content-type", "text/plain"),
-            status_code=last_resp.status_code,
+            content=r.content,
+            media_type=r.headers.get("content-type", "application/json"),
+            status_code=sc,
             headers={
                 "x-bridge-upstream-path": STATE.post_path,
-                "x-bridge-upstream-status": str(last_resp.status_code),
+                "x-bridge-upstream-status": str(sc),
                 "x-bridge-upstream-url": upstream_url,
-                "x-bridge-tried": "adaptive",
             },
         )
-    if last_err:
-        return PlainTextResponse(f"Bridge upstream error: {last_err}", status_code=502)
-    return PlainTextResponse("Upstream POST rejected all envelopes", status_code=502)
+    except Exception as e:
+        return PlainTextResponse(f"Bridge upstream error: {e}", status_code=502)
 
 
+# Root fallback (optional)
 @app.api_route(
     "/{full_path:path}",
     methods=["GET", "POST", "HEAD", "OPTIONS", "PUT", "PATCH", "DELETE"],
 )
 async def reverse_proxy_catchall(full_path: str, request: Request):
+    # Provide a friendly 404 from the bridge; don't expose upstream 404s by default.
     return PlainTextResponse("404 page not found\n", status_code=404)
 
 
+# Startup: warm the config
 @app.on_event("startup")
 async def startup_event():
     try:
         await ensure_config()
     except Exception:
+        # don't crash on startup; endpoints can still trigger ensure_config()
         pass
 
 
