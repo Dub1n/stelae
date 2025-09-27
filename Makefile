@@ -1,54 +1,59 @@
 # ========= Stelae MCP Stack — Makefile =========
-# quick targets:
-#   make up               # start services via pm2 + save
-#   make down             # stop/delete core services
-#   make restart-proxy    # restart mcp-proxy after config changes
-#   make logs             # tail logs
-#   make status           # pm2 table
-#   make render-proxy     # render config/proxy.json from template
-#   make bridge-venv      # create venv + install bridge deps
-#   make bridge-up        # start the streamable http bridge
-#   make bridge-down      # stop the bridge
-# ===============================================
 
-WSL_HOME        ?= $(HOME)
-STELAE_DIR      ?= $(WSL_HOME)/dev/stelae
-APPS_DIR        ?= $(WSL_HOME)/apps
-PROXY_DIR       ?= $(APPS_DIR)/mcp-proxy
-PROXY_BIN       ?= $(PROXY_DIR)/build/mcp-proxy
-PROXY_CONFIG    ?= $(STELAE_DIR)/config/proxy.json
-PROXY_TEMPLATE  ?= $(STELAE_DIR)/config/proxy.template.json
-PROXY_RENDERER  ?= $(STELAE_DIR)/scripts/render_proxy_config.py
-ENV_FILE        ?= $(STELAE_DIR)/.env
-PM2_ECOSYSTEM   ?= $(STELAE_DIR)/ecosystem.config.js
-PYTHON          ?= python3
-PM2             ?= pm2
-PUBLIC_PORT     ?= 9090
-PM2_SERVICES_CORE ?= mcp-bridge mcp-proxy strata docy memory shell 1mcp
+WSL_HOME          ?= $(HOME)
+STELAE_DIR        ?= $(WSL_HOME)/dev/stelae
+APPS_DIR          ?= $(WSL_HOME)/apps
+PROXY_DIR         ?= $(APPS_DIR)/mcp-proxy
+PROXY_BIN         ?= $(PROXY_DIR)/build/mcp-proxy
+PROXY_CONFIG      ?= $(STELAE_DIR)/config/proxy.json
+PROXY_TEMPLATE    ?= $(STELAE_DIR)/config/proxy.template.json
+PROXY_RENDERER    ?= $(STELAE_DIR)/scripts/render_proxy_config.py
+ENV_FILE          ?= $(STELAE_DIR)/.env
+ENV_EXAMPLE       ?= $(STELAE_DIR)/.env.example
+PM2_ECOSYSTEM     ?= $(STELAE_DIR)/ecosystem.config.js
+PYTHON            ?= python3
+PM2               ?= pm2
 
-BRIDGE_VENV     ?= $(HOME)/.venvs/stelae-bridge
-BRIDGE_PY       ?= $(BRIDGE_VENV)/bin/python
-
-.PHONY: up down restart-proxy logs status render-proxy bridge-venv bridge-up bridge-down help
+.PHONY: up down restart-proxy logs status render-proxy kill-bridge help
 
 help:
 	@echo "Targets:"
-	@echo "  up               - Start all services via pm2 and save"
-	@echo "  down             - Stop/delete core services"
+	@echo "  render-proxy     - Render config/proxy.json from template using .env"
+	@echo "  up               - Start facade + servers via pm2 and save"
 	@echo "  restart-proxy    - Restart mcp-proxy"
-	@echo "  render-proxy     - Render config from template"
-	@echo "  bridge-venv      - Create venv + install bridge deps"
-	@echo "  bridge-up        - Start the HTTP bridge"
-	@echo "  bridge-down      - Stop the HTTP bridge"
-	@echo "  logs             - Tail pm2 logs"
+	@echo "  kill-bridge      - Remove legacy mcp-bridge process (if any)"
+	@echo "  logs             - Tail pm2 logs for mcp-proxy"
 	@echo "  status           - Show pm2 status"
-
-up: render-proxy
-	@if [ ! -f "$(PM2_ECOSYSTEM)" ]; then echo "ERROR: Missing $(PM2_ECOSYSTEM)"; exit 1; fi
-	$(PM2) start "$(PM2_ECOSYSTEM)"
-	$(PM2) save
-	@echo "Tip (one-time): run 'pm2 startup systemd' to auto-start on boot."
+	@echo "  down             - Stop/delete mcp-proxy and servers"
 
 render-proxy:
-	@if [ ! -f "$(PROXY_TEMPLATE)" ]; then echo "ERROR: Missing $(PROXY_TEMPLATE)"; exit 1; fi
-	$(PYTHON) "$
+	@test -f "$(PROXY_TEMPLATE)" || (echo "ERROR: Missing $(PROXY_TEMPLATE)"; exit 1)
+	@test -f "$(PROXY_RENDERER)"  || (echo "ERROR: Missing $(PROXY_RENDERER)"; exit 1)
+	$(PYTHON) "$(PROXY_RENDERER)" \
+	  --template "$(PROXY_TEMPLATE)" \
+	  --output   "$(PROXY_CONFIG)" \
+	  --env-file "$(ENV_FILE)" \
+	  --fallback-env "$(ENV_EXAMPLE)"
+
+up: render-proxy
+	@test -f "$(PM2_ECOSYSTEM)" || (echo "ERROR: Missing $(PM2_ECOSYSTEM)"; exit 1)
+	$(PM2) start "$(PM2_ECOSYSTEM)"
+	$(PM2) save
+	@echo "Tip (one-time): pm2 startup systemd -u $$USER --hp $$HOME && pm2 save"
+
+restart-proxy:
+	$(PM2) restart mcp-proxy --update-env
+	$(PM2) save
+
+kill-bridge:
+	-$(PM2) delete mcp-bridge
+
+logs:
+	$(PM2) logs mcp-proxy --lines 150
+
+status:
+	$(PM2) status
+
+down:
+	-$(PM2) delete mcp-proxy strata docy memory shell fetch github
+	$(PM2) save

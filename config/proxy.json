@@ -1,7 +1,7 @@
 {
   "mcpProxy": {
     "baseURL": "https://mcp.infotopology.xyz",
-    "addr": ":9092",
+    "addr": ":9090",
     "name": "Stelae MCP Proxy",
     "version": "1.0.0",
     "type": "sse",
@@ -20,6 +20,7 @@
   },
   "mcpServers": {
     "fs": {
+      "type": "stdio",
       "command": "/home/gabri/.local/bin/rust-mcp-filesystem",
       "args": [
         "--root",
@@ -27,6 +28,7 @@
       ]
     },
     "rg": {
+      "type": "stdio",
       "command": "/home/gabri/.local/bin/mcp-grep-server",
       "args": [
         "--stdio",
@@ -35,6 +37,7 @@
       ]
     },
     "sh": {
+      "type": "stdio",
       "command": "/home/gabri/.local/bin/terminal_controller",
       "args": [
         "--workdir",
@@ -44,12 +47,14 @@
       ]
     },
     "docs": {
+      "type": "stdio",
       "command": "/home/gabri/.local/bin/mcp-server-docy",
       "args": [
         "--stdio"
       ]
     },
     "mem": {
+      "type": "stdio",
       "command": "/home/gabri/.local/bin/basic-memory",
       "args": [
         "--project",
@@ -60,9 +65,11 @@
       ]
     },
     "fetch": {
+      "type": "http",
       "command": "/home/gabri/.local/bin/mcp-server-fetch"
     },
     "strata": {
+      "type": "stdio",
       "command": "/home/gabri/.local/bin/strata"
     }
   }

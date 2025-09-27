@@ -73,7 +73,9 @@ def render(template: str, values: dict[str, str]) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Render proxy.json from template")
-    parser.add_argument("--template", default=Path("config/proxy.template.json"), type=Path)
+    parser.add_argument(
+        "--template", default=Path("config/proxy.template.json"), type=Path
+    )
     parser.add_argument("--output", default=Path("config/proxy.json"), type=Path)
     parser.add_argument("--env-file", default=Path(".env"), type=Path)
     parser.add_argument("--fallback-env", default=Path(".env.example"), type=Path)
@@ -82,6 +84,13 @@ def main() -> None:
     env_values = load_env(args.env_file, args.fallback_env)
     template_text = args.template.read_text(encoding="utf-8")
     rendered = render(template_text, env_values)
+
+    import json
+
+    try:
+        json.loads(rendered)
+    except Exception as e:
+        raise SystemExit(f"Rendered JSON invalid: {e}")
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(rendered + "\n", encoding="utf-8")

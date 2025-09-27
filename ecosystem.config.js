@@ -8,7 +8,7 @@ const NVM_BIN      = process.env.NVM_BIN || `${HOME}/.nvm/versions/node/v22.19.0
 const PROXY_BIN    = process.env.PROXY_BIN    || `${APPS_DIR}/mcp-proxy/build/mcp-proxy`;
 const PROXY_CONFIG = process.env.PROXY_CONFIG || `${STELAE_DIR}/config/proxy.json`;
 
-// Phoenix repo roots
+// Workspace root
 const PHOENIX_ROOT = process.env.PHOENIX_ROOT || `${HOME}/dev/stelae`;
 
 const STRATA_BIN   = process.env.STRATA_BIN   || `${LOCAL_BIN}/strata`;
@@ -16,7 +16,20 @@ const DOCY_BIN     = process.env.DOCY_BIN     || `${LOCAL_BIN}/mcp-server-docy`;
 const MEMORY_BIN   = process.env.MEMORY_BIN   || `${LOCAL_BIN}/basic-memory`;
 const SHELL_BIN    = process.env.SHELL_BIN    || `${LOCAL_BIN}/terminal_controller`;
 
+// cloudflared
+const CLOUDFLARED_BIN = process.env.CLOUDFLARED || "cloudflared";
+const PUBLIC_PORT     = process.env.PUBLIC_PORT || "9090";
+const CF_TUNNEL_NAME  = process.env.CF_TUNNEL_NAME || "stelae"; // default to your named tunnel
+
 const ENV_PATH = `${process.env.PATH}:${LOCAL_BIN}:${HOME}/.npm-global/bin:${NVM_BIN}`;
+
+function cloudflaredScriptAndArgs() {
+  if (CF_TUNNEL_NAME) {
+    return { script: CLOUDFLARED_BIN, args: `tunnel run ${CF_TUNNEL_NAME}`, interpreter: "none" };
+  }
+  return { script: CLOUDFLARED_BIN, args: `tunnel --url http://127.0.0.1:${PUBLIC_PORT} --no-autoupdate`, interpreter: "none" };
+}
+const cf = cloudflaredScriptAndArgs();
 
 module.exports = {
   apps: [
@@ -36,7 +49,22 @@ module.exports = {
       time: true
     },
 
-    // 1) Strata
+    // 1) cloudflared (named tunnel if CF_TUNNEL_NAME, else quick tunnel)
+    {
+      name: "cloudflared",
+      script: cf.script,
+      args: cf.args,
+      interpreter: cf.interpreter,
+      env: { PATH: ENV_PATH },
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 2000,
+      out_file: `${STELAE_DIR}/logs/cloudflared.out.log`,
+      error_file: `${STELAE_DIR}/logs/cloudflared.err.log`,
+      time: true
+    },
+
+    // 2) Strata
     {
       name: "strata",
       script: STRATA_BIN,
@@ -50,7 +78,7 @@ module.exports = {
       time: true
     },
 
-    // 2) Docy
+    // 3) Docy
     {
       name: "docy",
       script: DOCY_BIN,
@@ -64,7 +92,7 @@ module.exports = {
       time: true
     },
 
-    // 3) Memory
+    // 4) Memory
     {
       name: "memory",
       script: MEMORY_BIN,
@@ -79,7 +107,7 @@ module.exports = {
       time: true
     },
 
-    // 4) Shell
+    // 5) Shell
     {
       name: "shell",
       script: SHELL_BIN,
