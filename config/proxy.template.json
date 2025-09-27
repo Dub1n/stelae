@@ -1,7 +1,7 @@
 {
   "mcpProxy": {
     "baseURL": "{{PUBLIC_BASE_URL}}",
-    "addr": ":9092",
+    "addr": ":9090",
     "name": "Stelae MCP Proxy",
     "version": "1.0.0",
     "type": "sse",
@@ -16,11 +16,11 @@
     "version": "1.0.0",
     "description": "Local MCP stack",
     "publicBaseURL": "{{PUBLIC_BASE_URL}}",
-    "sseEndpoint": "{{PUBLIC_SSE_URL}}",
     "resources": []
   },
   "mcpServers": {
     "fs": {
+      "type": "stdio",
       "command": "{{FILESYSTEM_BIN}}",
       "args": [
         "--root",
@@ -28,6 +28,7 @@
       ]
     },
     "rg": {
+      "type": "stdio",
       "command": "{{RG_BIN}}",
       "args": [
         "--stdio",
@@ -36,6 +37,7 @@
       ]
     },
     "sh": {
+      "type": "stdio",
       "command": "{{SHELL_BIN}}",
       "args": [
         "--workdir",
@@ -45,12 +47,14 @@
       ]
     },
     "docs": {
+      "type": "stdio",
       "command": "{{DOCY_BIN}}",
       "args": [
         "--stdio"
       ]
     },
     "mem": {
+      "type": "stdio",
       "command": "{{MEMORY_BIN}}",
       "args": [
         "--project",
@@ -61,9 +65,11 @@
       ]
     },
     "fetch": {
+      "type": "http",
       "command": "{{LOCAL_BIN}}/mcp-server-fetch"
     },
     "strata": {
+      "type": "stdio",
       "command": "{{STRATA_BIN}}"
     }
   }

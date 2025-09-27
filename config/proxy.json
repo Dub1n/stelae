@@ -16,7 +16,6 @@
     "version": "1.0.0",
     "description": "Local MCP stack",
     "publicBaseURL": "https://mcp.infotopology.xyz",
-    "sseEndpoint": "https://mcp.infotopology.xyz/stream",
     "resources": []
   },
   "mcpServers": {
