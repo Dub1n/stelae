@@ -8,7 +8,6 @@ const NVM_BIN      = process.env.NVM_BIN || `${HOME}/.nvm/versions/node/v22.19.0
 const PROXY_BIN    = process.env.PROXY_BIN    || `${APPS_DIR}/mcp-proxy/build/mcp-proxy`;
 const PROXY_CONFIG = process.env.PROXY_CONFIG || `${STELAE_DIR}/config/proxy.json`;
 
-// Workspace root
 const PHOENIX_ROOT = process.env.PHOENIX_ROOT || `${HOME}/dev/stelae`;
 
 const STRATA_BIN   = process.env.STRATA_BIN   || `${LOCAL_BIN}/strata`;
@@ -16,20 +15,14 @@ const DOCY_BIN     = process.env.DOCY_BIN     || `${LOCAL_BIN}/mcp-server-docy`;
 const MEMORY_BIN   = process.env.MEMORY_BIN   || `${LOCAL_BIN}/basic-memory`;
 const SHELL_BIN    = process.env.SHELL_BIN    || `${LOCAL_BIN}/terminal_controller`;
 
-// cloudflared
-const CLOUDFLARED_BIN = process.env.CLOUDFLARED || "cloudflared";
-const PUBLIC_PORT     = process.env.PUBLIC_PORT || "9090";
-const CF_TUNNEL_NAME  = process.env.CF_TUNNEL_NAME || "stelae"; // default to your named tunnel
+const PYTHON_BIN   = process.env.PYTHON || "python3";
+
+// cloudflared bits
+const CF_BIN    = process.env.CLOUDFLARED || `${NVM_BIN}/cloudflared`;
+const CF_CONF   = process.env.CF_CONF     || `${HOME}/.cloudflared/stelae.yml`;
+const CF_TUNNEL = process.env.CF_TUNNEL_NAME || `stelae`;
 
 const ENV_PATH = `${process.env.PATH}:${LOCAL_BIN}:${HOME}/.npm-global/bin:${NVM_BIN}`;
-
-function cloudflaredScriptAndArgs() {
-  if (CF_TUNNEL_NAME) {
-    return { script: CLOUDFLARED_BIN, args: `tunnel run ${CF_TUNNEL_NAME}`, interpreter: "none" };
-  }
-  return { script: CLOUDFLARED_BIN, args: `tunnel --url http://127.0.0.1:${PUBLIC_PORT} --no-autoupdate`, interpreter: "none" };
-}
-const cf = cloudflaredScriptAndArgs();
 
 module.exports = {
   apps: [
@@ -39,7 +32,7 @@ module.exports = {
       script: PROXY_BIN,
       args: `--config ${PROXY_CONFIG}`,
       cwd: `${APPS_DIR}/mcp-proxy`,
-      env: { PATH: ENV_PATH, MCP_DEFAULT_SERVER: "mem", MCP_DEBUG_LOG: "1"},
+      env: { PATH: ENV_PATH, MCP_DEFAULT_SERVER: "mem", MCP_DEBUG_LOG: "1" },
       autorestart: true,
       max_restarts: 10,
       restart_delay: 2000,
@@ -49,22 +42,7 @@ module.exports = {
       time: true
     },
 
-    // 1) cloudflared (named tunnel if CF_TUNNEL_NAME, else quick tunnel)
-    {
-      name: "cloudflared",
-      script: cf.script,
-      args: cf.args,
-      interpreter: cf.interpreter,
-      env: { PATH: ENV_PATH },
-      autorestart: true,
-      max_restarts: 10,
-      restart_delay: 2000,
-      out_file: `${STELAE_DIR}/logs/cloudflared.out.log`,
-      error_file: `${STELAE_DIR}/logs/cloudflared.err.log`,
-      time: true
-    },
-
-    // 2) Strata
+    // 1) Strata
     {
       name: "strata",
       script: STRATA_BIN,
@@ -78,7 +56,7 @@ module.exports = {
       time: true
     },
 
-    // 3) Docy
+    // 2) Docy
     {
       name: "docy",
       script: DOCY_BIN,
@@ -92,7 +70,7 @@ module.exports = {
       time: true
     },
 
-    // 4) Memory
+    // 3) Memory
     {
       name: "memory",
       script: MEMORY_BIN,
@@ -107,7 +85,7 @@ module.exports = {
       time: true
     },
 
-    // 5) Shell
+    // 4) Shell
     {
       name: "shell",
       script: SHELL_BIN,
@@ -119,6 +97,41 @@ module.exports = {
       restart_delay: 2000,
       out_file: `${STELAE_DIR}/logs/shell.out.log`,
       error_file: `${STELAE_DIR}/logs/shell.err.log`,
+      time: true
+    },
+
+    // 5) cloudflared (named tunnel, sticky)
+    {
+      name: "cloudflared",
+      script: CF_BIN,
+      args: `tunnel run ${CF_TUNNEL} --config ${CF_CONF} --no-autoupdate --loglevel info`,
+      interpreter: "none",
+      env: { PATH: ENV_PATH },
+      autorestart: true,
+      max_restarts: 50,
+      restart_delay: 1500,
+      out_file: `${STELAE_DIR}/logs/cloudflared.out.log`,
+      error_file: `${STELAE_DIR}/logs/cloudflared.err.log`,
+      time: true
+    },
+
+    // 6) public watchdog (restart cloudflared on repeated failures)
+    {
+      name: "watchdog",
+      script: PYTHON_BIN,
+      args: `${STELAE_DIR}/scripts/watch_public_mcp.py`,
+      env: {
+        PATH: ENV_PATH,
+        PUBLIC_BASE_URL: process.env.PUBLIC_BASE_URL || "https://mcp.infotopology.xyz",
+        WATCH_INTERVAL: process.env.WATCH_INTERVAL || "60",
+        FAIL_THRESHOLD: process.env.FAIL_THRESHOLD || "3",
+        CF_PM2_NAME: "cloudflared"
+      },
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 2000,
+      out_file: `${STELAE_DIR}/logs/watchdog.out.log`,
+      error_file: `${STELAE_DIR}/logs/watchdog.err.log`,
       time: true
     }
   ]

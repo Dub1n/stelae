@@ -1,0 +1,21 @@
+# Rendered by scripts/render_cloudflared_config.py using your .env
+# Required in .env: CF_TUNNEL_UUID or CF_TUNNEL_NAME
+# Optional: CF_CREDENTIALS_FILE, CF_HA_CONNECTIONS, PUBLIC_BASE_URL, PUBLIC_PORT
+
+tunnel: stelae
+credentials-file: /home/gabri/.cloudflared/stelae.json
+
+protocol: quic
+ha-connections: 8
+
+originRequest:
+  disableChunkedEncoding: true
+  http2Origin: true
+  keepAliveTimeout: 65s
+  tcpKeepAlive: 60s
+
+ingress:
+  - hostname: mcp.infotopology.xyz
+    service: http://127.0.0.1:9090        # facade (mcp-proxy) listens here; cloudflared must point here
+  - service: http_status:404
+

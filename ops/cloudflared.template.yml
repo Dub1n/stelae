@@ -1,0 +1,20 @@
+# Rendered by scripts/render_cloudflared_config.py using your .env
+# Required in .env: CF_TUNNEL_UUID or CF_TUNNEL_NAME
+# Optional: CF_CREDENTIALS_FILE, CF_HA_CONNECTIONS, PUBLIC_BASE_URL, PUBLIC_PORT
+
+tunnel: {{CF_TUNNEL_UUID}}
+credentials-file: {{CF_CREDENTIALS_FILE}}
+
+protocol: quic
+ha-connections: {{CF_HA_CONNECTIONS}}
+
+originRequest:
+  disableChunkedEncoding: true
+  http2Origin: true
+  keepAliveTimeout: 65s
+  tcpKeepAlive: 60s
+
+ingress:
+  - hostname: {{CF_PUBLIC_HOSTNAME}}
+    service: http://127.0.0.1:{{PUBLIC_PORT}}
+  - service: http_status:404

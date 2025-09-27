@@ -2,7 +2,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ===== config =====
+# --- paths & config -----------------------------------------------------------
 HOME_DIR="${HOME}"
 STELAE_DIR="${STELAE_DIR:-$HOME_DIR/dev/stelae}"
 APPS_DIR="${APPS_DIR:-$HOME_DIR/apps}"
@@ -14,46 +14,50 @@ PROXY_JSON="${STELAE_DIR}/config/proxy.json"
 RENDERER="${STELAE_DIR}/scripts/render_proxy_config.py"
 ECOSYSTEM="${STELAE_DIR}/ecosystem.config.js"
 
-# single façade port
-PROXY_PORT="${PROXY_PORT:-9090}"
+PROXY_PORT="${PROXY_PORT:-9090}"                   # proxy listens here
 
-# cloudflare
-CLOUDFLARED_BIN="${CLOUDFLARED:-cloudflared}"
-CF_TUNNEL_NAME="${CF_TUNNEL_NAME:-stelae}"   # override via env if needed
+# cloudflared (named tunnel w/ config)
+CLOUDFLARED_BIN="${CLOUDFLARED:-$HOME_DIR/.nvm/versions/node/v22.19.0/bin/cloudflared}"
+CF_TUNNEL_NAME="${CF_TUNNEL_NAME:-stelae}"
 CF_DIR="$HOME_DIR/.cloudflared"
 CF_CONF="$CF_DIR/config.yml"
 
-# public URL (for probes)
+# public URL for probes
 PUBLIC_BASE_URL="$(grep -E '^PUBLIC_BASE_URL=' "$STELAE_DIR/.env" 2>/dev/null | sed 's/^[^=]*=//')"
 PUBLIC_BASE_URL="${PUBLIC_BASE_URL:-https://mcp.infotopology.xyz}"
 
-# flags
+# readiness thresholds
+MIN_TOOL_COUNT="${MIN_TOOL_COUNT:-12}"             # “warm enough” before exposing
+READY_TIMEOUT_SEC="${READY_TIMEOUT_SEC:-45}"
+
+# options ----------------------------------------------------------------------
 START_CLOUDFLARED=1
 KEEP_PM2=0
 for arg in "$@"; do
   case "$arg" in
     --no-cloudflared) START_CLOUDFLARED=0;;
-    --keep-pm2)       KEEP_PM2=1;;
+    --keep-pm2) KEEP_PM2=1;;
     -h|--help)
       cat <<EOF
 Usage: $(basename "$0") [options]
-
-Options:
   --no-cloudflared   Skip starting cloudflared via pm2
   --keep-pm2         Do not 'pm2 kill'; just (re)start managed apps
+
+Env overrides:
+  PROXY_PORT        (default 9090)
+  MIN_TOOL_COUNT    (default 12)
+  READY_TIMEOUT_SEC (default 45)
 EOF
       exit 0
     ;;
   esac
 done
 
-# ===== helpers =====
+# helpers ----------------------------------------------------------------------
 log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!!\033[0m %s\n' "$*"; }
 err()  { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; }
-
 require() { command -v "$1" >/dev/null 2>&1 || { err "missing command: $1"; exit 1; }; }
-curl_json() { curl -s --max-time 10 "$@" || true; }
 
 wait_port() {
   local port="$1" label="$2" tries=60
@@ -65,6 +69,31 @@ wait_port() {
     sleep 0.25
   done
   return 1
+}
+
+local_tool_count() {
+  curl -s "http://127.0.0.1:${PROXY_PORT}/mcp" -H 'Content-Type: application/json' \
+    --data '{"jsonrpc":"2.0","id":"T","method":"tools/list"}' \
+  | jq -r 'try (.result.tools|length) // 0' 2>/dev/null || echo 0
+}
+
+wait_tools_ready() {
+  log "Waiting for tools to register (target >= ${MIN_TOOL_COUNT}, timeout ${READY_TIMEOUT_SEC}s)…"
+  local start ts count=0
+  start=$(date +%s)
+  while :; do
+    count="$(local_tool_count)"
+    if [ "${count:-0}" -ge "$MIN_TOOL_COUNT" ]; then
+      log "Tool catalog ready: ${count} tools."
+      return 0
+    fi
+    ts=$(date +%s)
+    if [ $((ts - start)) -ge "$READY_TIMEOUT_SEC" ]; then
+      warn "Timed out at ${count} tools; continuing (public may briefly see fewer tools)."
+      return 0
+    fi
+    sleep 1
+  done
 }
 
 ensure_cloudflared_ingress() {
@@ -97,7 +126,6 @@ EOF
 }
 
 show_public_jsonrpc_once() {
-  # no traps; manual cleanup to avoid set -u issues
   local url="$1"
   local hdrs body status ctype cfray rc=1
   hdrs="$(mktemp)"
@@ -135,7 +163,7 @@ show_public_jsonrpc_retry() {
   return 1
 }
 
-# ===== env prep =====
+# prereqs ----------------------------------------------------------------------
 require jq
 require python3
 require ss
@@ -143,7 +171,7 @@ if [ -s "$HOME_DIR/.nvm/nvm.sh" ]; then . "$HOME_DIR/.nvm/nvm.sh"; fi
 require pm2
 mkdir -p "$STELAE_DIR/logs"
 
-# ===== stop everything =====
+# stop / clean -----------------------------------------------------------------
 if [ "$KEEP_PM2" -eq 0 ]; then
   log "Killing pm2 (all processes)…"
   pm2 kill || true
@@ -154,21 +182,16 @@ fi
 
 log "Killing stray listeners on :$PROXY_PORT (if any)…"
 mapfile -t PIDS < <(ss -ltnp "( sport = :$PROXY_PORT )" | awk -F',' '/pid=/{print $2}' | sed 's/pid=//' | awk '{print $1}' | sort -u)
-if [ "${#PIDS[@]}" -gt 0 ]; then
-  for pid in "${PIDS[@]}"; do kill -9 "$pid" 2>/dev/null || true; done
-fi
+if [ "${#PIDS[@]}" -gt 0 ]; then for pid in "${PIDS[@]}"; do kill -9 "$pid" 2>/dev/null || true; done; fi
 
-# ===== (re)render proxy config =====
+# render proxy config ----------------------------------------------------------
 log "Rendering proxy config → $PROXY_JSON"
-if [ ! -f "$PROXY_TEMPLATE" ]; then err "Template missing: $PROXY_TEMPLATE"; exit 1; fi
-python3 "$RENDERER" --template "$PROXY_TEMPLATE" --output "$PROXY_JSON" --env-file "$STELAE_DIR/.env" --fallback-env "$STELAE_DIR/.env.example" || {
-  err "proxy render failed"; exit 1; }
+python3 "$RENDERER" --template "$PROXY_TEMPLATE" --output "$PROXY_JSON" --env-file "$STELAE_DIR/.env" --fallback-env "$STELAE_DIR/.env.example"
 python3 - <<'PY' "$PROXY_JSON"
 import json,sys; json.load(open(sys.argv[1]))
 PY
 
-# ===== (re)start core via pm2 =====
-if [ ! -f "$ECOSYSTEM" ]; then err "Missing ecosystem file: $ECOSYSTEM"; exit 1; fi
+# start local proxy + servers --------------------------------------------------
 log "Starting mcp-proxy via pm2"
 pm2 start "$ECOSYSTEM" --only mcp-proxy 2>/dev/null || pm2 restart mcp-proxy --update-env
 for svc in strata docy memory shell; do
@@ -176,40 +199,39 @@ for svc in strata docy memory shell; do
 done
 pm2 save || true
 
-# ===== wait for façade =====
 wait_port "$PROXY_PORT" "mcp-proxy" || { err "proxy didn’t bind :$PROXY_PORT"; pm2 logs mcp-proxy --lines 120; exit 2; }
 
-# ===== local probes =====
+# local readiness (before exposing) -------------------------------------------
 log "Local probe: HEAD http://127.0.0.1:${PROXY_PORT}/mcp"
 curl -sI "http://127.0.0.1:${PROXY_PORT}/mcp" | sed -n '1,10p' || true
 
 log "Local probe: initialize (JSON-RPC)"
-curl -s "http://127.0.0.1:${PROXY_PORT}/mcp" \
-  -H 'Content-Type: application/json' \
+curl -s "http://127.0.0.1:${PROXY_PORT}/mcp" -H 'Content-Type: application/json' \
   --data '{"jsonrpc":"2.0","id":"init","method":"initialize","params":{"protocolVersion":"2024-11-05"}}' | jq -C '.' || true
 
-log "Local probe: tools/list → names"
-curl -s "http://127.0.0.1:${PROXY_PORT}/mcp" \
-  -H 'Content-Type: application/json' \
-  --data '{"jsonrpc":"2.0","id":"T","method":"tools/list"}' \
-| jq -r '.result.tools[].name' | sort | nl | sed -n '1,200p' || true
+wait_tools_ready
 
-# ===== cloudflared (optional) =====
+log "Local probe: tools/list → names (first 40)"
+curl -s "http://127.0.0.1:${PROXY_PORT}/mcp" -H 'Content-Type: application/json' \
+  --data '{"jsonrpc":"2.0","id":"T","method":"tools/list"}' \
+| jq -r '.result.tools[].name' | sort | nl | sed -n '1,40p' || true
+
+# start cloudflared only when local is warm -----------------------------------
 if [ "$START_CLOUDFLARED" -eq 1 ]; then
   require "$CLOUDFLARED_BIN"
   ensure_cloudflared_ingress
-  log "Ensuring cloudflared pm2 process uses: tunnel run ${CF_TUNNEL_NAME} (explicit config, no chunked)"
+  log "Ensuring cloudflared pm2 process (flags first)…"
   if ! pm2 describe cloudflared >/dev/null 2>&1; then
-    pm2 start "$CLOUDFLARED_BIN" --name cloudflared -- tunnel run "${CF_TUNNEL_NAME}" --config "${CF_CONF}" --no-chunked-encoding
+    pm2 start "$CLOUDFLARED_BIN" --name cloudflared -- --no-chunked-encoding --config "${CF_CONF}" tunnel run "${CF_TUNNEL_NAME}"
   else
-    pm2 restart cloudflared --update-env -- tunnel run "${CF_TUNNEL_NAME}" --config "${CF_CONF}" --no-chunked-encoding
+    pm2 restart cloudflared --update-env -- --no-chunked-encoding --config "${CF_CONF}" tunnel run "${CF_TUNNEL_NAME}"
   fi
   pm2 save || true
 else
   warn "Skipping cloudflared (--no-cloudflared)."
 fi
 
-# ===== public probes =====
+# public probes (best-effort; tolerate CF 530 blips) ---------------------------
 if [ "$START_CLOUDFLARED" -eq 1 ] && [ -n "$PUBLIC_BASE_URL" ]; then
   log "Public probe: manifest"
   curl -skI "${PUBLIC_BASE_URL}/.well-known/mcp/manifest.json" | sed -n '1,12p' || true
@@ -218,4 +240,4 @@ if [ "$START_CLOUDFLARED" -eq 1 ] && [ -n "$PUBLIC_BASE_URL" ]; then
   show_public_jsonrpc_retry "${PUBLIC_BASE_URL}/mcp" || true
 fi
 
-log "Done. If anything looks off, check: 'pm2 logs mcp-proxy --lines 150' and 'pm2 logs cloudflared --lines 60'."
+log "Done. For issues, check: 'pm2 logs mcp-proxy --lines 150' and 'pm2 logs cloudflared --lines 80'."

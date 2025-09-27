@@ -1,0 +1,17 @@
+name = "stelae-manifest"
+main = "manifest-worker.js"
+compatibility_date = "2025-09-01"
+
+# pin your account (ASCII only)
+account_id = "63b31bb589eebdcf4ffbd8ba2e68b196"
+
+# keep it least-privilege but reliable: route the whole host and filter in code
+routes = [
+  { pattern = "mcp.infotopology.xyz/*", zone_name = "infotopology.xyz" }
+]
+
+# KV binding for manifest JSON
+[[kv_namespaces]]
+binding    = "MANIFEST_KV"
+id         = "7f01da303863427fa232584dee4c995b"
+preview_id = "7f01da303863427fa232584dee4c995b"

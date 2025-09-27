@@ -21,12 +21,35 @@
 
 ## Test-Driven Development (TDD)
 
+Follow TDD practices where applicable.
+
+- This applies to:
+  - new features
+  - infrastructure
+
+- This doesn't apply to:
+  - small changes
+  - small test harnesses
+  - code that would not meaningfully benefit from having a test written for it
+  - code that can be tested comprehensively with few commands
+
 - Write tests *before* writing the code. This forces you to think about the interface and behavior first.
 - **Specifics:**
   - Write unit tests for individual functions and classes, focusing on isolated behavior.
   - Use integration tests to verify interactions between different modules and components.
   - Aim for high test coverage (80%+) to ensure that most of the code is tested.
   - Use mocking and stubbing to isolate units under test and control dependencies.
+
+If existing code does that not have appropriate tests (unit tests, end-to-end tests, etc.) is encounetered, the following approach is employed:
+
+1. Complete current task
+2. After summarising the work completed, notify the user of the missing tests and affected components
+3. If tests are to be written, the user will notify you. If they do not, proceed with the next task
+4. If the user requests "present test plan" (or words to that effect), present a plan for the user to provide in a new chat:
+  The user will provide a test plan to the agent
+  The agent will write a test *without* reading the components that are to be tested, but is told in the test plan what the required inputs/outputs/endpoints etc are, just not the actual implementation of the components
+  The agent will write the tests for the components such that they pass when the requirements are met and fail should they not, ensuring coverage of edge cases and likely points of failure
+  The agent will run the tests on the components and, should either the tests or the components need fixing, conduct the fixes required
 
 ## SOLID Design Principles - Coding Assistant Guidelines
 
