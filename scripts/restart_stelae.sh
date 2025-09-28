@@ -167,9 +167,18 @@ show_public_jsonrpc_retry() {
 require jq
 require python3
 require ss
+require go
 if [ -s "$HOME_DIR/.nvm/nvm.sh" ]; then . "$HOME_DIR/.nvm/nvm.sh"; fi
 require pm2
 mkdir -p "$STELAE_DIR/logs"
+
+# build fresh proxy binary before restarting services
+log "Building mcp-proxy binary → $PROXY_BIN"
+(
+  cd "$PROXY_DIR"
+  mkdir -p "$(dirname "$PROXY_BIN")"
+  go build -o "$PROXY_BIN" ./...
+)
 
 # stop / clean -----------------------------------------------------------------
 if [ "$KEEP_PM2" -eq 0 ]; then

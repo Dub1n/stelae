@@ -1,3 +1,5 @@
 starlette
 uvicorn
 httpx
+anyio
+modelcontextprotocol

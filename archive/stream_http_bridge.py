@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+DEPRECATED: Archived legacy bridge retained for historical reference only.
+
 Stelae MCP Bridge - HTTP+SSE auto-probing bridge for ChatGPT Connector compliance.
 
 Public surface:

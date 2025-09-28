@@ -4,7 +4,7 @@
     "addr": ":9090",
     "name": "Stelae MCP Proxy",
     "version": "1.0.0",
-    "type": "sse",
+    "type": "streamable-http",
     "options": {
       "panicIfInvalid": true,
       "logEnabled": true,

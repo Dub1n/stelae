@@ -24,6 +24,8 @@ pm2 logs mcp-proxy --lines 120 | egrep 'Handling requests at|Successfully listed
 # <github> Handling requests at /github/
 ````
 
+`pm2 status` should show `mcp-proxy`, `stelae-bridge`, `cloudflared`, and `watchdog` as `online`. The individual tool servers are managed by the proxy itself and only appear in the proxy logs.
+
 If any server is missing, check its binary path/args in `config/proxy.json` (rendered from the template). Regenerate from `.env` if needed, then restart:
 
 ```bash
@@ -164,7 +166,7 @@ Also ensure at least two tool calls succeed (e.g., `fetch` + one of `grep`/`exec
 * **restart everything (no bridge in this architecture)**
 
 ```bash
-pm2 restart mcp-proxy strata docy memory shell cloudflared --update-env
+pm2 restart mcp-proxy stelae-bridge cloudflared watchdog --update-env
 pm2 save
 ```
 

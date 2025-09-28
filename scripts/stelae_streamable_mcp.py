@@ -38,6 +38,8 @@ DEFAULT_SEARCH_PATHS: Sequence[str] = tuple(
     part.strip() for part in SEARCH_PATHS_ENV.split(",") if part.strip()
 ) or (str(SEARCH_ROOT),)
 
+TRANSPORT = os.getenv("STELAE_STREAMABLE_TRANSPORT", "streamable-http")
+
 app = FastMCP(
     name="stelae-hub",
     instructions="Connector-ready hub providing search and fetch over the local workspace.",
@@ -242,7 +244,7 @@ async def fetch(
 
 
 def run() -> None:
-    app.run(transport="streamable-http")
+    app.run(transport=TRANSPORT)
 
 
 if __name__ == "__main__":

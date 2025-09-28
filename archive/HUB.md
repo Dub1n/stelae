@@ -1,5 +1,9 @@
 $ bash -lc 'cat <<'"'"'EOF'"'"' > HUB.md
 
+# DEPRECATED — historical Stelae hub design
+
+> This document outlines the initial Go-based hub proposal and is kept for reference only. The current bridge implementation lives in `scripts/stelae_streamable_mcp.py`.
+
 # Stelae Hub Design
 
 ## Context

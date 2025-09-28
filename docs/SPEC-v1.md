@@ -11,6 +11,7 @@ this whole setup is a stitched-together backend so that ChatGPT’s “MCP conne
 * your *local MCP servers* (filesystem, grep, shell, docs, memory, strata, fetch, etc.) are each little processes, each exposing a JSON-RPC/SSE interface. they’re individually fine, but raw they’d all be separate URLs.
 * the **mcp-proxy** sits in front as a **facade router**. it launches and supervises all stdio MCP servers directly, keeps their registrations fresh, and exposes a unified `/mcp` endpoint. when a client (like ChatGPT) connects, it doesn’t need to know about the underlying tools — the proxy handles `initialize`, `tools/list`, and `tools/call` by dispatching to the right MCP server.
 * **cloudflared** tunnels that single port (9090 locally) to the outside world, pinned on a static domain with TLS and Cloudflare’s keepalive. that’s why ChatGPT can connect with one URL and not freak out about redirects or timeouts.
+* a lightweight **FastMCP bridge** stays hot under pm2 so the Codex CLI / VS Code agent can attach over stdio instantly while reusing the same upstream proxy.
 * **memory** is just one MCP server among many; not the master. it provides its own `/mem/mcp` endpoint, but from the outside it’s merged into the same tool list as everything else. the proxy makes sure that `/mcp` is always the right entrypoint, regardless of which tool you call.
 * result: a fully ChatGPT-compliant MCP endpoint, with `HEAD`/`GET`/`POST` all behaving as the Connector spec requires, and all your essential tools callable through one path.
 
@@ -74,13 +75,14 @@ flowchart TD
 
 ### process supervision
 
-* pm2 now supervises only the long-lived façade and infrastructure helpers:
+* pm2 now supervises the long-lived façade and helper processes:
 
   * `mcp-proxy` (facade)
+  * `stelae-bridge` (stdio FastMCP hub kept hot for local Codex/VS Code clients)
   * `cloudflared` (tunnel to `mcp.infotopology.xyz`)
   * `watchdog` (optional Cloudflare tunnel babysitter)
 * individual MCP tools (filesystem, ripgrep, shell, docs, memory, strata, fetch, etc.) run as stdio children of **mcp-proxy**. the proxy is responsible for launching them, retrying failed registrations, and rebuilding the aggregated tool catalog before answering client calls.
-* pm2 startup is bound to systemd with `pm2 startup systemd -u gabri --hp /home/gabri` + `pm2 save`.
+* pm2 startup is bound to systemd with `pm2 startup systemd -u gabri --hp /home/gabri` + `pm2 save`, ensuring all four services revive automatically when WSL boots.
 
 ### external exposure
 

@@ -8,7 +8,7 @@
   `https://mcp.infotopology.xyz/.well-known/mcp/manifest.json`  
   (edge-served; not dependent on the tunnel).
 - **tools** appear via `tools/list` (public `/mcp`) — expect ~**39** right now.
-- **pm2** supervises: `mcp-proxy`, `cloudflared`, `strata`, `docy`, `memory`, `shell`, `watchdog`.
+- **pm2** supervises: `mcp-proxy`, `stelae-bridge`, `cloudflared`, `watchdog` (the individual tool servers are spawned directly by the proxy).
 
 ---
 
@@ -35,7 +35,7 @@
 ### pm2 expected set
 
 ```list
-mcp-proxy, cloudflared, strata, docy, memory, shell, watchdog
+mcp-proxy, stelae-bridge, cloudflared, watchdog
 ```
 
 ---
@@ -52,6 +52,7 @@ flowchart LR
     subgraph Host
       PX["mcp-proxy :9090<br/>/mcp (SSE + JSON-RPC)"]
       S1["fs/rg/sh/docs/mem/strata/fetch/github<br/>(stdio MCP servers)"]
+      BR["stelae-bridge (stdio hub)"]
       PM2["pm2 (supervision)"]
     end
 
@@ -59,7 +60,8 @@ flowchart LR
     Client -->|POST /mcp| CF --> PX --> S1
     PM2 --- PX
     PM2 --- CF
-    PM2 --- S1
+    PM2 --- BR
+    BR --> S1
 ````
 
 ---

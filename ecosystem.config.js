@@ -4,22 +4,16 @@ const STELAE_DIR   = process.env.STELAE_DIR   || `${HOME}/dev/stelae`;
 const APPS_DIR     = process.env.APPS_DIR     || `${HOME}/apps`;
 const LOCAL_BIN    = `${HOME}/.local/bin`;
 const NVM_BIN      = process.env.NVM_BIN || `${HOME}/.nvm/versions/node/v22.19.0/bin`;
+const BRIDGE_PY    = process.env.BRIDGE_PY || `${HOME}/.venvs/stelae-bridge/bin/python`;
 
 const PROXY_BIN    = process.env.PROXY_BIN    || `${APPS_DIR}/mcp-proxy/build/mcp-proxy`;
 const PROXY_CONFIG = process.env.PROXY_CONFIG || `${STELAE_DIR}/config/proxy.json`;
-
-const PHOENIX_ROOT = process.env.PHOENIX_ROOT || `${HOME}/dev/stelae`;
-
-const STRATA_BIN   = process.env.STRATA_BIN   || `${LOCAL_BIN}/strata`;
-const DOCY_BIN     = process.env.DOCY_BIN     || `${LOCAL_BIN}/mcp-server-docy`;
-const MEMORY_BIN   = process.env.MEMORY_BIN   || `${LOCAL_BIN}/basic-memory`;
-const SHELL_BIN    = process.env.SHELL_BIN    || `${LOCAL_BIN}/terminal_controller`;
 
 const PYTHON_BIN   = process.env.PYTHON || "python3";
 
 // cloudflared bits
 const CF_BIN    = process.env.CLOUDFLARED || `${NVM_BIN}/cloudflared`;
-const CF_CONF   = process.env.CF_CONF     || `${HOME}/.cloudflared/stelae.yml`;
+const CF_CONF   = process.env.CF_CONF     || `${HOME}/.cloudflared/config.yml`;
 const CF_TUNNEL = process.env.CF_TUNNEL_NAME || `stelae`;
 
 const ENV_PATH = `${process.env.PATH}:${LOCAL_BIN}:${HOME}/.npm-global/bin:${NVM_BIN}`;
@@ -42,71 +36,34 @@ module.exports = {
       time: true
     },
 
-    // 1) Strata
+    // 1) Streamable bridge (keeps stdio MCP facade hot for Codex/VS Code)
     {
-      name: "strata",
-      script: STRATA_BIN,
+      name: "stelae-bridge",
+      script: BRIDGE_PY,
       interpreter: "none",
-      env: { PATH: ENV_PATH },
+      args: "-m scripts.stelae_streamable_mcp",
+      cwd: STELAE_DIR,
+      env: {
+        PATH: ENV_PATH,
+        PYTHONPATH: STELAE_DIR,
+        STELAE_PROXY_BASE: process.env.STELAE_PROXY_BASE || "http://127.0.0.1:9090",
+        STELAE_STREAMABLE_TRANSPORT: process.env.STELAE_STREAMABLE_TRANSPORT || "stdio"
+      },
       autorestart: true,
       max_restarts: 10,
       restart_delay: 2000,
-      out_file: `${STELAE_DIR}/logs/strata.out.log`,
-      error_file: `${STELAE_DIR}/logs/strata.err.log`,
+      out_file: `${STELAE_DIR}/logs/stelae-bridge.out.log`,
+      error_file: `${STELAE_DIR}/logs/stelae-bridge.err.log`,
       time: true
     },
 
-    // 2) Docy
-    {
-      name: "docy",
-      script: DOCY_BIN,
-      interpreter: "none",
-      env: { PATH: ENV_PATH },
-      autorestart: true,
-      max_restarts: 10,
-      restart_delay: 2000,
-      out_file: `${STELAE_DIR}/logs/docy.out.log`,
-      error_file: `${STELAE_DIR}/logs/docy.err.log`,
-      time: true
-    },
-
-    // 3) Memory
-    {
-      name: "memory",
-      script: MEMORY_BIN,
-      interpreter: "none",
-      args: "mcp --transport stdio",
-      env: { PATH: ENV_PATH },
-      autorestart: true,
-      max_restarts: 10,
-      restart_delay: 2000,
-      out_file: `${STELAE_DIR}/logs/memory.out.log`,
-      error_file: `${STELAE_DIR}/logs/memory.err.log`,
-      time: true
-    },
-
-    // 4) Shell
-    {
-      name: "shell",
-      script: SHELL_BIN,
-      interpreter: "none",
-      args: `--workdir ${PHOENIX_ROOT} --allow npm,pytest,make,python,git`,
-      env: { PATH: ENV_PATH },
-      autorestart: true,
-      max_restarts: 10,
-      restart_delay: 2000,
-      out_file: `${STELAE_DIR}/logs/shell.out.log`,
-      error_file: `${STELAE_DIR}/logs/shell.err.log`,
-      time: true
-    },
-
-    // 5) cloudflared (named tunnel, sticky)
+    // 2) cloudflared (named tunnel, sticky)
     {
       name: "cloudflared",
       script: CF_BIN,
-      args: `tunnel run ${CF_TUNNEL} --config ${CF_CONF} --no-autoupdate --loglevel info`,
+      args: `--no-chunked-encoding --config ${CF_CONF} --no-autoupdate --loglevel debug --transport-loglevel debug tunnel run ${CF_TUNNEL}`,
       interpreter: "none",
-      env: { PATH: ENV_PATH },
+      env: { PATH: ENV_PATH, CF_CONF: process.env.CF_CONF || `${HOME}/.cloudflared/config.yml` },
       autorestart: true,
       max_restarts: 50,
       restart_delay: 1500,
@@ -115,7 +72,7 @@ module.exports = {
       time: true
     },
 
-    // 6) public watchdog (restart cloudflared on repeated failures)
+    // 3) public watchdog (restart cloudflared on repeated failures)
     {
       name: "watchdog",
       script: PYTHON_BIN,
