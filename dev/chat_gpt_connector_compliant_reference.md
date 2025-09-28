@@ -31,7 +31,8 @@
 ### 3.2 SSE Endpoint (GET /mcp)
 
 - **Requirement**: Respond with `Content-Type: text/event-stream`, send initial heartbeat/comment within 3–5 s, continue heartbeats ≤20 s (`docs/chat_gpt_connector_compliance_requirements_spec_v_0.md:34-47`).
-- **Observed behavior**: Probe shows stream opening in ~0.14 s, immediate `event: endpoint` emission (`/tmp/probe.log`, first lines).
+- **Requirement**: Emit `event: endpoint` with an **unescaped** leading-slash path (for example `/mcp?session_id=<hex>`) or a full absolute URL on the same origin. FastMCP’s `mcp.client.sse` rejects cross-origin URLs and assumes the data is not percent-encoded (`fastmcp` client source confirms this expectation).
+- **Observed behavior**: After `handleSSE` update on 2025‑09‑28, the proxy emits `/mcp?session_id=<hex>`; probe confirms the connector immediately POSTs to the correct endpoint and no longer times out.
 - **Notes**: Heartbeat cadence currently 15 s via Go ticker.
 
 ### 3.3 JSON-RPC POST /mcp
@@ -79,10 +80,10 @@ These responses are sufficient for ChatGPT verification and actual use (source: 
 
 ## 5. Stelae Current Behavior Snapshot (2025‑09‑28)
 
-- **Manifest**: `curl https://mcp.infotopology.xyz/.well-known/mcp/manifest.json` → only `search`, `fetch` (post Cloudflare worker rewrite).
-- **SSE**: `curl -Ns https://mcp.infotopology.xyz/mcp` → comment heartbeat and `event: endpoint` immediately (verified via probe).
-- **Initialize**: Local proxy build trims `result.tools` to the facade descriptors (`search`, `fetch`). Production endpoint still returns the full upstream catalog until the proxy is redeployed.
-- **tools/list**: Mirrors initialize in local tests (only `search`/`fetch`); production remains unfiltered for the moment.
+- **Manifest**: `curl https://mcp.infotopology.xyz/.well-known/mcp/manifest.json` → only `search`, `fetch` (post Cloudflare worker rewrite). When registering the connector in ChatGPT, supply the base origin `https://mcp.infotopology.xyz` (the verifier appends `/.well-known/mcp/manifest.json` automatically).
+- **SSE**: `curl -Ns https://mcp.infotopology.xyz/mcp` → comment heartbeat and `event: endpoint` immediately with `/mcp?session_id=<hex>` (no percent-encoding). Downstream POSTs now hit the facade as expected.
+- **Initialize**: `result.tools` now matches the facade descriptors (`search`, `fetch`) in production after the 2025‑09‑28 redeploy.
+- **tools/list**: Mirrors initialize (only `search`/`fetch`).
 - **Tool execution**: The Go facade now returns deterministic sample hits for `search`; `fetch` continues proxying Basic Memory/Docy responses.
 
 ## 6. Compliance Matrix
@@ -91,9 +92,10 @@ These responses are sufficient for ChatGPT verification and actual use (source: 
 | --- | --- | --- | --- | --- |
 | Manifest endpoint with search/fetch only | Community & manifest worker | JSON with `tools: [search, fetch]` | ✅ (Cloudflare worker) | ✅ |
 | SSE GET heartbeat + endpoint event | Official + internal | `event: endpoint` + heartbeats | ✅ | ✅ |
+| SSE endpoint payload unescaped | FastMCP client behavior + incident 2025‑09‑28 | `/mcp?session_id=<hex>` (no `%2F`) | ✅ (deployed 2025‑09‑28) | ✅ |
 | HEAD /mcp returns 200 SSE headers | Internal spec | SSE headers, no body | ✅ | ✅ |
-| JSON-RPC `initialize` limited to search/fetch | Example connectors, community reports | `result.tools` = search, fetch | Local build returns search/fetch; production still reports full catalog until proxy redeploy | ⚠ (needs deploy) |
-| JSON-RPC `tools/list` limited to search/fetch | Example connectors | same as initialize | Local build mirrors search/fetch; production still returns 40 tools pre-redeploy | ⚠ (needs deploy) |
+| JSON-RPC `initialize` limited to search/fetch | Example connectors, community reports | `result.tools` = search, fetch | ✅ | ✅ |
+| JSON-RPC `tools/list` limited to search/fetch | Example connectors | same as initialize | ✅ | ✅ |
 | Tool schemas match ChatGPT expectation | Example (Todoist) | search → list of hits; fetch → document payload | search facade returns deterministic sample hits; fetch proxies upstream | ✅ (local static results) |
 | HTTP error handling | Internal spec | 200 + JSON-RPC error | Matches | ✅ |
 | SSE keepalive ≤20 s | Internal spec | heartbeat ≤20 s | 15 s ticker | ✅ |
@@ -101,10 +103,9 @@ These responses are sufficient for ChatGPT verification and actual use (source: 
 
 ## 7. Action Items
 
-1. **Trim initialize/tools.list output**: Implemented via `collectTools` + `mergeWithFacadeDefaults`, exercised by `TestCollectToolsFiltersToFacadeCatalog`/`TestCollectToolsProvidesFacadeFallbacks`. Pending: redeploy proxy so production matches local results.
-2. **Enhance mock search results**: Go facade now serves deterministic hits from `buildFacadeSearchPayload` and the Python streamable shim defaults to `STATIC_SEARCH_HITS`.
-3. **Automate handshake validation**: `make check-connector` wraps `dev/debug/check_connector.py` to run the probe, assert tool catalogs/search hits, and write timestamped logs under `dev/logs/`.
-4. **Coordinate with OpenAI**: Once production outputs align with the trimmed catalogs, share sanitized payloads + session IDs with support.
+1. **Enhance mock search results**: Go facade now serves deterministic hits from `buildFacadeSearchPayload` and the Python streamable shim defaults to `STATIC_SEARCH_HITS`.
+2. **Automate handshake validation**: `make check-connector` wraps `dev/debug/check_connector.py` to run the probe, assert tool catalogs/search hits, and write timestamped logs under `dev/logs/`.
+3. **Coordinate with OpenAI**: Once production outputs align with the trimmed catalogs and SSE payload, share sanitized payloads + session IDs with support.
 
 ## 8. Appendix: Useful Commands & Snippets
 

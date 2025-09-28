@@ -27,7 +27,7 @@ PUBLIC_BASE_URL="$(grep -E '^PUBLIC_BASE_URL=' "$STELAE_DIR/.env" 2>/dev/null | 
 PUBLIC_BASE_URL="${PUBLIC_BASE_URL:-https://mcp.infotopology.xyz}"
 
 # readiness thresholds
-MIN_TOOL_COUNT="${MIN_TOOL_COUNT:-12}"             # “warm enough” before exposing
+MIN_TOOL_COUNT="${MIN_TOOL_COUNT:-2}"             # “warm enough” before exposing
 READY_TIMEOUT_SEC="${READY_TIMEOUT_SEC:-45}"
 CURL_MAX_TIME="${CURL_MAX_TIME:-45}"
 

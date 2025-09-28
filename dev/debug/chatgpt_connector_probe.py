@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Minimal Streamable-HTTP probe to emulate ChatGPT connector handshake."""
+
 from __future__ import annotations
 
 import argparse
@@ -8,7 +9,7 @@ import json
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional, Tuple
-
+import urllib.parse
 import httpx
 
 DEFAULT_SERVER_URL = "https://mcp.infotopology.xyz/mcp"
@@ -21,7 +22,9 @@ def _event_stream_lines(text: str):
         yield line.rstrip("\r")
 
 
-async def timed(name: str, coro, *, output: Optional[Callable[[str], None]] = print) -> Tuple[float, Any]:
+async def timed(
+    name: str, coro, *, output: Optional[Callable[[str], None]] = print
+) -> Tuple[float, Any]:
     start = time.perf_counter()
     result = await coro
     duration = time.perf_counter() - start
@@ -30,22 +33,41 @@ async def timed(name: str, coro, *, output: Optional[Callable[[str], None]] = pr
     return duration, result
 
 
-async def fetch_session_endpoint(client: httpx.AsyncClient, server_url: str, timeout: float) -> str:
+async def fetch_session_endpoint(
+    client: httpx.AsyncClient, server_url: str, timeout: float
+) -> str:
     """Open the SSE facade and return the per-session endpoint"""
     headers = {"Accept": "text/event-stream"}
-    async with client.stream("GET", server_url, headers=headers, timeout=timeout) as resp:
+    async with client.stream(
+        "GET", server_url, headers=headers, timeout=timeout
+    ) as resp:
         resp.raise_for_status()
         event: Optional[str] = None
         data: Optional[str] = None
         async for chunk in resp.aiter_text():
             for line in _event_stream_lines(chunk):
                 if line.startswith("event: "):
-                    event = line[len("event: "):].strip()
+                    event = line[len("event: ") :].strip()
                 elif line.startswith("data: "):
-                    data = line[len("data: "):].strip()
+                    data = line[len("data: ") :].strip()
                 elif line == "":
                     if event == "endpoint" and data:
-                        return data
+                        # First try JSON (our own facade can emit JSON payloads)
+                        try:
+                            parsed = json.loads(data)
+                        except json.JSONDecodeError:
+                            parsed = None
+                        if isinstance(parsed, dict):
+                            endpoint_url = parsed.get("endpoint")
+                            if endpoint_url:
+                                return endpoint_url
+
+                        # Fall back to the standard FastMCP format: a URL-encoded path/query
+                        decoded = urllib.parse.unquote(data)
+                        if decoded.startswith(("http://", "https://")):
+                            return decoded
+                        endpoint_url = urllib.parse.urljoin(server_url, decoded)
+                        return endpoint_url
                     event = None
                     data = None
         raise RuntimeError("SSE stream closed without endpoint event")
@@ -58,7 +80,9 @@ class JsonRpcResult:
     payload: Dict[str, Any] | None
 
 
-async def post_rpc(client: httpx.AsyncClient, endpoint: str, payload: Dict[str, Any], timeout: float) -> JsonRpcResult:
+async def post_rpc(
+    client: httpx.AsyncClient, endpoint: str, payload: Dict[str, Any], timeout: float
+) -> JsonRpcResult:
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
     resp = await client.post(endpoint, headers=headers, json=payload, timeout=timeout)
     text = resp.text.strip()
@@ -68,7 +92,9 @@ async def post_rpc(client: httpx.AsyncClient, endpoint: str, payload: Dict[str, 
             parsed = json.loads(text)
         except json.JSONDecodeError:
             parsed = {"_raw": text}
-    return JsonRpcResult(status_code=resp.status_code, headers=dict(resp.headers), payload=parsed)
+    return JsonRpcResult(
+        status_code=resp.status_code, headers=dict(resp.headers), payload=parsed
+    )
 
 
 async def run_probe(
@@ -92,7 +118,12 @@ async def run_probe(
             "params": {
                 "clientInfo": {"name": "chatgpt-probe", "version": "0.1"},
                 "protocolVersion": "2024-11-05",
-                "capabilities": {"roots": {}, "prompts": {}, "resources": {}, "tools": {}},
+                "capabilities": {
+                    "roots": {},
+                    "prompts": {},
+                    "resources": {},
+                    "tools": {},
+                },
             },
         }
 
@@ -168,7 +199,9 @@ async def run_probe(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Probe MCP streamable-http handshake like ChatGPT connector")
+    parser = argparse.ArgumentParser(
+        description="Probe MCP streamable-http handshake like ChatGPT connector"
+    )
     parser.add_argument("--server-url", default=DEFAULT_SERVER_URL)
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT)
     args = parser.parse_args()
@@ -178,3 +211,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
