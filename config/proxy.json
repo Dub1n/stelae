@@ -23,7 +23,6 @@
       "type": "stdio",
       "command": "/home/gabri/.local/bin/rust-mcp-filesystem",
       "args": [
-        "--root",
         "/home/gabri/dev/stelae"
       ]
     },

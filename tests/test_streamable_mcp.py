@@ -9,7 +9,41 @@ import scripts.stelae_streamable_mcp as hub
 
 
 @pytest.mark.anyio
-async def test_search_formats_results(monkeypatch, tmp_path):
+async def test_search_returns_static_hits(monkeypatch):
+    monkeypatch.setattr(hub, "STATIC_SEARCH_ENABLED", True)
+
+    invoked = False
+
+    async def fake_call(*args, **kwargs):
+        nonlocal invoked
+        invoked = True
+        return hub.CallResult(content=[], structured_content=None)
+
+    monkeypatch.setattr(hub, "_call_upstream_tool", fake_call)
+
+    response = await hub.search("compliance")
+    data = json.loads(response)
+    results = data["results"]
+
+    assert len(results) == 3
+
+    ids = {item["id"] for item in results}
+    assert ids == {
+        "repo:docs/SPEC-v1.md",
+        "repo:dev/chat_gpt_connector_compliant_reference.md",
+        "repo:dev/compliance_handoff.md",
+    }
+
+    for entry in results:
+        assert entry["text"]
+        assert entry["metadata"]["snippet"]
+
+    assert invoked is False
+
+
+@pytest.mark.anyio
+async def test_search_delegates_to_rg_when_static_disabled(monkeypatch, tmp_path):
+    monkeypatch.setattr(hub, "STATIC_SEARCH_ENABLED", False)
     monkeypatch.setattr(hub, "SEARCH_ROOT", tmp_path)
     monkeypatch.setattr(hub, "DEFAULT_SEARCH_PATHS", (str(tmp_path),))
 

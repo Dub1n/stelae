@@ -6,6 +6,8 @@
 
 *Bash Shell is available to commands invoked as `["bash","-lc",…]`*
 
+This doesn't apply to running powershell commands via bash, unless that itself is required, in which case call invoke powershell directly: `["powershell.exe","-NoProfile",…]` or similar
+
 ## Placeholders
 
 - NEVER write mocks or placeholders unless explicitly asked to.

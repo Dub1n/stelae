@@ -23,7 +23,6 @@
       "type": "stdio",
       "command": "{{FILESYSTEM_BIN}}",
       "args": [
-        "--root",
         "{{STELAE_DIR}}"
       ]
     },

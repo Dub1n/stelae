@@ -51,6 +51,13 @@ Each archive contains a single entry with the platform baked into the name (e.g.
 
 </details>
 
+### Windows + WSL workflow (recommended)
+
+- Launch Codex CLI from the Ubuntu WSL distribution to avoid Windows-native stdio quirks that break MCP transports.
+- From Windows, run `wsl.exe -d Ubuntu` (or your distro name), then `cd ~/dev/stelae` before starting `codex` so the CLI boots with Linux paths and permissions.
+- Keep long-lived helpers such as `pm2`, the MCP bridge, and `codex` inside the same WSL session; only use Windows shells for graphical tooling.
+- If Codex starts from PowerShell or Cmd by mistake, stop it and relaunch inside WSL to restore deterministic MCP discovery.
+
 ### Using Codex with your ChatGPT plan
 
 <p align="center">

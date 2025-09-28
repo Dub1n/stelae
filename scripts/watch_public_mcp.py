@@ -42,7 +42,9 @@ def ok():
 def restart_cloudflared():
     print("watchdog: restarting cloudflared via pm2…", flush=True)
     try:
-        subprocess.run(["pm2", "restart", CLOUD_FLARE_PM2], check=True)
+        subprocess.run(["pm2", "restart", CLOUD_FLARE_PM2], check=True, timeout=45)
+    except subprocess.TimeoutExpired as exc:
+        print(f"watchdog: pm2 restart timed out after {exc.timeout}s", file=sys.stderr)
     except Exception as e:
         print(f"watchdog: pm2 restart failed: {e}", file=sys.stderr)
 

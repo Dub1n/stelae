@@ -29,6 +29,7 @@ PUBLIC_BASE_URL="${PUBLIC_BASE_URL:-https://mcp.infotopology.xyz}"
 # readiness thresholds
 MIN_TOOL_COUNT="${MIN_TOOL_COUNT:-12}"             # “warm enough” before exposing
 READY_TIMEOUT_SEC="${READY_TIMEOUT_SEC:-45}"
+CURL_MAX_TIME="${CURL_MAX_TIME:-45}"
 
 # options ----------------------------------------------------------------------
 START_CLOUDFLARED=1
@@ -72,7 +73,7 @@ wait_port() {
 }
 
 local_tool_count() {
-  curl -s "http://127.0.0.1:${PROXY_PORT}/mcp" -H 'Content-Type: application/json' \
+  curl --max-time "$CURL_MAX_TIME" -s "http://127.0.0.1:${PROXY_PORT}/mcp" -H 'Content-Type: application/json' \
     --data '{"jsonrpc":"2.0","id":"T","method":"tools/list"}' \
   | jq -r 'try (.result.tools|length) // 0' 2>/dev/null || echo 0
 }
@@ -129,7 +130,7 @@ show_public_jsonrpc_once() {
   local url="$1"
   local hdrs body status ctype cfray rc=1
   hdrs="$(mktemp)"
-  body="$(curl -sk -D "$hdrs" \
+  body="$(curl --max-time "$CURL_MAX_TIME" -sk -D "$hdrs" \
                -H 'Content-Type: application/json' \
                -H 'Accept: application/json' \
                -H 'User-Agent: stelae-health/1.0' \
@@ -212,16 +213,16 @@ wait_port "$PROXY_PORT" "mcp-proxy" || { err "proxy didn’t bind :$PROXY_PORT";
 
 # local readiness (before exposing) -------------------------------------------
 log "Local probe: HEAD http://127.0.0.1:${PROXY_PORT}/mcp"
-curl -sI "http://127.0.0.1:${PROXY_PORT}/mcp" | sed -n '1,10p' || true
+curl --max-time "$CURL_MAX_TIME" -sI "http://127.0.0.1:${PROXY_PORT}/mcp" | sed -n '1,10p' || true
 
 log "Local probe: initialize (JSON-RPC)"
-curl -s "http://127.0.0.1:${PROXY_PORT}/mcp" -H 'Content-Type: application/json' \
+curl --max-time "$CURL_MAX_TIME" -s "http://127.0.0.1:${PROXY_PORT}/mcp" -H 'Content-Type: application/json' \
   --data '{"jsonrpc":"2.0","id":"init","method":"initialize","params":{"protocolVersion":"2024-11-05"}}' | jq -C '.' || true
 
 wait_tools_ready
 
 log "Local probe: tools/list → names (first 40)"
-curl -s "http://127.0.0.1:${PROXY_PORT}/mcp" -H 'Content-Type: application/json' \
+curl --max-time "$CURL_MAX_TIME" -s "http://127.0.0.1:${PROXY_PORT}/mcp" -H 'Content-Type: application/json' \
   --data '{"jsonrpc":"2.0","id":"T","method":"tools/list"}' \
 | jq -r '.result.tools[].name' | sort | nl | sed -n '1,40p' || true
 
@@ -243,7 +244,7 @@ fi
 # public probes (best-effort; tolerate CF 530 blips) ---------------------------
 if [ "$START_CLOUDFLARED" -eq 1 ] && [ -n "$PUBLIC_BASE_URL" ]; then
   log "Public probe: manifest"
-  curl -skI "${PUBLIC_BASE_URL}/.well-known/mcp/manifest.json" | sed -n '1,12p' || true
+  curl --max-time "$CURL_MAX_TIME" -skI "${PUBLIC_BASE_URL}/.well-known/mcp/manifest.json" | sed -n '1,12p' || true
 
   log "Public probe: tools/list (JSON-RPC, retry + diagnostics)"
   show_public_jsonrpc_retry "${PUBLIC_BASE_URL}/mcp" || true

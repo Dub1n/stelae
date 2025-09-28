@@ -24,6 +24,12 @@ PM2             ?= pm2
 CF_TEMPLATE 	?= $(STELAE_DIR)/ops/cloudflared.template.yml
 CF_OUTPUT   	?= $(STELAE_DIR)/ops/cloudflared.yml
 CF_RENDERER 	?= $(STELAE_DIR)/scripts/render_cloudflared_config.py
+BRIDGE_PYTHON   ?= $(HOME)/.venvs/stelae-bridge/bin/python
+CONNECTOR_PROBE ?= $(STELAE_DIR)/dev/debug/chatgpt_connector_probe.py
+CONNECTOR_BASE  ?= https://mcp.infotopology.xyz/mcp
+CONNECTOR_TIMEOUT ?= 20
+PROBE_LOG_DIR   ?= $(STELAE_DIR)/dev/logs
+CHECK_CONNECTOR_SCRIPT ?= $(STELAE_DIR)/dev/debug/check_connector.py
 
 .PHONY: render-cloudflared
 render-cloudflared:
@@ -70,3 +76,11 @@ logs:
 
 status:
 	$(PM2) status
+
+.PHONY: check-connector
+check-connector:
+	@$(BRIDGE_PYTHON) "$(CHECK_CONNECTOR_SCRIPT)" \
+		--server-url "$(CONNECTOR_BASE)" \
+		--timeout "$(CONNECTOR_TIMEOUT)" \
+		--probe "$(CONNECTOR_PROBE)" \
+		--log-dir "$(PROBE_LOG_DIR)"
