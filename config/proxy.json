@@ -72,6 +72,17 @@
     "strata": {
       "type": "stdio",
       "command": "/home/gabri/.local/bin/strata"
+    },
+    "one_mcp": {
+      "type": "stdio",
+      "command": "/home/gabri/.local/bin/uv",
+      "args": [
+        "--directory",
+        "/home/gabri/apps/vendor/1mcpserver",
+        "run",
+        "server.py",
+        "--local"
+      ]
     }
   }
 }

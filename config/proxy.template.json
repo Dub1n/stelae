@@ -72,6 +72,17 @@
     "strata": {
       "type": "stdio",
       "command": "{{STRATA_BIN}}"
+    },
+    "one_mcp": {
+      "type": "stdio",
+      "command": "{{ONE_MCP_BIN}}",
+      "args": [
+        "--directory",
+        "{{ONE_MCP_DIR}}",
+        "run",
+        "server.py",
+        "--local"
+      ]
     }
   }
 }
