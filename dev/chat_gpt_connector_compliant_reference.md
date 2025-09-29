@@ -54,6 +54,7 @@
   - `search` returns array of `{id,title,text,url}` objects (`SearchOutput` model).
   - `fetch` returns `{id,title,text,url,metadata}` (`FetchOutput`).
 - **Implication**: Initialization and `tools/list` responses must include schema describing these exact structures.
+- **Stelae note**: The facade `fetch` descriptor now requires an `id` field (per OpenAI spec) and returns deterministic content for the default facade search hits when requested.
 
 ### 3.5 Head Request
 
@@ -80,10 +81,10 @@ These responses are sufficient for ChatGPT verification and actual use (source: 
 
 ## 5. Stelae Current Behavior Snapshot (2025‑09‑28)
 
-- **Manifest**: `curl https://mcp.infotopology.xyz/.well-known/mcp/manifest.json` → only `search`, `fetch` (post Cloudflare worker rewrite). When registering the connector in ChatGPT, supply the base origin `https://mcp.infotopology.xyz` (the verifier appends `/.well-known/mcp/manifest.json` automatically).
+- **Manifest**: `curl https://mcp.infotopology.xyz/.well-known/mcp/manifest.json` → full downstream catalog plus the facade `search`/`fetch` entries. Register the connector with the base origin `https://mcp.infotopology.xyz`; ChatGPT appends `/.well-known/mcp/manifest.json`.
 - **SSE**: `curl -Ns https://mcp.infotopology.xyz/mcp` → comment heartbeat and `event: endpoint` immediately with `/mcp?session_id=<hex>` (no percent-encoding). Downstream POSTs now hit the facade as expected.
-- **Initialize**: `result.tools` now matches the facade descriptors (`search`, `fetch`) in production after the 2025‑09‑28 redeploy.
-- **tools/list**: Mirrors initialize (only `search`/`fetch`).
+- **Initialize**: `result.tools` includes the full upstream catalog merged with facade entries (search/fetch) sorted by name.
+- **tools/list**: Mirrors initialize.
 - **Tool execution**: The Go facade now returns deterministic sample hits for `search`; `fetch` continues proxying Basic Memory/Docy responses.
 
 ## 6. Compliance Matrix

@@ -28,6 +28,40 @@ def _extract_tool_entries(payload: Dict[str, Any] | None) -> List[Dict[str, Any]
     return [entry for entry in entries if isinstance(entry, dict)]
 
 
+def _find_tool(tools: Iterable[Dict[str, Any]], name: str) -> Dict[str, Any] | None:
+    for tool in tools:
+        if tool.get("name") == name:
+            return tool
+    return None
+
+
+def _ensure_required_field(schema: Dict[str, Any], field: str) -> None:
+    required = schema.get("required")
+    values: List[str] = []
+    if isinstance(required, list):
+        for item in required:
+            if isinstance(item, str):
+                values.append(item)
+    if field not in values:
+        values.append(field)
+    schema["required"] = values
+
+
+def _validate_fetch_schema(tools: Iterable[Dict[str, Any]]) -> None:
+    fetch = _find_tool(tools, "fetch")
+    if not fetch:
+        return
+    schema = fetch.get("inputSchema")
+    if not isinstance(schema, dict):
+        raise SystemExit("Fetch tool missing input schema")
+    props = schema.get("properties")
+    if not isinstance(props, dict):
+        raise SystemExit("Fetch tool missing properties map")
+    if "id" not in props:
+        raise SystemExit("Fetch tool schema missing 'id' property")
+    _ensure_required_field(schema, "id")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Validate connector probe output")
     parser.add_argument("--server-url", required=True)
@@ -64,20 +98,23 @@ def main() -> None:
     init_payload = (result["initialize"]["result"].payload or {}).get("result", {})
     init_tools = _extract_tool_entries(init_payload)
     init_names = _extract_tool_names(init_tools)
-    if init_names != ["fetch", "search"]:
+    required = {"fetch", "search"}
+    if not required.issubset(init_names):
         raise SystemExit(
-            "Initialize catalog must contain exactly ['fetch', 'search']: "
+            "Initialize catalog missing required facade tools ['fetch', 'search']: "
             + json.dumps(init_tools, indent=2)
         )
+    _validate_fetch_schema(init_tools)
 
     list_payload = (result["tools_list"]["result"].payload or {}).get("result", {})
     list_tools = _extract_tool_entries(list_payload)
     list_names = _extract_tool_names(list_tools)
-    if list_names != ["fetch", "search"]:
+    if not required.issubset(list_names):
         raise SystemExit(
-            "tools/list catalog must contain exactly ['fetch', 'search']: "
+            "tools/list catalog missing required facade tools ['fetch', 'search']: "
             + json.dumps(list_tools, indent=2)
         )
+    _validate_fetch_schema(list_tools)
 
     search_payload = (result["search"]["result"].payload or {}).get("result", {})
     hits = [hit for hit in search_payload.get("results", []) if isinstance(hit, dict)]

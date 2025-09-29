@@ -23,17 +23,17 @@ export default {
     }
 
     if (url.pathname === "/.well-known/mcp/manifest.json") {
-      const allowedToolNames = ["fetch", "search"]; // enforce ChatGPT verifier expectations
       const fallbackTools = {
         fetch: {
           name: "fetch",
-          description: "Connector-compliant fetch placeholder exposed at the edge.",
+          description:
+            "Fetches a document by id and returns its canonical content in MCP fetch format.",
           inputSchema: {
             type: "object",
             properties: {
-              url: { title: "Url", type: "string" }
+              id: { title: "Id", type: "string", minLength: 1 }
             },
-            required: ["url"]
+            required: ["id"]
           }
         },
         search: {
@@ -87,10 +87,18 @@ export default {
         }
 
         const manifestTools = Array.isArray(parsed.tools) ? parsed.tools : [];
-        parsed.tools = allowedToolNames.map((name) => {
-          const existing = manifestTools.find((tool) => tool && tool.name === name);
-          return existing || fallbackTools[name];
-        });
+        const toolMap = new Map();
+        for (const tool of manifestTools) {
+          if (tool && tool.name) {
+            toolMap.set(tool.name, tool);
+          }
+        }
+        for (const name of Object.keys(fallbackTools)) {
+          if (!toolMap.has(name)) {
+            toolMap.set(name, fallbackTools[name]);
+          }
+        }
+        parsed.tools = Array.from(toolMap.values());
 
         body = JSON.stringify(parsed);
       } catch (err) {
