@@ -10,11 +10,11 @@ The goal is to present a **single MCP endpoint** (`https://mcp.infotopology.xyz/
 
 ```diagram
 ChatGPT / Codex ---> Cloudflare tunnel ---> mcp-proxy (Go facade)
-                                              └─ launches + indexes MCP servers (fs/rg/sh/docs/memory/…)
-                                              └─ merges downstream descriptors + override hints
-                                              └─ serves SSE + JSON-RPC on /mcp
-                    ^
-                    └ cloudflared keeps port 9090 reachable over TLS
+                           ^                  └─ launches + indexes MCP servers (fs/rg/sh/docs/memory/…)
+                           |                  └─ merges downstream descriptors + override hints
+                           |                  └─ serves SSE + JSON-RPC on /mcp
+                           |
+                           └ cloudflared keeps port 9090 reachable over TLS
 
 Local dev (Codex CLI) ──> FastMCP bridge (`scripts/stelae_streamable_mcp.py`)
                                └─ runs in STDIO mode for Codex
@@ -42,14 +42,14 @@ Local dev (Codex CLI) ──> FastMCP bridge (`scripts/stelae_streamable_mcp.py`
 
 ```bash
 $ source ~/.nvm/nvm.sh && pm2 status
-┌────┬──────────────┬─────────────┬─────────┬───────────┐
-│ id │ name         │ mode        │ status  │ notes     │
-├────┼──────────────┼─────────────┼─────────┼───────────┤
-│ 0  │ mcp-proxy    │ fork        │ online  │ facade on :9090 │
-│ 1  │ stelae-bridge│ fork        │ online  │ FastMCP STDIO bridge │
-│ 2  │ cloudflared  │ fork        │ online  │ tunnel to mcp.infotopology.xyz │
-│ 3  │ watchdog     │ fork        │ online  │ optional tunnel babysitter │
-└────┴──────────────┴─────────────┴─────────┴───────────┘
+┌────┬──────────────┬─────────────┬─────────┐
+│ id │ name         │ mode        │ status  │ notes                         
+├────┼──────────────┼─────────────┼─────────┤ ──────────────────────────────
+│ 0  │ mcp-proxy    │ fork        │ online  │ facade on :9090               
+│ 1  │ stelae-bridge│ fork        │ online  │ FastMCP STDIO bridge          
+│ 2  │ cloudflared  │ fork        │ online  │ tunnel to mcp.infotopology.xyz
+│ 3  │ watchdog     │ fork        │ online  │ optional tunnel babysitter
+└────┴──────────────┴─────────────┴─────────┘ 
 ```
 
 `pm2 ls` should never show a `mcp-bridge` process anymore—the deprecated HTTP bridge was removed and its configs archived.
@@ -58,6 +58,7 @@ $ source ~/.nvm/nvm.sh && pm2 status
 
 * `config/proxy.json` – rendered facade config (servers, manifest metadata, override file path).
 * `config/tool_overrides.json` – optional per-server and `master` annotation overrides merged on proxy startup.
+* Setting `enabled: false` on a server, on a specific tool, or via the `master` section removes the tool from manifest/initialize/tools.list responses (upstream servers still load, but clients no longer see those entries).
 * `Makefile` target `check-connector` – runs `dev/debug/check_connector.py`, hits the public endpoint, and records the published tool catalog (verify overrides appear as expected).
 * `C:\Users\gabri\.codex\config.toml` – Codex CLI entry; launches the STDIO bridge via WSL with `PYTHONPATH=/home/gabri/dev/stelae` so `scripts.*` resolves correctly.
 * Cloudflare credentials under `~/.cloudflared/` – used by `cloudflared` pm2 process.
@@ -166,98 +167,3 @@ PY
 ```
 
 This spec reflects the current production arrangement: a single Go facade, one STDIO FastMCP bridge, and a Cloudflare tunnel. The deprecated HTTP bridge has been archived, and validation tooling now inspects the full downstream catalog with annotation overrides applied.
-
-Response Headers:
-access-control-allow-credentials
-true
-access-control-allow-origin
-*
-cf-cache-status
-DYNAMIC
-cf-ray
-986696dcc9312aca-LHR
-content-length
-16
-content-type
-application/json
-cross-origin-opener-policy
-same-origin-allow-popups
-date
-Sun, 28 Sep 2025 22:13:39 GMT
-nel
-{"success_fraction":0.01,"report_to":"cf-nel","max_age":604800}
-permissions-policy
-interest-cohort=()
-referrer-policy
-strict-origin-when-cross-origin
-report-to
-{"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=P5u15tEGfuMOrANAs8Jr%2FmoZr8uHfxGN1XaZeL2RTJIIj8dd9NNZJEJmGCuy6sFuSSRqMTIm7qdA%2BrJ3zzO89KCPLZiPsW4tjapayrFbmewgb5pSYQNsrJIS%2Bv12vT25"}],"group":"cf-nel","max_age":604800}
-server
-cloudflare
-set-cookie
-GCLB="df328852bd8a8dc5"; Max-Age=1; Path=/; HttpOnly
-strict-transport-security
-max-age=31536000; includeSubDomains; preload
-via
-1.1 google
-x-content-type-options
-nosniff
-x-frame-options
-SAMEORIGIN
-x-response-time
-0 ms
-x-robots-tag
-nofollow
-
-Request headers:
-:authority
-ab.chatgpt.com
-:method
-POST
-:path
-/v1/rgstr?k=client-nb0qtYlZuy2tCMN5s5ncnuIBCJncjRViT0IzFm7GqST&st=javascript-client&sv=3.17.0&t=1759097619662&sid=bc8f532b-1ea0-4384-a90a-e3dc03042b51&ec=2&gz=1
-:scheme
-https
-accept
-*/*
-accept-encoding
-gzip, deflate, br, zstd
-accept-language
-en-GB,en-US;q=0.9,en;q=0.8
-content-length
-958
-origin
-https://chatgpt.com
-priority
-u=1, i
-referer
-https://chatgpt.com/
-sec-ch-ua
-"Chromium";v="140", "Not=A?Brand";v="24", "Google Chrome";v="140"
-sec-ch-ua-mobile
-?0
-sec-ch-ua-platform
-"Windows"
-sec-fetch-dest
-empty
-sec-fetch-mode
-cors
-sec-fetch-site
-same-site
-user-agent
-Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36
-
-Query string parameters:
-k=client-nb0qtYlZuy2tCMN5s5ncnuIBCJncjRViT0IzFm7GqST&st=javascript-client&sv=3.17.0&t=1759097619662&sid=bc8f532b-1ea0-4384-a90a-e3dc03042b51&ec=2&gz=1
-
-Request payload:
-
-íMoÛFÿ0§ )~_¹ÔÜÔ°¸µ(b¹R[-wÝ¥bÙÐ/¢Ýõ¡IöPBQÔ¾wæpÂh(~{8^¾#BÚ£Y[ìQx×K=(
-ñûl
-ÅxáÖ'»5þxQíï¾/ª_Óõ§V^ØÆ¡T!c?öýZ{×£²Xä¡ú^^º¨Q{(àíë)êIÂ@òqN+Ï_¼¸e¢õâÝÍ"ð=ÿÕâ$~µ¸Kâ¾çxÕ93ËUzQ²xqþÓÍå³àl·H·òåâÍFÉAì{ãgqM¢Ø$±ÉÚÈÎVÝs"J³ï­G½àÀg©¶º'KVCq~¢'ïÆºyFÐ,¦Ä'aMì ü&
-ÓeO¬À¨ Ù¶O¸l[¬K&À
-ÑåÓï²ÂF*|TY#Kò9ikÝr0åqÂ5NcRÖ²#ìÉa-)#ü(«3ñi$­²¶÷¨¬G'ÅÀùÁ.)áVÂ}ýÔ¿³µ¶-¼ÅêDH±ïä ßH¹e814ÍhP¹1fgYãVYEÜbÚ4qP×Y
-¬qÇ(Õ_¡
-©ø7Åø·Fêà<¾ç§bÇÝèîfc¼¨aRÀáàÀð&;Ð¡!51Ä§R4¬¢<Ló0MW98ÐE:4¨&¤ °>5¶z8 É¤2pc+â¶ëÓ;Ûäcv0Ãé]Ïeæê10N8PIi´Q¤¿ü"Ç[3¶flý±Õ¢@ET×ëó3ÑH{R×Û©WÇ'¹BÖºÞ~@¥­¶Ä½Ôãt0Pé*÷óUæAPHôxîõ#p_ÊV°{¬áQ_É,è"Ûa}òçé*ÍÄ+C*EMÔþtZ¹ìnöÑÃ,D§ãI'aödÃ£R(Ìimucz],tCLÛ®¥5e^öfjÎÔ©ù=?ü$N£ç=*»^ZVô|ÐnbW¼V3¬fXÍ+Þ³+Þ´ÄØló Î<Í3pÆ[ ~Bß_ zxn;Òïß?>+ýÊ¶ÈRÏ?9¹ü;ÙMëK9³íúÓ¨mQRÑ¬YEaåH|7²Ø%¹O\jêG~V«k¯Ý¾W|zÏÃ/ã×
-
-* Setting `enabled: false` on a server, on a specific tool, or via the `master` section removes the tool from manifest/initialize/tools.list responses (upstream servers still load, but clients no longer see those entries).
