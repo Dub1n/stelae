@@ -1,0 +1,444 @@
+{
+    "server": {
+        "label": "stelae",
+        "endpoint": "https://mcp.infotopology.xyz/stream",
+        "transport": "sse",
+        "version": "1.0.0",
+        "health": {
+            "manifest_url": "https://mcp.infotopology.xyz/.well-known/mcp/manifest.json",
+            "tools_list_url": "https://mcp.infotopology.xyz/tools/list"
+        }
+    },
+    "approvals": {
+        "read_default": "never",
+        "write_default": "always"
+    },
+    "policy": {
+        "tooling_preference": "mcp_only",
+        "workspace_roots": [
+            "/home/ubuntu/dev/phoenix"
+        ],
+        "git_required_clean": true,
+        "dry_run_first": true
+    },
+    "tools": [
+        {
+            "name": "list_allowed_directories",
+            "summary": "Return directories the server may access.",
+            "category": "fs-read",
+            "annotations": {
+                "readOnly": true,
+                "destructive": false,
+                "idempotent": true
+            },
+            "approval": "never",
+            "input_schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            },
+            "examples": [
+                {
+                    "description": "Discover roots",
+                    "arguments": {}
+                }
+            ]
+        },
+        {
+            "name": "directory_tree",
+            "summary": "Recursive tree as JSON (limit depth).",
+            "category": "fs-read",
+            "annotations": {
+                "readOnly": true,
+                "destructive": false,
+                "idempotent": true
+            },
+            "approval": "never",
+            "input_schema": {
+                "type": "object",
+                "required": [
+                    "path"
+                ],
+                "properties": {
+                    "path": {
+                        "type": "string"
+                    },
+                    "max_depth": {
+                        "type": "integer"
+                    }
+                }
+            },
+            "examples": [
+                {
+                    "arguments": {
+                        "path": "/home/ubuntu/dev/phoenix",
+                        "max_depth": 2
+                    }
+                }
+            ]
+        },
+        {
+            "name": "grep",
+            "summary": "Search text with line numbers.",
+            "category": "code-search",
+            "annotations": {
+                "readOnly": true,
+                "destructive": false,
+                "idempotent": true
+            },
+            "approval": "never",
+            "input_schema": {
+                "type": "object",
+                "required": [
+                    "pattern",
+                    "paths"
+                ],
+                "properties": {
+                    "pattern": {
+                        "type": "string"
+                    },
+                    "paths": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            }
+                        ]
+                    },
+                    "recursive": {
+                        "type": "boolean",
+                        "default": true
+                    },
+                    "line_number": {
+                        "type": "boolean",
+                        "default": true
+                    },
+                    "max_count": {
+                        "type": "integer",
+                        "default": 200
+                    }
+                }
+            },
+            "examples": [
+                {
+                    "arguments": {
+                        "pattern": "TODO|FIXME",
+                        "paths": "apps/",
+                        "recursive": true,
+                        "line_number": true
+                    }
+                }
+            ]
+        },
+        {
+            "name": "read_text_file",
+            "summary": "Read entire text file (UTF-8).",
+            "category": "fs-read",
+            "annotations": {
+                "readOnly": true,
+                "destructive": false,
+                "idempotent": true
+            },
+            "approval": "never",
+            "input_schema": {
+                "type": "object",
+                "required": [
+                    "path"
+                ],
+                "properties": {
+                    "path": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        {
+            "name": "edit_file",
+            "summary": "Line-based edits returning a git-style diff.",
+            "category": "fs-write",
+            "annotations": {
+                "readOnly": false,
+                "destructive": false,
+                "idempotent": false,
+                "supports_dry_run": true
+            },
+            "approval": "always",
+            "input_schema": {
+                "type": "object",
+                "required": [
+                    "path",
+                    "edits"
+                ],
+                "properties": {
+                    "path": {
+                        "type": "string"
+                    },
+                    "dryRun": {
+                        "type": "boolean",
+                        "default": true
+                    },
+                    "edits": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": [
+                                "oldText",
+                                "newText"
+                            ],
+                            "properties": {
+                                "oldText": {
+                                    "type": "string"
+                                },
+                                "newText": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "examples": [
+                {
+                    "description": "Dry-run change",
+                    "arguments": {
+                        "path": "apps/web/src/config.ts",
+                        "dryRun": true,
+                        "edits": [
+                            {
+                                "oldText": "DEBUG=false",
+                                "newText": "DEBUG=true"
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "write_file",
+            "summary": "Overwrite or append content to a file.",
+            "category": "fs-write",
+            "annotations": {
+                "readOnly": false,
+                "destructive": true,
+                "idempotent": false
+            },
+            "approval": "always",
+            "input_schema": {
+                "type": "object",
+                "required": [
+                    "path",
+                    "content"
+                ],
+                "properties": {
+                    "path": {
+                        "type": "string"
+                    },
+                    "content": {
+                        "type": "string"
+                    },
+                    "mode": {
+                        "type": "string",
+                        "enum": [
+                            "overwrite",
+                            "append"
+                        ],
+                        "default": "overwrite"
+                    }
+                }
+            }
+        },
+        {
+            "name": "execute_command",
+            "summary": "Run a allowlisted shell command (build/test).",
+            "category": "exec",
+            "annotations": {
+                "readOnly": false,
+                "destructive": false,
+                "idempotent": false
+            },
+            "approval": "always",
+            "input_schema": {
+                "type": "object",
+                "required": [
+                    "command"
+                ],
+                "properties": {
+                    "command": {
+                        "type": "string"
+                    },
+                    "timeout": {
+                        "type": "integer",
+                        "default": 60
+                    }
+                }
+            },
+            "examples": [
+                {
+                    "arguments": {
+                        "command": "npm test --workspaces"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "fetch_documentation_page",
+            "summary": "Fetch a docs page and return markdown.",
+            "category": "docs",
+            "annotations": {
+                "readOnly": true,
+                "destructive": false,
+                "idempotent": true
+            },
+            "approval": "never",
+            "input_schema": {
+                "type": "object",
+                "required": [
+                    "url"
+                ],
+                "properties": {
+                    "url": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        {
+            "name": "fetch_document_links",
+            "summary": "Extract internal/external links from a docs page.",
+            "category": "docs",
+            "annotations": {
+                "readOnly": true,
+                "destructive": false,
+                "idempotent": true
+            },
+            "approval": "never",
+            "input_schema": {
+                "type": "object",
+                "required": [
+                    "url"
+                ],
+                "properties": {
+                    "url": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        {
+            "name": "fetch",
+            "summary": "Fetch URL content as markdown or raw.",
+            "category": "docs",
+            "annotations": {
+                "readOnly": true,
+                "destructive": false,
+                "idempotent": true
+            },
+            "approval": "never",
+            "input_schema": {
+                "type": "object",
+                "required": [
+                    "url"
+                ],
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "format": "uri"
+                    },
+                    "raw": {
+                        "type": "boolean",
+                        "default": false
+                    },
+                    "max_length": {
+                        "type": "integer",
+                        "default": 5000
+                    }
+                }
+            }
+        },
+        {
+            "name": "search_notes",
+            "summary": "Search Basic Memory notes with filters.",
+            "category": "memory",
+            "annotations": {
+                "readOnly": true,
+                "destructive": false,
+                "idempotent": true
+            },
+            "approval": "never",
+            "input_schema": {
+                "type": "object",
+                "required": [
+                    "query"
+                ],
+                "properties": {
+                    "query": {
+                        "type": "string"
+                    },
+                    "page_size": {
+                        "type": "integer",
+                        "default": 10
+                    }
+                }
+            }
+        }
+    ],
+    "golden_paths": [
+        {
+            "name": "Safe code edit",
+            "steps": [
+                {
+                    "tool": "grep",
+                    "args": {
+                        "pattern": "TODO",
+                        "paths": "apps/",
+                        "recursive": true
+                    }
+                },
+                {
+                    "tool": "read_text_file",
+                    "args": {
+                        "path": "apps/web/src/config.ts"
+                    }
+                },
+                {
+                    "tool": "edit_file",
+                    "args": {
+                        "path": "apps/web/src/config.ts",
+                        "dryRun": true,
+                        "edits": [
+                            {
+                                "oldText": "DEBUG=false",
+                                "newText": "DEBUG=true"
+                            }
+                        ]
+                    },
+                    "expect": "diff"
+                },
+                {
+                    "tool": "edit_file",
+                    "args": {
+                        "path": "apps/web/src/config.ts",
+                        "dryRun": false,
+                        "edits": [
+                            {
+                                "oldText": "DEBUG=false",
+                                "newText": "DEBUG=true"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "tool": "execute_command",
+                    "args": {
+                        "command": "npm test --workspaces"
+                    }
+                }
+            ]
+        }
+    ]
+}

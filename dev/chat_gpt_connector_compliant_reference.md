@@ -155,4 +155,103 @@ Tool(
 )
 ```
 
+### Enpoints Checks
+
+#### 1. Manifest
+
+**Endpoint:** `/.well-known/mcp/manifest.json`
+
+**Required output (JSON object):**
+
+```json
+{
+  "servers": [
+    {
+      "name": "stelae",
+      "transport": "streamable-http",
+      "url": "https://mcp.infotopology.xyz/mcp",
+      "version": "1.0.0"
+    }
+  ],
+  "tools": [
+    { "name": "list_allowed_directories", "description": "...", "input_schema": { ... } },
+    { "name": "grep", "description": "...", "input_schema": { ... } },
+    { "name": "fetch", "description": "...", "input_schema": { ... } }
+    // …
+  ]
+}
+```
+
+**Use it for:** confirming your server label (`stelae`) and seeing the advertised tool names.
+Your Stelae doc has this as a validation step.
+
+---
+
+#### 2. Tools list
+
+**Endpoint:** `/tools/list`
+
+**Required output (JSON object):**
+
+```json
+{
+  "tools": [
+    { "name": "list_allowed_directories", "description": "...", "input_schema": { ... } },
+    { "name": "grep", "description": "...", "input_schema": { ... } },
+    { "name": "fetch", "description": "...", "input_schema": { ... } }
+  ]
+}
+```
+
+**Use it for:** confirming that child MCPs (filesystem, grep, fetch) are mounted correctly.
+Your README calls this check out explicitly: `curl -s http://localhost:9090/tools/list | jq '.tools | map(.name)'`.
+
+---
+
+#### 3. Streaming health
+
+**Endpoint:** `/stream`
+
+**Required output:**
+
+- Should return HTTP 200 and keep an SSE (server-sent events) connection open.
+- For a quick check, you can do:
+
+  ```bash
+  curl -skI https://mcp.infotopology.xyz/stream
+  ```
+
+  and look for `HTTP/1.1 200 OK` (even if no events stream).
+  Your checklist suggests this too.
+
+#### 4. (Optional) Tool execution
+
+If you hit a specific tool (via API or ChatGPT), the server responds with a JSON content array, e.g. for `list_allowed_directories`:
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "[\"/home/ubuntu/dev/phoenix\"]"
+    }
+  ]
+}
+```
+
+That shape (`{ "content": [ { "type": "text", "text": "…" } ] }`) is what the MCP spec requires.
+
+**Quick sanity sequence**:
+
+```bash
+# Manifest should show servers + tool names
+curl -s https://mcp.infotopology.xyz/.well-known/mcp/manifest.json | jq .
+
+# Tool list should enumerate same tools
+curl -s https://mcp.infotopology.xyz/tools/list | jq .
+
+# Stream endpoint should 200 OK
+curl -skI https://mcp.infotopology.xyz/stream
+```
+
 *Maintainer:* Stelae Infra. Update this document whenever the OpenAI verifier behavior or protocol requirements evolve.

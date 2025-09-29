@@ -7,6 +7,13 @@ PORT="${PUBLIC_PORT:-9090}"
 SRC="http://127.0.0.1:${PORT}/.well-known/mcp/manifest.json"
 
 WORKER_DIR="${WORKER_DIR:-$HOME/dev/stelae/cloudflare/worker}"
+WRANGLER_BIN="${WRANGLER_BIN:-wrangler}"
+USE_REMOTE="${WRANGLER_REMOTE:-1}"
+if [ "$USE_REMOTE" -eq 1 ] 2>/dev/null; then
+  WRANGLER_KV_REMOTE_ARGS=(--remote)
+else
+  WRANGLER_KV_REMOTE_ARGS=()
+fi
 
 # KV namespace friendly name (as shown by `wrangler kv namespace list`)
 NAMESPACE_NAME="${NAMESPACE_NAME:-stelae-manifest}"
@@ -15,7 +22,7 @@ NAMESPACE_NAME="${NAMESPACE_NAME:-stelae-manifest}"
 KEY="${KEY:-manifest_json}"
 
 # ---- preflight ----
-command -v wrangler >/dev/null || { echo "wrangler not found in PATH" >&2; exit 1; }
+command -v "$WRANGLER_BIN" >/dev/null || { echo "wrangler not found in PATH" >&2; exit 1; }
 command -v jq >/dev/null || { echo "jq not found in PATH" >&2; exit 1; }
 command -v curl >/dev/null || { echo "curl not found in PATH" >&2; exit 1; }
 
@@ -33,7 +40,7 @@ fi
 
 # ---- resolve namespace id from title ----
 echo "==> resolving KV namespace id for title: ${NAMESPACE_NAME}"
-NS_JSON="$(wrangler kv namespace list 2>/dev/null || true)"
+NS_JSON="$("$WRANGLER_BIN" kv namespace list 2>/dev/null || true)"
 if [ -z "$NS_JSON" ]; then
   echo "error: could not list KV namespaces (wrangler auth/config?)" >&2
   exit 3
@@ -52,13 +59,13 @@ echo "    -> namespace id: $NAMESPACE_ID"
 # ---- deploy worker (idempotent) ----
 if [ -d "$WORKER_DIR" ]; then
   echo "==> deploying worker from: $WORKER_DIR"
-  ( cd "$WORKER_DIR" && wrangler deploy )
+  ( cd "$WORKER_DIR" && "$WRANGLER_BIN" deploy )
 else
   echo "warn: WORKER_DIR not found ($WORKER_DIR); skipping deploy" >&2
 fi
 
 # ---- write KV using --namespace-id ----
 echo "==> pushing manifest to KV (namespace-id=$NAMESPACE_ID, key=$KEY)…"
-wrangler kv key put --namespace-id "$NAMESPACE_ID" "$KEY" --path "$tmp"
+"$WRANGLER_BIN" kv key put --namespace-id "$NAMESPACE_ID" "$KEY" --path "$tmp" ${WRANGLER_KV_REMOTE_ARGS[@]}
 
 echo "ok: KV updated."

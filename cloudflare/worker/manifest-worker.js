@@ -65,26 +65,25 @@ export default {
 
       try {
         const parsed = JSON.parse(body);
-        parsed.endpointURL = `${url.origin}/mcp`;
+        const origin = url.protocol === "https:" ? url.origin : `https://${url.host}`;
+        parsed.endpointURL = `${origin}/mcp`;
         if (!parsed.protocolVersion) {
           parsed.protocolVersion = "2024-11-05";
         }
-        if (!parsed.servers || parsed.servers.length === 0) {
-          parsed.servers = [
-            {
-              name: parsed.name || "Stelae MCP Proxy",
-              url: `${url.origin}/mcp`,
-              transport: "streamable-http",
-              version: parsed.version || "1.0.0"
-            }
-          ];
-        } else {
-          parsed.servers = parsed.servers.map((srv) => ({
-            ...srv,
-            transport: srv.transport || "streamable-http",
-            url: srv.url || `${url.origin}/mcp`
-          }));
-        }
+
+        const existingServers = Array.isArray(parsed.servers) ? parsed.servers : [];
+        const serverCandidate = existingServers.find((srv) => srv && typeof srv.name === "string" && srv.name.trim().length > 0);
+        const candidateName = (serverCandidate?.name || parsed.serverName || parsed.name || "").toString().trim().toLowerCase();
+        const derivedName = candidateName && !candidateName.includes(" ") ? candidateName : "stelae";
+        parsed.name = derivedName;
+        parsed.servers = [
+          {
+            name: derivedName,
+            transport: "streamable-http",
+            url: `${origin}/mcp`,
+            version: parsed.version || "1.0.0"
+          }
+        ];
 
         const manifestTools = Array.isArray(parsed.tools) ? parsed.tools : [];
         const toolMap = new Map();

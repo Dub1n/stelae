@@ -1,0 +1,229 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://example.com/schemas/agent-manifest.json",
+    "title": "Agent Manifest",
+    "type": "object",
+    "required": [
+        "server",
+        "approvals",
+        "tools"
+    ],
+    "properties": {
+        "server": {
+            "type": "object",
+            "required": [
+                "label",
+                "endpoint",
+                "transport",
+                "version"
+            ],
+            "properties": {
+                "label": {
+                    "type": "string",
+                    "description": "Short, stable namespace the agent must use (e.g., stelae)."
+                },
+                "endpoint": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "Public SSE/HTTP MCP endpoint."
+                },
+                "transport": {
+                    "type": "string",
+                    "enum": [
+                        "sse",
+                        "http"
+                    ],
+                    "default": "sse"
+                },
+                "version": {
+                    "type": "string"
+                },
+                "health": {
+                    "type": "object",
+                    "properties": {
+                        "manifest_url": {
+                            "type": "string",
+                            "format": "uri"
+                        },
+                        "tools_list_url": {
+                            "type": "string",
+                            "format": "uri"
+                        }
+                    }
+                }
+            }
+        },
+        "approvals": {
+            "type": "object",
+            "description": "Default approval policy; tools can override.",
+            "required": [
+                "read_default",
+                "write_default"
+            ],
+            "properties": {
+                "read_default": {
+                    "type": "string",
+                    "enum": [
+                        "never",
+                        "always"
+                    ]
+                },
+                "write_default": {
+                    "type": "string",
+                    "enum": [
+                        "never",
+                        "always"
+                    ]
+                }
+            }
+        },
+        "policy": {
+            "type": "object",
+            "properties": {
+                "tooling_preference": {
+                    "type": "string",
+                    "enum": [
+                        "mcp_only",
+                        "prefer_mcp",
+                        "unrestricted"
+                    ],
+                    "default": "mcp_only",
+                    "description": "Hint to avoid web/built-ins when doing repo work:contentReference[oaicite:2]{index=2}."
+                },
+                "workspace_roots": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "Paths returned by list_allowed_directories; agents must stay within:contentReference[oaicite:3]{index=3}."
+                },
+                "git_required_clean": {
+                    "type": "boolean",
+                    "default": true
+                },
+                "dry_run_first": {
+                    "type": "boolean",
+                    "default": true
+                }
+            }
+        },
+        "tools": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "name",
+                    "summary",
+                    "input_schema"
+                ],
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "summary": {
+                        "type": "string"
+                    },
+                    "category": {
+                        "type": "string",
+                        "enum": [
+                            "fs-read",
+                            "fs-write",
+                            "code-search",
+                            "exec",
+                            "docs",
+                            "memory",
+                            "utility"
+                        ]
+                    },
+                    "annotations": {
+                        "type": "object",
+                        "properties": {
+                            "readOnly": {
+                                "type": "boolean"
+                            },
+                            "destructive": {
+                                "type": "boolean"
+                            },
+                            "idempotent": {
+                                "type": "boolean"
+                            },
+                            "supports_dry_run": {
+                                "type": "boolean"
+                            }
+                        }
+                    },
+                    "approval": {
+                        "type": "string",
+                        "enum": [
+                            "inherit",
+                            "never",
+                            "always"
+                        ],
+                        "default": "inherit",
+                        "description": "Overrides defaults for this tool."
+                    },
+                    "input_schema": {
+                        "type": "object"
+                    },
+                    "output_schema": {
+                        "type": "object"
+                    },
+                    "examples": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": [
+                                "arguments"
+                            ],
+                            "properties": {
+                                "description": {
+                                    "type": "string"
+                                },
+                                "arguments": {
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "golden_paths": {
+            "type": "array",
+            "description": "Few-shot, minimal ‘plan → dry-run → apply’ sequences the agent can copy.",
+            "items": {
+                "type": "object",
+                "required": [
+                    "name",
+                    "steps"
+                ],
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "steps": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "required": [
+                                "tool",
+                                "args"
+                            ],
+                            "properties": {
+                                "tool": {
+                                    "type": "string"
+                                },
+                                "args": {
+                                    "type": "object"
+                                },
+                                "expect": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -2,7 +2,7 @@
   "mcpProxy": {
     "baseURL": "https://mcp.infotopology.xyz",
     "addr": ":9090",
-    "name": "Stelae MCP Proxy",
+    "name": "stelae",
     "version": "1.0.0",
     "type": "streamable-http",
     "options": {
@@ -12,11 +12,13 @@
     }
   },
   "manifest": {
-    "name": "Stelae MCP Proxy",
+    "name": "stelae",
     "version": "1.0.0",
     "description": "Local MCP stack",
     "publicBaseURL": "https://mcp.infotopology.xyz",
-    "resources": []
+    "serverName": "stelae",
+    "resources": [],
+    "toolOverridesPath": "/home/gabri/dev/stelae/config/tool_overrides.json"
   },
   "mcpServers": {
     "fs": {

@@ -43,6 +43,41 @@ Path placeholders expand from `.env`; see setup below.
    make render-proxy
    \```
    This renders `config/proxy.json` from `config/proxy.template.json` using `.env` (with `.env.example` as fallback).
+3. (Optional) Tailor tool annotations with `config/tool_overrides.json`. The file ships with sensible read-only defaults for filesystem/search tools and can be extended per downstream server, or globally via the `master` section:
+   ```json
+   {
+     "servers": {
+       "fs": {
+         "enabled": true,
+         "tools": {
+           "read_file": {
+             "enabled": true,
+             "annotations": { "readOnlyHint": true }
+           }
+         }
+       },
+       "fetch": {
+         "enabled": true,
+         "tools": {
+           "fetch": {
+             "enabled": true,
+             "annotations": { "openWorldHint": true }
+           }
+         }
+       }
+     },
+     "master": {
+       "enabled": true,
+       "tools": {
+         "*": {
+           "enabled": true,
+           "annotations": { "readOnlyHint": true }
+         }
+       }
+     }
+   }
+  ```
+   The optional `master` block lets you override tools regardless of which server registered them; use `"*"` to target every tool, or list specific names. Setting `"enabled": false` at the server or tool level hides those entries from the manifest, `initialize`, and `tools/list` responses (and therefore from remote clients). Only the hints you specify are changed; unspecified hints keep the proxy defaults.
 3. Ensure the `stelae-search` virtualenv contains `mcp` ≥ 0.1.0:
    \```bash
    ${SEARCH_PYTHON_BIN} -m pip install --upgrade mcp
@@ -66,7 +101,7 @@ source ~/.nvm/nvm.sh
   \```
 - Apply config changes:
   \```bash
-  make render-proxy
+  make render-proxy            # re-renders config + propagates override path
   source ~/.nvm/nvm.sh && pm2 restart mcp-proxy --update-env
   \```
 - Check status / logs:
@@ -78,6 +113,8 @@ source ~/.nvm/nvm.sh
   \```bash
   make down
   \```
+
+The helper script `scripts/restart_stelae.sh --full` wraps the full cycle (rebuild proxy, render config, restart PM2 fleet, redeploy Cloudflare worker, republish manifest) and is the fastest way to validate override changes end-to-end.
 
 Logs default to `~/dev/stelae/logs/` (see `ecosystem.config.js`).
 
@@ -126,8 +163,8 @@ Operational steps:
 
 ## Local vs Remote Consumers
 
-- Remote agents (e.g. ChatGPT) use the public manifest served via Cloudflare.
-- Local MCP clients can connect to `http://localhost:9090`. A split-manifest approach is tracked in `TODO.md` (Further Enhancements) if you decide to differentiate responses.
+- Remote agents (e.g. ChatGPT) use the public manifest served via Cloudflare, which now mirrors the complete downstream tool catalog (annotations included).
+- Local MCP clients can connect to `http://localhost:9090` and receive the same tool metadata, so overrides remain consistent between environments.
 
 ---
 

@@ -1,214 +1,86 @@
-# AGENTS.md
+# Agent Guidelines
 
-## Command Tool
+## Stelae
 
-!IMPORTANT: Only **USE BASH COMMANDS** unless asked otherwise or no bash command is available for the task.
+### Project Structure & Module Organization
 
-*Bash Shell is available to commands invoked as `["bash","-lc",…]`*
+The root expects a local `.env`; rendered artifacts land in `config/proxy.json` via the Python renderers in `scripts/`. `scripts/` houses Python and bash automation—keep every module narrow and under 150 lines. Operational manifests live in `ops/`, Cloudflare worker code in `cloudflare/worker/`, and diagnostics in `dev/`. Integration tests stay in `tests/`, runtime logs under `logs/`, and the top-level `Makefile` is the authoritative interface to PM2 workflows.
 
-This doesn't apply to running powershell commands via bash, unless that itself is required, in which case call invoke powershell directly: `["powershell.exe","-NoProfile",…]` or similar
+### Runtime Topology & Responsibilities
 
-## Placeholders
+- PM2 orchestrates four long-lived processes defined in `ecosystem.config.js`: the Go proxy on `:9090`, the Python streamable bridge (`scripts/stelae_streamable_mcp.py`), the Cloudflared tunnel, and the watchdog that restarts Cloudflared when the public probe fails. Always run `source ~/.nvm/nvm.sh` before `make up/down/status/logs` so PM2 sees the Node toolchain.
+- The Go proxy binary lives outside this repo in `~/apps/mcp-proxy` (fork of `TBXark/mcp-proxy`). `ecosystem.config.js` points to that tree’s `build/mcp-proxy` artifact. Rebuild in that directory with `go build -o build/mcp-proxy` after Go changes.
+- Downstream MCP servers (filesystem, ripgrep, shell, docs, memory, fetch, strata, etc.) are declared under `mcpServers` in the rendered `config/proxy.json`. Most run via stdio; fetch is HTTP. The bridge process keeps a streamable/stdio shim hot for local IDE clients.
 
-- NEVER write mocks or placeholders unless explicitly asked to.
+### Configuration & Rendering Workflow
 
-## DRY
+- Treat `config/proxy.json` as generated—edit `config/proxy.template.json` and run `make render-proxy` to refresh. The renderer pulls values from `.env` variables like `PUBLIC_BASE_URL`, `FILESYSTEM_BIN`, and `STELAE_DIR`.
+- Manifest metadata (`manifest.*`) feeds both the proxy and Cloudflare worker. Key fields: `publicBaseURL` (external host), `serverName` (slug that remote clients reference), and optional resources array.
+- Other templates: Cloudflare tunnel configuration under `ops/`, and diagnostic manifests in `dev/`.
 
-- Avoid duplicating code. Extract common logic into reusable functions, components, or modules.
-- **Specifics:**
-  - Identify duplicated code patterns.
-  - Create reusable functions or components for common tasks.
-  - Use higher-order functions or components to abstract common logic.
-  - Ensure that changes to shared code are thoroughly tested to avoid breaking existing functionality.
+### Manifest Pipeline (Local & Remote)
 
-## Test-Driven Development (TDD)
+- Local manifest source: `http://localhost:9090/.well-known/mcp/manifest.json` served directly by the Go proxy (`http.go`). We extend `buildManifestDocument` and `manifestServerEntries` there. The manifest must include `endpointURL`, `servers` (single `stelae` entry with `transport` + `version`), tools, prompts, and resources.
+- Public manifest: a Cloudflare Worker in `cloudflare/worker/manifest-worker.js` reads the origin manifest from KV and rewrites fields to enforce `https://mcp.infotopology.xyz/mcp`, normalize the server slug to `stelae`, and guarantee `transport/version`. Update KV via `scripts/push_manifest_to_kv.sh` (fetches localhost manifest) before deploying with `npx wrangler deploy --config cloudflare/worker/wrangler.toml`.
+- When investigating manifest bugs, inspect both the Go proxy (for base document) and the worker (for edge rewrites). Verify with `curl -s http://localhost:9090/...` and `curl -sk https://mcp.infotopology.xyz/...`.
 
-Follow TDD practices where applicable.
+### Companion Repos & Cross-Repo Contracts
 
-- This applies to:
-  - new features
-  - infrastructure
+- `~/apps/mcp-proxy`: Go code for the proxy. Key files: `http.go` (HTTP server + manifest), `config.go` (config schema, including `ManifestConfig.ServerName`), and tests under `http_test.go`. Run `go test ./...` before rebuilding. Avoid editing `config.json` in that repo; Stelae renders its own config.
+- The proxy expects manifest-aware fields like `manifest.serverName` and uses them when complementing manifest responses. Changes to schema require updates in both this repo and the Go fork.
+- Cloudflare worker relies on KV data (namespace `stelae-manifest`). Ensure `scripts/push_manifest_to_kv.sh` succeeds before redeploying the worker; otherwise it falls back to a minimal manifest.
 
-- This doesn't apply to:
-  - small changes
-  - small test harnesses
-  - code that would not meaningfully benefit from having a test written for it
-  - code that can be tested comprehensively with few commands
+### Operational Playbook & Verification
 
-- Write tests *before* writing the code. This forces you to think about the interface and behavior first.
-- **Specifics:**
-  - Write unit tests for individual functions and classes, focusing on isolated behavior.
-  - Use integration tests to verify interactions between different modules and components.
-  - Aim for high test coverage (80%+) to ensure that most of the code is tested.
-  - Use mocking and stubbing to isolate units under test and control dependencies.
+- Typical workflow: edit template or Go source → `make render-proxy` (if template) → rebuild Go binary in `~/apps/mcp-proxy` → `make down` / `make up` to restart PM2 → `make status` to confirm processes → run curls in README (`jq '{servers, tools: (.tools|map(.name))}'`).
+- Logs live under `logs/`; `make logs` tails all PM2 outputs. Individual logs: `logs/mcp-proxy.out.log`, `logs/cloudflared.err.log`, etc.
+- Public availability requires Cloudflared: start/restart with `pm2 restart cloudflared` or the Makefile. If `curl -sk https://mcp.infotopology.xyz/.well-known/mcp/manifest.json` returns CF 1033, the tunnel is down.
 
-If existing code does that not have appropriate tests (unit tests, end-to-end tests, etc.) is encounetered, the following approach is employed:
+### Common Gotchas
 
-1. Complete current task
-2. After summarising the work completed, notify the user of the missing tests and affected components
-3. If tests are to be written, the user will notify you. If they do not, proceed with the next task
-4. If the user requests "present test plan" (or words to that effect), present a plan for the user to provide in a new chat:
-  The user will provide a test plan to the agent
-  The agent will write a test *without* reading the components that are to be tested, but is told in the test plan what the required inputs/outputs/endpoints etc are, just not the actual implementation of the components
-  The agent will write the tests for the components such that they pass when the requirements are met and fail should they not, ensuring coverage of edge cases and likely points of failure
-  The agent will run the tests on the components and, should either the tests or the components need fixing, conduct the fixes required
+- Do not hand-edit `config/proxy.json`; rerender from the template to avoid drift. The renderer injects paths for local binaries (filesystem/rg/etc.).
+- Remember the manifest split: remote clients only see the single `stelae` server (streamable HTTP). We intentionally hide individual downstream servers to keep ChatGPT’s connector list clean.
+- Some scripts (`scripts/restart_stelae.sh`, `dev/debug/*`) expect `.env` variables to be set and may fail silently if required keys are missing.
+- The repo may contain pending docs (e.g., `docs/agnet_manifest_*`). Check `git status` before making large edits and avoid stomping user-authored drafts.
 
-## SOLID Design Principles - Coding Assistant Guidelines
+### Build, Test, and Development Commands
 
-When generating, reviewing, or modifying code, follow these guidelines to ensure adherence to SOLID principles:
+Run `make render-proxy` after touching `.env` or template files, then `make up` to start the PM2 stack defined by `ecosystem.config.js`; `make down` tears it back to a clean slate. Inspect process state with `make status` and follow rolling output with `make logs`. Always `source ~/.nvm/nvm.sh` before any PM2 interaction. Debug endpoints with helpers in `dev/`, for example `python dev/debug/check_connector.py --help`.
 
-### 1. Single Responsibility Principle (SRP)
+### Coding Style & Naming Conventions
 
-- Never allow a file to exceed 500 lines.
-- If a file approaches 400 lines, break it up immediately. - Treat 1000 lines as unacceptable, even temporarily.
-- Use folders and naming conventions to keep small files logically grouped.
-- Each class must have only one reason to change.
-- Limit class scope to a single functional area or abstraction level.
-- Keep functions under 30-40 lines.
-- When a class exceeds 100-150 lines, consider if it has multiple responsibilities.
-- Separate cross-cutting concerns (logging, validation, error handling) from business logic.
-- Create dedicated classes for distinct operations like data access, business rules, and UI.
-- Method names should clearly indicate their singular purpose.
-- If a method description requires "and" or "or", it likely violates SRP.
-- Prioritize composition over inheritance when combining behaviors.
+Target Python 3.11+, 4-space indentation, and type-hinted, intention-revealing names such as `render_proxy_config`. Keep functions under 40 lines and split files before they reach 400 lines to preserve single responsibility. Shell scripts adopt `set -euo pipefail` and kebab-case filenames. JSON templates use uppercase placeholders like `{{ STELAE_DIR }}`; never embed secrets—let the renderer pull them from the environment.
 
-### 2. Open/Closed Principle (OCP)
+### Testing Guidelines
 
-- Design classes to be extended without modification.
-- Use abstract classes and interfaces to define stable contracts.
-- Implement extension points for anticipated variations.
-- Favor strategy patterns over conditional logic.
-- Use configuration and dependency injection to support behavior changes.
-- Avoid switch/if-else chains based on type checking.
-- Provide hooks for customization in frameworks and libraries.
-- Design with polymorphism as the primary mechanism for extending functionality.
+Pytest is standard; add suites in `tests/` using `test_<feature>.py` modules and scenario-focused test functions. Run the full suite with `pytest` or scope with commands such as `pytest tests/test_streamable_mcp.py::test_happy_path`. Uphold ≥80% coverage for touched code and exercise both success and failure paths. When mocking external dependencies, prefer dependency-injected fakes instead of editing shared fixtures.
 
-### 3. Liskov Substitution Principle (LSP)
+### Commit & Pull Request Guidelines
 
-- Ensure derived classes are fully substitutable for their base classes.
-- Maintain all invariants of the base class in derived classes.
-- Never throw exceptions from methods that don't specify them in base classes.
-- Don't strengthen preconditions in subclasses.
-- Don't weaken postconditions in subclasses.
-- Never override methods with implementations that do nothing or throw exceptions.
-- Avoid type checking or downcasting, which may indicate LSP violations.
-- Prefer composition over inheritance when complete substitutability can't be achieved.
+Write imperative commit subjects following `<type>: <summary>` (e.g., `docs: clarify proxy renderer usage`). Commit rendered outputs only when the deployment experience changes. Pull requests must describe the change, list impacted services, and record manual verification steps like `pytest` or `make render-proxy`, while linking issues or TODO items. Attach logs or screenshots for behavioral shifts and flag migrations or secret rotations explicitly.
 
-### 4. Interface Segregation Principle (ISP)
+### Security & Configuration Tips
 
-- Create focused, minimal interfaces with cohesive methods.
-- Split large interfaces into smaller, more specific ones.
-- Design interfaces around client needs, not implementation convenience.
-- Avoid "fat" interfaces that force clients to depend on methods they don't use.
-- Use role interfaces that represent behaviors rather than object types.
-- Implement multiple small interfaces rather than a single general-purpose one.
-- Consider interface composition to build up complex behaviors.
-- Remove any methods from interfaces that are only used by a subset of implementing classes.
+Keep secrets out of git: `.env` stays local and values flow through PM2 environment variables. Regenerate Cloudflare configs via `make render-cloudflared` and retain results under `ops/`. Validate public endpoints with the curl checks in `README.md` before promoting configuration changes. Add new MCP servers through the template renderer rather than editing `config/proxy.json` manually to avoid drift.
 
-### 5. Dependency Inversion Principle (DIP)
+## Agent
 
-- High-level modules should depend on abstractions, not details.
-- Make all dependencies explicit, ideally through constructor parameters.
-- Use dependency injection to provide implementations.
-- Program to interfaces, not concrete classes.
-- Place abstractions in a separate package/namespace from implementations.
-- Avoid direct instantiation of service classes with 'new' in business logic.
-- Create abstraction boundaries at architectural layer transitions.
-- Define interfaces owned by the client, not the implementation.
+### Shared Agent Practices
 
-### Implementation Guidelines
+- Default to bash commands via `["bash","-lc", …]` and only switch shells when the task explicitly requires it; never introduce mocks or placeholders unless requested.
+- Eliminate duplicate logic by extracting reusable helpers and regression-testing shared code; design changes with SOLID guardrails—treat ~400 lines as the cue to split files, keep functions under ~40 lines, prefer composition, and watch for red flags like god classes or behavior-flipping boolean flags.
+- Prefer TDD for new features and infrastructure while relaxing it for small fixes when speed matters; target ≥80% coverage, exercise both success and failure paths, and document any missing tests you uncover before waiting for user direction.
+- Keep modules interchangeable and isolated, separating UI, business logic, and flow control (e.g., ViewModel/Manager/Coordinator) and check for existing CLI tooling before adding new scripts.
 
-- When starting a new class, explicitly identify its single responsibility.
-- Document extension points and expected subclassing behavior.
-- Every file, class, and function should do one thing only.
-- If a file, class, or function has multiple responsibilities, split it immediately.
-- Each view, manager, or utility should be laser-focused on one concern.
-- Write interface contracts with clear expectations and invariants.
-- Question any class that depends on many concrete implementations.
-- Every functionality should be in a dedicated class, struct, or protocol, even if it’s small.
-- Favor composition over inheritance, but always use object-oriented thinking.
-- Code must be built for reuse, not just to “make it work.”
-- Use factories, dependency injection, or service locators to manage dependencies.
-- Review inheritance hierarchies to ensure LSP compliance.
-- Regularly refactor toward SOLID, especially when extending functionality.
-- Use design patterns (Strategy, Decorator, Factory, Observer, etc.) to facilitate SOLID adherence.
-- All class, method, and variable names must be descriptive and intention-revealing.
-- Avoid vague names like data, info, helper, or temp.
-- Always code as if someone else will scale this.
-- Include extension points (e.g., protocol conformance, dependency injection) from day one.
+### Collaboration & Autonomy
 
-### Warning Signs
+- Handle natural follow-up work—tests, docs, quick fixes—without extra prompting, but confirm before taking on large or risky changes.
+- Communicate concisely: skip emojis and filler, stay directive, and reinforce the user’s reasoning; when confusion appears, add a compact teaching note that explains the approach and relevant systems.
 
-- God classes that do "everything"
-- Methods with boolean parameters that radically change behavior
-- Deep inheritance hierarchies
-- Classes that need to know about implementation details of their dependencies
-- Circular dependencies between modules
-- High coupling between unrelated components
-- Classes that grow rapidly in size with new features
-- Methods with many parameters
+### Troubleshooting Discipline
 
-## Mdular Design
+- After three failed edit attempts due to tooling issues, share the intended contents (or any diff over 100 lines) in chat and ask the user to apply it.
 
-- Code should connect like Lego
-— interchangeable, testable, and isolated.
-- Ask: “Can I reuse this class in a different screen or project?” If not, refactor it.
-- Reduce tight coupling between components. Favor dependency injection or protocols.
+## Integration Note
 
-## Manager and Coordinator Patterns
-
-- Use ViewModel, Manager, and Coordinator naming conventions for logic separation:
-- UI logic ➝ ViewModel - Business logic ➝ Manager - Navigation/state flow ➝ Coordinator
-- Never mix views and business logic directly.
-
-## Project settings and data
-
-ALWAYS check if there is a way to interact with a project via the CLI before writing custom scripts `npx sanity --help`
-
-## TypeScript
-
-### Content modelling
-
-- Unless explicitly modelling web pages or app views, create content models for what things are, not what they look like in a front-end
-- For example, consider the `status` of an element instead of its `color`
-
-### Basic schema types
-
-- ALWAYS use the `defineType`, `defineField`, and `defineArrayMember` helper functions
-- ALWAYS write schema types to their own files and export a named `const` that matches the filename
-- ONLY use a `name` attribute in fields unless the `title` needs to be something other than a title-case version of the `name`
-- ANY `string` field type with an `options.list` array with fewer than 5 options must use `options.layout: "radio"`
-- ANY `image` field must include `options.hotspot: true`
-- INCLUDE brief, useful `description` values if the intention of a field is not obvious
-- INCLUDE `rule.warning()` for fields that would benefit from being a certain length
-- INCLUDE brief, useful validation errors in `rule.required().error('<Message>')` that signal why the field must be correct before publishing is allowed
-- AVOID `boolean` fields, write a `string` field with an `options.list` configuration
-- NEVER write single `reference` type fields, always write an `array` of references
-- CONSIDER the order of fields, from most important and relevant first, to least often used last
-
-### Dependency Injection
-
-Favor dependency injection using interfaces to promote loose coupling and testability. Use a registry or container to manage dependencies.
-
-## Autonomy
-
-If task completion presents immediate follow-ups, complete them without without notifying the user. Examples incude (but aren't limited to): running tests, verifying implemented code quality, updating documentation, necessary updates in related files.
-
-## Communication
-
-- Eliminate: emojis, filler, hype, conversational transitions.
-- Prioritize: directive phrasing; aim at cognitive rebuilding, not tone-matching.
-- Disable: engagement/sentiment-boosting behaviors.
-- Suppress: metrics like satisfaction scores and continuation bias.
-- Goal: improve the user's independent, high-fidelity thinking.
-
-## Teaching
-
-The user is learning software development through building projects with Agents such as yourself. When appropriate, provide information on the method of implemtation with detail at the level of the task (high-level explanation for broad tasks, low-level for specific tasks).
-If the user asks a question or requests a task that suggests they do not understand an aspect of the code, infrastructure, or any other part of the code, provide an educational snippet to help them understand the systems at play and the specifics of why and how you completed the task requirements as you would/did.
-
-## Troubleshooting
-
-### File Editing
-
-If you are struggling to edit a file (3+ attempts to make one edit) due to parsing, syntax, or other command issues, write the new contents of the file (or the diff if longer than 100 lines) to the chat and ask the user to update the file's contents.
+- This document blends repo-specific guidance with the shared cross-repo standards; when regenerating it, import only the applicable parts of the global rules, summarize instead of duplicating entire sections, and keep the result concise so future updates stay manageable.
