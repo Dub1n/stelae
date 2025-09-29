@@ -10,14 +10,14 @@ A WSL-native deployment of [mcp-proxy](https://github.com/TBXark/mcp-proxy) that
 |-----------|-----------|----------------|---------|
 | mcp-proxy | HTTP/SSE (:9090) | `${PROXY_BIN}` | Aggregates tools/prompts/resources from local MCP servers into one endpoint. |
 | Filesystem MCP | stdio | `${FILESYSTEM_BIN} --root ${STELAE_DIR}` | Scoped read/write access to the repo. |
-| ripgrep MCP | stdio | `${RG_BIN} --stdio --root ${SEARCH_ROOT}` | Code search backend used by the canonical `search` shim. |
+| ripgrep MCP | stdio | `${RG_BIN} --stdio --root ${SEARCH_ROOT}` | Code search backend powering the `grep` tool. |
 | Terminal Controller MCP | stdio | `${SHELL_BIN}` | Allowlisted command execution in Phoenix workspace. |
 | Docy MCP | stdio | `${DOCY_BIN} --stdio` | Documentation / URL ingestion (feeds canonical `fetch`). |
 | Basic Memory MCP | stdio | `${MEMORY_BIN}` | Persistent project memory. |
 | Strata MCP | stdio | `${STRATA_BIN}` | Progressive discovery / intent routing. |
-| 1mcp agent | stdio | `${ONE_MCP_BIN} --transport stdio` | Discovery/promotion sidecar serving capability lookups. |
-| Search shim (inactive) | — | — | Retired while `mcp-grep` remains the primary search surface; see TODO for potential revival. |
-| Fetch MCP | stdio | `${LOCAL_BIN}/mcp-server-fetch` | Official MCP providing canonical `fetch`. |
+| Fetch MCP | HTTP | `${LOCAL_BIN}/mcp-server-fetch` | Official MCP providing canonical `fetch`. |
+| FastMCP bridge | streamable HTTP (`/mcp`) / stdio | `python -m scripts.stelae_streamable_mcp` | Exposes the full proxy catalog to desktop agents; falls back to local search/fetch if the proxy is unavailable. |
+| 1mcp agent | stdio | `${ONE_MCP_BIN} --transport stdio` | Discovery/promotion sidecar for capability lookups *(not yet implemented in this stack)*. |
 
 Path placeholders expand from `.env`; see setup below.
 
@@ -27,7 +27,7 @@ Path placeholders expand from `.env`; see setup below.
 
 - Windows 11 + WSL2 (Ubuntu) with systemd enabled (`/etc/wsl.conf` → `[boot]` / `systemd=true`).
 - Tooling installed: Go, Node.js + npm (via NVM), `pm2`, Python 3.11+, `pipx`, `ripgrep`, `cloudflared`.
-- Discovery agent: `npm install -g @1mcp/agent` (provides the `1mcp` binary).
+- Discovery agent *(planned)*: `npm install -g @1mcp/agent` (provides the `1mcp` binary; integration TBD).
 - Cloudflare named tunnel `stelae` with DNS `mcp.infotopology.xyz` and credentials stored under `~/.cloudflared/`.
 
 ---
@@ -43,7 +43,7 @@ Path placeholders expand from `.env`; see setup below.
    make render-proxy
    \```
    This renders `config/proxy.json` from `config/proxy.template.json` using `.env` (with `.env.example` as fallback).
-3. (Optional) Tailor tool annotations with `config/tool_overrides.json`. The file ships with sensible read-only defaults for filesystem/search tools and can be extended per downstream server, or globally via the `master` section:
+3. (Optional) Tailor tool annotations with `config/tool_overrides.json`. The file includes per-server read-only hints but leaves the `master` block empty so overrides are opt-in. Extend it per downstream server, or globally via the `master` section:
    ```json
    {
      "servers": {
@@ -51,8 +51,8 @@ Path placeholders expand from `.env`; see setup below.
          "enabled": true,
          "tools": {
            "read_file": {
-             "enabled": true,
-             "annotations": { "readOnlyHint": true }
+         "enabled": true,
+         "annotations": {}
            }
          }
        },
@@ -70,17 +70,17 @@ Path placeholders expand from `.env`; see setup below.
        "enabled": true,
        "tools": {
          "*": {
-           "enabled": true,
-           "annotations": { "readOnlyHint": true }
+         "enabled": true,
+         "annotations": {}
          }
        }
      }
    }
   ```
    The optional `master` block lets you override tools regardless of which server registered them; use `"*"` to target every tool, or list specific names. Setting `"enabled": false` at the server or tool level hides those entries from the manifest, `initialize`, and `tools/list` responses (and therefore from remote clients). Only the hints you specify are changed; unspecified hints keep the proxy defaults.
-3. Ensure the `stelae-search` virtualenv contains `mcp` ≥ 0.1.0:
+4. Ensure the FastMCP bridge virtualenv (`.venv/` by default) includes `mcp`, `fastmcp`, `anyio`, and `httpx`:
    \```bash
-   ${SEARCH_PYTHON_BIN} -m pip install --upgrade mcp
+   .venv/bin/python -m pip install --upgrade mcp fastmcp anyio httpx
    \```
    Install the fetch server with `pipx install mcp-server-fetch` if not already present.
 
@@ -170,14 +170,14 @@ Operational steps:
 
 ## Future Developments
 
-- Build the stdio aggregator so desktop agents (e.g. Codex) can access the full tool surface via a single MCP entry. See `HUB.md` for the architectural plan and open questions.
-- Re-evaluate the retired `scripts/stelae_search_mcp.py` shim once we have a bounded-search strategy (or confirm it can be deleted entirely).
+- Wire in the optional 1mcp discovery agent once the upstream contract settles *(not yet implemented)*.
+- Decide whether to fully retire the legacy `scripts/stelae_search_mcp.py` shim now that the bridge mirrors the full catalog (track in TODO).
 
 ## Validation Checklist
 
-1. `curl -s http://localhost:9090/.well-known/mcp/manifest.json | jq '{tools: (.tools | map(.name))}'` shows `fetch` and the upstream `rg` search tools.
+1. `curl -s http://localhost:9090/.well-known/mcp/manifest.json | jq '{tools: (.tools | map(.name))}'` shows the full downstream catalog (filesystem, ripgrep, shell, docs, memory, strata, fetch, etc.).
 2. From ChatGPT, exercise `fetch` (canonical) and `rg/search` (ripgrep) to confirm both return JSON payloads.
-3. `pm2 status` shows `online` for proxy, each MCP, and `cloudflared`.
+3. `pm2 status` shows `online` for proxy, the FastMCP bridge, each MCP, and `cloudflared`.
 
 ---
 
@@ -186,7 +186,7 @@ Operational steps:
 - **Cloudflare tunnel up:** `pm2 start "cloudflared tunnel run stelae" --name cloudflared` (or `pm2 restart cloudflared`). `curl -sk https://mcp.infotopology.xyz/.well-known/mcp/manifest.json` must return HTTP 200; a Cloudflare 1033 error indicates the tunnel is down.
 - **Manifest sanity:** `curl -s http://localhost:9090/.well-known/mcp/manifest.json | jq '{servers, tools: (.tools | map(.name))}'` verifies every essential MCP (filesystem, ripgrep, shell, docs, memory, fetch, strata, 1mcp).
 - **SSE probes:** use the Python harness under `docs/openai-mcp.md` (or the snippets in this README) to connect to `/rg/sse` and `/fetch/sse`. Confirm `grep` returns results and `fetch` succeeds when `raw: true` (Docy’s markdown extraction still needs a fix; track in TODO).
-- **Streamable HTTP gap:** mcp-proxy currently publishes per-server SSE endpoints only. A Streamable HTTP front-end (single POST/GET path) is still required for the ChatGPT connector wizard—see TODO for the planned aggregate shim.
+- **Streamable HTTP bridge:** `scripts/stelae_streamable_mcp.py` now proxies the full catalog for local desktop agents; ensure the `stelae-bridge` pm2 process stays online.
 
 ```python
 # Minimal SSE smoke test (run inside the stelae-search virtualenv)
@@ -266,7 +266,7 @@ Keep a backup of `config/proxy.json` (or rely on git history) before large chang
 ## Troubleshooting
 
 - `pm2 status` shows `Permission denied` → source NVM first (`source ~/.nvm/nvm.sh`).
-- `search` missing in manifest → verify the shim virtualenv has the `mcp` package and restart the `search` process.
+- `search` missing in manifest → verify the bridge virtualenv has the required Python deps and restart the `stelae-bridge` pm2 process (`source ~/.nvm/nvm.sh && pm2 restart stelae-bridge`).
 - `fetch` missing → ensure `mcp-server-fetch` lives under `${LOCAL_BIN}` and is executable.
 - `jq: parse error` → wrap the jq program in single quotes: `jq '{servers, tools: (.tools | length)}'`.
 - Cloudflare 404 on `/stream` → proxy offline or tunnel disconnected; inspect `pm2 logs mcp-proxy` and `pm2 logs cloudflared`.
@@ -277,7 +277,8 @@ Keep a backup of `config/proxy.json` (or rely on git history) before large chang
 
 - `config/proxy.template.json` — template rendered into `config/proxy.json`.
 - `scripts/render_proxy_config.py` — templating helper.
-- `scripts/stelae_search_mcp.py` — FastMCP shim providing canonical `search`.
+- `scripts/stelae_streamable_mcp.py` — FastMCP bridge that mirrors the proxy catalog for local clients.
+- `scripts/stelae_search_mcp.py` — Legacy search shim kept for historical reference.
 - `scripts/stelae_search_fetch.py` — HTTP shim (unused currently; keep for potential automation).
 - `dev/server-setup-commands.md` — Cloudflare tunnel quick commands.
 - `TODO.md` — backlog and future enhancements.
