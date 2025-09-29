@@ -52,9 +52,9 @@ flowchart LR
     toSet ==>|enabled? + annotations| INITJSON
     toSet ==>|enabled? + annotations| MANIFEST
 
-    PROXY ==> |facade fallback| TOOLJSON
-    PROXY ==> |facade fallback| INITJSON
-    PROXY ==> |facade fallback| MANIFEST
+    PROXY ==> |fallback| TOOLJSON
+    PROXY ==> |fallback| INITJSON
+    PROXY ==> |fallback| MANIFEST
 
     TOOLJSON -->|exposed via JSON-RPC `tools/list`| CLIENTS
     INITJSON -->|JSON-RPC `initialize`| CLIENTS
