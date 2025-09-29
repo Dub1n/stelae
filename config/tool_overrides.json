@@ -2,12 +2,7 @@
   "master": {
     "tools": {
       "*": {
-        "annotations": {
-          "destructiveHint": false,
-          "openWorldHint": false,
-          "idempotentHint": false,
-          "readOnlyHint": true
-        }
+        "annotations": {}
       }
     }
   },
