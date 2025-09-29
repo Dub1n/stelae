@@ -1,0 +1,72 @@
+{
+  "master": {
+    "tools": {
+      "*": {
+        "annotations": {}
+      }
+    }
+  },
+  "servers": {
+    "fs": {
+      "tools": {
+        "read_file": {
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        "read_text_file": {
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        "directory_tree": {
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        "search_files": {
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        "search_files_content": {
+          "annotations": {
+            "readOnlyHint": true
+          }
+        }
+      }
+    },
+    "rg": {
+      "tools": {
+        "grep": {
+          "annotations": {
+            "readOnlyHint": true
+          }
+        }
+      }
+    },
+    "docs": {
+      "tools": {
+        "fetch_documentation_page": {
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        "fetch_document_links": {
+          "annotations": {
+            "readOnlyHint": true
+          }
+        }
+      }
+    },
+    "fetch": {
+      "tools": {
+        "fetch": {
+          "annotations": {
+            "openWorldHint": true
+          }
+        }
+      }
+    }
+  }
+}

@@ -23,17 +23,17 @@ export default {
     }
 
     if (url.pathname === "/.well-known/mcp/manifest.json") {
-      const allowedToolNames = ["fetch", "search"]; // enforce ChatGPT verifier expectations
       const fallbackTools = {
         fetch: {
           name: "fetch",
-          description: "Connector-compliant fetch placeholder exposed at the edge.",
+          description:
+            "Fetches a document by id and returns its canonical content in MCP fetch format.",
           inputSchema: {
             type: "object",
             properties: {
-              url: { title: "Url", type: "string" }
+              id: { title: "Id", type: "string", minLength: 1 }
             },
-            required: ["url"]
+            required: ["id"]
           }
         },
         search: {
@@ -65,32 +65,39 @@ export default {
 
       try {
         const parsed = JSON.parse(body);
-        parsed.endpointURL = `${url.origin}/mcp`;
+        const origin = url.protocol === "https:" ? url.origin : `https://${url.host}`;
+        parsed.endpointURL = `${origin}/mcp`;
         if (!parsed.protocolVersion) {
           parsed.protocolVersion = "2024-11-05";
         }
-        if (!parsed.servers || parsed.servers.length === 0) {
-          parsed.servers = [
-            {
-              name: parsed.name || "Stelae MCP Proxy",
-              url: `${url.origin}/mcp`,
-              transport: "streamable-http",
-              version: parsed.version || "1.0.0"
-            }
-          ];
-        } else {
-          parsed.servers = parsed.servers.map((srv) => ({
-            ...srv,
-            transport: srv.transport || "streamable-http",
-            url: srv.url || `${url.origin}/mcp`
-          }));
-        }
+
+        const existingServers = Array.isArray(parsed.servers) ? parsed.servers : [];
+        const serverCandidate = existingServers.find((srv) => srv && typeof srv.name === "string" && srv.name.trim().length > 0);
+        const candidateName = (serverCandidate?.name || parsed.serverName || parsed.name || "").toString().trim().toLowerCase();
+        const derivedName = candidateName && !candidateName.includes(" ") ? candidateName : "stelae";
+        parsed.name = derivedName;
+        parsed.servers = [
+          {
+            name: derivedName,
+            transport: "streamable-http",
+            url: `${origin}/mcp`,
+            version: parsed.version || "1.0.0"
+          }
+        ];
 
         const manifestTools = Array.isArray(parsed.tools) ? parsed.tools : [];
-        parsed.tools = allowedToolNames.map((name) => {
-          const existing = manifestTools.find((tool) => tool && tool.name === name);
-          return existing || fallbackTools[name];
-        });
+        const toolMap = new Map();
+        for (const tool of manifestTools) {
+          if (tool && tool.name) {
+            toolMap.set(tool.name, tool);
+          }
+        }
+        for (const name of Object.keys(fallbackTools)) {
+          if (!toolMap.has(name)) {
+            toolMap.set(name, fallbackTools[name]);
+          }
+        }
+        parsed.tools = Array.from(toolMap.values());
 
         body = JSON.stringify(parsed);
       } catch (err) {

@@ -26,7 +26,13 @@ module.exports = {
       script: PROXY_BIN,
       args: `--config ${PROXY_CONFIG}`,
       cwd: `${APPS_DIR}/mcp-proxy`,
-      env: { PATH: ENV_PATH, MCP_DEFAULT_SERVER: "mem", MCP_DEBUG_LOG: "1" },
+      env: {
+        PATH: ENV_PATH,
+        MCP_DEFAULT_SERVER: "mem",
+        MCP_DEBUG_LOG: "1",
+        ...(process.env.OPENAI_API_KEY ? { OPENAI_API_KEY: process.env.OPENAI_API_KEY } : {}),
+        ...(process.env.GITHUB_TOKEN ? { GITHUB_TOKEN: process.env.GITHUB_TOKEN } : {})
+      },
       autorestart: true,
       max_restarts: 10,
       restart_delay: 2000,

@@ -129,16 +129,16 @@ Patch Docy’s readability path or pin its dependency so canonical (non-raw) fet
 
 ## Phase 5 — Discovery/Install Sidecar (1mcp agent)
 
-- [ ] **Install globally**
+- [x] **Install from source**
 
-- `npm install -g @1mcp/agent`
-- ✅ *Acceptance:* `1mcp --version` succeeds from a new shell
+  - `git clone https://github.com/particlefuture/1mcpserver` → `uv sync`
+  - ✅ *Acceptance:* repo lives under `${VENDOR_DIR}/1mcpserver` with dependencies synced
 
-- [ ] **Add to pm2**
+- [x] **Expose via proxy**
 
-- Ensure `ecosystem.config.js` launches the binary via stdio (e.g. `script: "1mcp"`, `args: "--transport stdio"`)
-- `pm2 restart 1mcp`
-- ✅ *Acceptance:* `pm2 logs 1mcp` stays quiet (stdio idle) and `pm2 describe 1mcp` points to the npm binary
+  - `config/proxy.template.json` adds a `one_mcp` stdio stanza using `uv --directory ... run server.py --local`
+  - `ecosystem.config.js` now forwards `OPENAI_API_KEY`/`GITHUB_TOKEN` into `mcp-proxy` so the child can start
+  - ✅ *Acceptance:* `make render-proxy` surfaces `one_mcp` in `config/proxy.json`
 
 ---
 

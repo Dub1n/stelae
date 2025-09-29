@@ -33,20 +33,29 @@ CURL_MAX_TIME="${CURL_MAX_TIME:-45}"
 
 # options ----------------------------------------------------------------------
 START_CLOUDFLARED=1
+START_BRIDGE=1
+START_WATCHDOG=1
 KEEP_PM2=0
+FULL_REDEPLOY=0
 for arg in "$@"; do
   case "$arg" in
     --no-cloudflared) START_CLOUDFLARED=0;;
+    --no-bridge) START_BRIDGE=0;;
+    --no-watchdog) START_WATCHDOG=0;;
     --keep-pm2) KEEP_PM2=1;;
+    --full) FULL_REDEPLOY=1;;
     -h|--help)
       cat <<EOF
 Usage: $(basename "$0") [options]
   --no-cloudflared   Skip starting cloudflared via pm2
+  --no-bridge        Skip starting the streamable bridge
+  --no-watchdog      Skip starting the public tunnel watchdog
   --keep-pm2         Do not 'pm2 kill'; just (re)start managed apps
+  --full             Also push manifest to Cloudflare KV and deploy worker
 
 Env overrides:
   PROXY_PORT        (default 9090)
-  MIN_TOOL_COUNT    (default 12)
+  MIN_TOOL_COUNT    (default 2)
   READY_TIMEOUT_SEC (default 45)
 EOF
       exit 0
@@ -59,6 +68,15 @@ log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!!\033[0m %s\n' "$*"; }
 err()  { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; }
 require() { command -v "$1" >/dev/null 2>&1 || { err "missing command: $1"; exit 1; }; }
+
+ensure_pm2_app() {
+  local app="$1"
+  if ! pm2 describe "$app" >/dev/null 2>&1; then
+    pm2 start "$ECOSYSTEM" --only "$app"
+  else
+    pm2 restart "$app" --update-env
+  fi
+}
 
 wait_port() {
   local port="$1" label="$2" tries=60
@@ -171,6 +189,9 @@ require ss
 require go
 if [ -s "$HOME_DIR/.nvm/nvm.sh" ]; then . "$HOME_DIR/.nvm/nvm.sh"; fi
 require pm2
+if [ "$FULL_REDEPLOY" -eq 1 ]; then
+  require npx
+fi
 mkdir -p "$STELAE_DIR/logs"
 
 # build fresh proxy binary before restarting services
@@ -203,10 +224,22 @@ PY
 
 # start local proxy + servers --------------------------------------------------
 log "Starting mcp-proxy via pm2"
-pm2 start "$ECOSYSTEM" --only mcp-proxy 2>/dev/null || pm2 restart mcp-proxy --update-env
-for svc in strata docy memory shell; do
-  pm2 start "$ECOSYSTEM" --only "$svc" 2>/dev/null || pm2 restart "$svc" --update-env 2>/dev/null || true
-done
+ensure_pm2_app mcp-proxy
+
+if [ "$START_BRIDGE" -eq 1 ]; then
+  log "Starting stelae-bridge via pm2"
+  ensure_pm2_app stelae-bridge
+else
+  warn "Skipping stelae-bridge (--no-bridge)."
+fi
+
+if [ "$START_WATCHDOG" -eq 1 ]; then
+  log "Starting watchdog via pm2"
+  ensure_pm2_app watchdog
+else
+  warn "Skipping watchdog (--no-watchdog)."
+fi
+
 pm2 save || true
 
 wait_port "$PROXY_PORT" "mcp-proxy" || { err "proxy didn’t bind :$PROXY_PORT"; pm2 logs mcp-proxy --lines 120; exit 2; }
@@ -225,6 +258,14 @@ log "Local probe: tools/list → names (first 40)"
 curl --max-time "$CURL_MAX_TIME" -s "http://127.0.0.1:${PROXY_PORT}/mcp" -H 'Content-Type: application/json' \
   --data '{"jsonrpc":"2.0","id":"T","method":"tools/list"}' \
 | jq -r '.result.tools[].name' | sort | nl | sed -n '1,40p' || true
+
+if [ "$FULL_REDEPLOY" -eq 1 ]; then
+  log "Full redeploy: pushing manifest to Cloudflare KV"
+  (
+    cd "$STELAE_DIR"
+    PORT="$PROXY_PORT" bash scripts/push_manifest_to_kv.sh
+  )
+fi
 
 # start cloudflared only when local is warm -----------------------------------
 if [ "$START_CLOUDFLARED" -eq 1 ]; then

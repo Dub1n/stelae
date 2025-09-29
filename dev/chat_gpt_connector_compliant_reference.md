@@ -54,6 +54,7 @@
   - `search` returns array of `{id,title,text,url}` objects (`SearchOutput` model).
   - `fetch` returns `{id,title,text,url,metadata}` (`FetchOutput`).
 - **Implication**: Initialization and `tools/list` responses must include schema describing these exact structures.
+- **Stelae note**: The facade `fetch` descriptor now requires an `id` field (per OpenAI spec) and returns deterministic content for the default facade search hits when requested.
 
 ### 3.5 Head Request
 
@@ -80,10 +81,10 @@ These responses are sufficient for ChatGPT verification and actual use (source: 
 
 ## 5. Stelae Current Behavior Snapshot (2025‑09‑28)
 
-- **Manifest**: `curl https://mcp.infotopology.xyz/.well-known/mcp/manifest.json` → only `search`, `fetch` (post Cloudflare worker rewrite). When registering the connector in ChatGPT, supply the base origin `https://mcp.infotopology.xyz` (the verifier appends `/.well-known/mcp/manifest.json` automatically).
+- **Manifest**: `curl https://mcp.infotopology.xyz/.well-known/mcp/manifest.json` → full downstream catalog plus the facade `search`/`fetch` entries. Register the connector with the base origin `https://mcp.infotopology.xyz`; ChatGPT appends `/.well-known/mcp/manifest.json`.
 - **SSE**: `curl -Ns https://mcp.infotopology.xyz/mcp` → comment heartbeat and `event: endpoint` immediately with `/mcp?session_id=<hex>` (no percent-encoding). Downstream POSTs now hit the facade as expected.
-- **Initialize**: `result.tools` now matches the facade descriptors (`search`, `fetch`) in production after the 2025‑09‑28 redeploy.
-- **tools/list**: Mirrors initialize (only `search`/`fetch`).
+- **Initialize**: `result.tools` includes the full upstream catalog merged with facade entries (search/fetch) sorted by name.
+- **tools/list**: Mirrors initialize.
 - **Tool execution**: The Go facade now returns deterministic sample hits for `search`; `fetch` continues proxying Basic Memory/Docy responses.
 
 ## 6. Compliance Matrix
@@ -152,6 +153,105 @@ Tool(
     ...,
     transport="sse",
 )
+```
+
+### Enpoints Checks
+
+#### 1. Manifest
+
+**Endpoint:** `/.well-known/mcp/manifest.json`
+
+**Required output (JSON object):**
+
+```json
+{
+  "servers": [
+    {
+      "name": "stelae",
+      "transport": "streamable-http",
+      "url": "https://mcp.infotopology.xyz/mcp",
+      "version": "1.0.0"
+    }
+  ],
+  "tools": [
+    { "name": "list_allowed_directories", "description": "...", "input_schema": { ... } },
+    { "name": "grep", "description": "...", "input_schema": { ... } },
+    { "name": "fetch", "description": "...", "input_schema": { ... } }
+    // …
+  ]
+}
+```
+
+**Use it for:** confirming your server label (`stelae`) and seeing the advertised tool names.
+Your Stelae doc has this as a validation step.
+
+---
+
+#### 2. Tools list
+
+**Endpoint:** `/tools/list`
+
+**Required output (JSON object):**
+
+```json
+{
+  "tools": [
+    { "name": "list_allowed_directories", "description": "...", "input_schema": { ... } },
+    { "name": "grep", "description": "...", "input_schema": { ... } },
+    { "name": "fetch", "description": "...", "input_schema": { ... } }
+  ]
+}
+```
+
+**Use it for:** confirming that child MCPs (filesystem, grep, fetch) are mounted correctly.
+Your README calls this check out explicitly: `curl -s http://localhost:9090/tools/list | jq '.tools | map(.name)'`.
+
+---
+
+#### 3. Streaming health
+
+**Endpoint:** `/stream`
+
+**Required output:**
+
+- Should return HTTP 200 and keep an SSE (server-sent events) connection open.
+- For a quick check, you can do:
+
+  ```bash
+  curl -skI https://mcp.infotopology.xyz/stream
+  ```
+
+  and look for `HTTP/1.1 200 OK` (even if no events stream).
+  Your checklist suggests this too.
+
+#### 4. (Optional) Tool execution
+
+If you hit a specific tool (via API or ChatGPT), the server responds with a JSON content array, e.g. for `list_allowed_directories`:
+
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "[\"/home/ubuntu/dev/phoenix\"]"
+    }
+  ]
+}
+```
+
+That shape (`{ "content": [ { "type": "text", "text": "…" } ] }`) is what the MCP spec requires.
+
+**Quick sanity sequence**:
+
+```bash
+# Manifest should show servers + tool names
+curl -s https://mcp.infotopology.xyz/.well-known/mcp/manifest.json | jq .
+
+# Tool list should enumerate same tools
+curl -s https://mcp.infotopology.xyz/tools/list | jq .
+
+# Stream endpoint should 200 OK
+curl -skI https://mcp.infotopology.xyz/stream
 ```
 
 *Maintainer:* Stelae Infra. Update this document whenever the OpenAI verifier behavior or protocol requirements evolve.
