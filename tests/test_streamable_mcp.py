@@ -8,7 +8,7 @@ from mcp import types
 import scripts.stelae_streamable_mcp as hub
 
 
-@pytest.mark.anyio
+@pytest.mark.anyio("asyncio")
 async def test_search_returns_static_hits(monkeypatch):
     monkeypatch.setattr(hub, "STATIC_SEARCH_ENABLED", True)
 
@@ -41,7 +41,7 @@ async def test_search_returns_static_hits(monkeypatch):
     assert invoked is False
 
 
-@pytest.mark.anyio
+@pytest.mark.anyio("asyncio")
 async def test_search_delegates_to_rg_when_static_disabled(monkeypatch, tmp_path):
     monkeypatch.setattr(hub, "STATIC_SEARCH_ENABLED", False)
     monkeypatch.setattr(hub, "SEARCH_ROOT", tmp_path)
@@ -75,7 +75,7 @@ async def test_search_delegates_to_rg_when_static_disabled(monkeypatch, tmp_path
     assert first["metadata"]["snippet"] == "alpha"
 
 
-@pytest.mark.anyio
+@pytest.mark.anyio("asyncio")
 async def test_fetch_falls_back_to_raw(monkeypatch):
     responses = [
         hub.CallResult(
@@ -115,7 +115,7 @@ async def test_fetch_falls_back_to_raw(monkeypatch):
     assert data["metadata"] == {}
 
 
-@pytest.mark.anyio
+@pytest.mark.anyio("asyncio")
 async def test_fetch_non_json_response(monkeypatch):
     async def fake_call(server_name, tool_name, arguments, read_timeout=hub.SSE_READ_TIMEOUT):
         return hub.CallResult(
@@ -129,3 +129,98 @@ async def test_fetch_non_json_response(monkeypatch):
     data = json.loads(payload)
     assert data["text"] == "plain text output"
     assert data["metadata"]["raw"] is True
+
+
+@pytest.mark.anyio("asyncio")
+async def test_proxy_mode_exposes_remote_catalog(monkeypatch):
+    async def fake_proxy_jsonrpc(method, params=None, *, read_timeout=None):
+        if method == "tools/list":
+            return {
+                "tools": [
+                    {
+                        "name": "read_file",
+                        "description": "Read file contents",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {"path": {"type": "string"}},
+                            "required": ["path"],
+                        },
+                        "annotations": {
+                            "readOnlyHint": True,
+                        },
+                    }
+                ]
+            }
+        if method == "prompts/list":
+            return {
+                "prompts": [
+                    {
+                        "name": "documentation_sources",
+                        "description": "List docs",
+                        "arguments": [],
+                    }
+                ]
+            }
+        if method == "resources/list":
+            return {
+                "resources": [
+                    {
+                        "name": "grep_info",
+                        "uri": "grep://info",
+                        "mimeType": "text/plain",
+                    }
+                ]
+            }
+        if method == "prompts/get":
+            return {
+                "messages": [
+                    {
+                        "role": "assistant",
+                        "content": {"type": "text", "text": "hello"},
+                    }
+                ],
+                "description": "List docs",
+            }
+        if method == "resources/read":
+            return {
+                "contents": [
+                    {
+                        "uri": "grep://info",
+                        "mimeType": "text/plain",
+                        "text": "grep info",
+                    }
+                ]
+            }
+        if method == "tools/call":
+            return {
+                "content": [
+                    {"type": "text", "text": "file content"},
+                ],
+                "structuredContent": {"result": "ok"},
+            }
+        return {}
+
+    # Activate proxy handlers with fake bridge
+    hub._activate_proxy_handlers()
+    hub.PROXY_MODE = True
+    monkeypatch.setattr(hub, "_proxy_jsonrpc", fake_proxy_jsonrpc)
+
+    tools = await hub.app.list_tools()
+    assert tools and tools[0].name == "read_file"
+    prompts = await hub.app.list_prompts()
+    assert prompts and prompts[0].name == "documentation_sources"
+    resources = await hub.app.list_resources()
+    assert resources and str(resources[0].uri) == "grep://info"
+
+    messages = await hub.app.get_prompt("documentation_sources", {})
+    assert messages.description == "List docs"
+    assert messages.messages[0].content.type == "text"
+
+    contents = await hub.app.read_resource("grep://info")
+    assert len(list(contents)) == 1
+
+    call_result = await hub.app.call_tool("read_file", {"path": "README.md"})
+    assert isinstance(call_result, tuple)
+    content_blocks, structured = call_result
+    assert structured == {"result": "ok"}
+    assert content_blocks[0].type == "text"
