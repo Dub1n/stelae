@@ -118,7 +118,7 @@ wait_tools_ready() {
 ensure_cloudflared_ingress() {
   mkdir -p "$CF_DIR"
   local tuuid
-  tuuid="$(cloudflared tunnel list 2>/dev/null | awk -v n="$CF_TUNNEL_NAME" '$2==n{print $1}' | head -n1 || true)"
+  tuuid="$("$CLOUDFLARED_BIN" tunnel list 2>/dev/null | awk -v n="$CF_TUNNEL_NAME" '$2==n{print $1}' | head -n1 || true)"
   if [[ -z "$tuuid" ]]; then
     warn "Tunnel '$CF_TUNNEL_NAME' not found; create it: cloudflared tunnel create $CF_TUNNEL_NAME"
     return 0
@@ -140,8 +140,8 @@ ingress:
   - service: http_status:404
 EOF
   fi
-  cloudflared tunnel ingress validate || warn "cloudflared ingress validate returned non-zero"
-  cloudflared tunnel route dns "$CF_TUNNEL_NAME" mcp.infotopology.xyz >/dev/null 2>&1 || true
+  "$CLOUDFLARED_BIN" tunnel ingress validate || warn "cloudflared ingress validate returned non-zero"
+  "$CLOUDFLARED_BIN" tunnel route dns "$CF_TUNNEL_NAME" mcp.infotopology.xyz >/dev/null 2>&1 || true
 }
 
 show_public_jsonrpc_once() {
@@ -264,19 +264,16 @@ if [ "$FULL_REDEPLOY" -eq 1 ]; then
   (
     cd "$STELAE_DIR"
     PORT="$PROXY_PORT" bash scripts/push_manifest_to_kv.sh
-  )
+  ) || warn "push_manifest_to_kv.sh failed; continuing"
 fi
 
 # start cloudflared only when local is warm -----------------------------------
 if [ "$START_CLOUDFLARED" -eq 1 ]; then
   require "$CLOUDFLARED_BIN"
+  command -v cloudflared >/dev/null 2>&1 || PATH="$PATH:$(dirname "$CLOUDFLARED_BIN")"
   ensure_cloudflared_ingress
-  log "Ensuring cloudflared pm2 process (flags first)…"
-  if ! pm2 describe cloudflared >/dev/null 2>&1; then
-    pm2 start "$CLOUDFLARED_BIN" --name cloudflared -- --no-chunked-encoding --config "${CF_CONF}" tunnel run "${CF_TUNNEL_NAME}"
-  else
-    pm2 restart cloudflared --update-env -- --no-chunked-encoding --config "${CF_CONF}" tunnel run "${CF_TUNNEL_NAME}"
-  fi
+  log "Starting cloudflared via pm2"
+  ensure_pm2_app cloudflared
   pm2 save || true
 else
   warn "Skipping cloudflared (--no-cloudflared)."
