@@ -13,6 +13,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started · `[!]` broken · 
 ## Requirement Group A
 
 - [~] [override-expansion](./tasks/override-expansion.md) Support richer proxy tool overrides (descriptions, aliases) so agents see our tuned guidance during initialize/tools/list results.
+- [ ] [override-automation](./tasks/override-automation.md) Automate syncing new tools into the overrides file so defaults stay fresh without manual edits.
 - [~] Another requirement
 
 ## Requirement Group B
