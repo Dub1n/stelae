@@ -69,6 +69,13 @@
       "type": "http",
       "command": "/home/gabri/.local/bin/mcp-server-fetch"
     },
+    "scrapling": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "scrapling-fetch-mcp"
+      ]
+    },
     "strata": {
       "type": "stdio",
       "command": "/home/gabri/.local/bin/strata"

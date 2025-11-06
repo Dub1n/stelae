@@ -16,6 +16,7 @@ A WSL-native deployment of [mcp-proxy](https://github.com/TBXark/mcp-proxy) that
 | Basic Memory MCP | stdio | `${MEMORY_BIN}` | Persistent project memory. |
 | Strata MCP | stdio | `${STRATA_BIN}` | Progressive discovery / intent routing. |
 | Fetch MCP | HTTP | `${LOCAL_BIN}/mcp-server-fetch` | Official MCP providing canonical `fetch`. |
+| Scrapling MCP | stdio | `uvx scrapling-fetch-mcp` | Fetch bot-protected pages via Scrapling (basic/stealth/max-stealth). |
 | FastMCP bridge | streamable HTTP (`/mcp`) / stdio | `python -m scripts.stelae_streamable_mcp` | Exposes the full proxy catalog to desktop agents; falls back to local search/fetch if the proxy is unavailable. |
 | 1mcp agent | stdio | `${ONE_MCP_BIN} --transport stdio` | Discovery/promotion sidecar for capability lookups *(not yet implemented in this stack)*. |
 
@@ -94,6 +95,12 @@ Path placeholders expand from `.env`; see setup below.
    .venv/bin/python -m pip install --upgrade mcp fastmcp anyio httpx
    \```
    Install the fetch server with `pipx install mcp-server-fetch` if not already present.
+
+   Install Scrapling MCP (optional, needed for high-protection sites):
+   \```bash
+   uv tool install scrapling-fetch-mcp
+   uvx --from scrapling-fetch-mcp scrapling install
+   \```
 
 ---
 

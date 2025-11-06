@@ -69,6 +69,13 @@
       "type": "http",
       "command": "{{LOCAL_BIN}}/mcp-server-fetch"
     },
+    "scrapling": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "scrapling-fetch-mcp"
+      ]
+    },
     "strata": {
       "type": "stdio",
       "command": "{{STRATA_BIN}}"
