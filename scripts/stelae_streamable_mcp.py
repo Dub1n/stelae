@@ -13,7 +13,6 @@ from pathlib import Path
 from types import MethodType
 from typing import Any, Dict, Iterable, List, Sequence
 
-import anyio
 import httpx
 from mcp import types
 from mcp.client.sse import sse_client
@@ -33,12 +32,19 @@ SEARCH_ROOT = Path(os.getenv("STELAE_SEARCH_ROOT", os.getcwd())).resolve()
 SEARCH_PATHS_ENV = os.getenv("STELAE_STREAMABLE_SEARCH_PATHS", str(SEARCH_ROOT))
 STREAMABLE_HOST = os.getenv("STELAE_STREAMABLE_HOST", DEFAULT_STREAMABLE_HOST)
 STREAMABLE_PORT = int(os.getenv("STELAE_STREAMABLE_PORT", str(DEFAULT_STREAMABLE_PORT)))
-SEARCH_MAX_RESULTS = int(os.getenv("STELAE_STREAMABLE_MAX_RESULTS", str(DEFAULT_SEARCH_MAX_RESULTS)))
-FETCH_MAX_LENGTH = int(os.getenv("STELAE_STREAMABLE_FETCH_MAX_LENGTH", str(DEFAULT_FETCH_MAX_LENGTH)))
-SSE_TIMEOUT = float(os.getenv("STELAE_STREAMABLE_SSE_TIMEOUT", str(DEFAULT_SSE_TIMEOUT)))
-SSE_READ_TIMEOUT = float(os.getenv("STELAE_STREAMABLE_SSE_READ_TIMEOUT", str(DEFAULT_SSE_READ_TIMEOUT)))
+SEARCH_MAX_RESULTS = int(
+    os.getenv("STELAE_STREAMABLE_MAX_RESULTS", str(DEFAULT_SEARCH_MAX_RESULTS))
+)
+FETCH_MAX_LENGTH = int(
+    os.getenv("STELAE_STREAMABLE_FETCH_MAX_LENGTH", str(DEFAULT_FETCH_MAX_LENGTH))
+)
+SSE_TIMEOUT = float(
+    os.getenv("STELAE_STREAMABLE_SSE_TIMEOUT", str(DEFAULT_SSE_TIMEOUT))
+)
+SSE_READ_TIMEOUT = float(
+    os.getenv("STELAE_STREAMABLE_SSE_READ_TIMEOUT", str(DEFAULT_SSE_READ_TIMEOUT))
+)
 STATIC_SEARCH_ENABLED = os.getenv("STELAE_STREAMABLE_STATIC_SEARCH", "1") != "0"
-PROXY_SYNC_DISABLED = os.getenv("STELAE_STREAMABLE_DISABLE_PROXY_SYNC", "0") == "1"
 PROXY_SYNC_TIMEOUT = float(os.getenv("STELAE_STREAMABLE_SYNC_TIMEOUT", "10.0"))
 PROXY_CALL_TIMEOUT = float(
     os.getenv("STELAE_STREAMABLE_PROXY_CALL_TIMEOUT", str(SSE_READ_TIMEOUT))
@@ -59,7 +65,9 @@ def _configure_logger() -> logging.Logger:
         return logger
 
     log_path_env = os.getenv("STELAE_STREAMABLE_STDIO_LOG")
-    default_path = Path(__file__).resolve().parent.parent / "logs" / "stelae_stdio_bridge.log"
+    default_path = (
+        Path(__file__).resolve().parent.parent / "logs" / "stelae_stdio_bridge.log"
+    )
     log_path = Path(log_path_env) if log_path_env else default_path
 
     formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
@@ -69,7 +77,9 @@ def _configure_logger() -> logging.Logger:
     try:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         file_handler = logging.FileHandler(log_path, encoding="utf-8")
-    except Exception as exc:  # pragma: no cover - filesystem issues are diagnostic by nature
+    except (
+        Exception
+    ) as exc:  # pragma: no cover - filesystem issues are diagnostic by nature
         file_handler_error = exc
     else:
         file_handler.setFormatter(formatter)
@@ -86,7 +96,11 @@ def _configure_logger() -> logging.Logger:
     logger.propagate = False
 
     if file_handler_error:
-        logger.warning("Falling back to stderr logging because %s could not be opened: %s", log_path, file_handler_error)
+        logger.warning(
+            "Falling back to stderr logging because %s could not be opened: %s",
+            log_path,
+            file_handler_error,
+        )
 
     return logger
 
@@ -160,7 +174,9 @@ class CallResult:
 
     @classmethod
     def from_call_tool_result(cls, result: types.CallToolResult) -> "CallResult":
-        text_content = [item for item in result.content if isinstance(item, types.TextContent)]
+        text_content = [
+            item for item in result.content if isinstance(item, types.TextContent)
+        ]
         return cls(content=text_content, structured_content=result.structuredContent)
 
 
@@ -172,7 +188,9 @@ async def _call_upstream_tool(
     read_timeout: float = SSE_READ_TIMEOUT,
 ) -> CallResult:
     endpoint = f"{PROXY_BASE}/{server_name}/sse"
-    async with sse_client(endpoint, timeout=SSE_TIMEOUT, sse_read_timeout=read_timeout) as (
+    async with sse_client(
+        endpoint, timeout=SSE_TIMEOUT, sse_read_timeout=read_timeout
+    ) as (
         read_stream,
         write_stream,
     ):
@@ -184,7 +202,9 @@ async def _call_upstream_tool(
             return CallResult.from_call_tool_result(result)
 
 
-def _coerce_paths(paths: Sequence[str] | str | None) -> Sequence[str | os.PathLike[str]]:
+def _coerce_paths(
+    paths: Sequence[str] | str | None,
+) -> Sequence[str | os.PathLike[str]]:
     if not paths:
         return DEFAULT_SEARCH_PATHS
     if isinstance(paths, str):
@@ -237,8 +257,14 @@ def _extract_result(method: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
-def _proxy_jsonrpc_sync(method: str, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
-    payload: Dict[str, Any] = {"jsonrpc": "2.0", "id": _next_rpc_id(method), "method": method}
+def _proxy_jsonrpc_sync(
+    method: str, params: Dict[str, Any] | None = None
+) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "jsonrpc": "2.0",
+        "id": _next_rpc_id(method),
+        "method": method,
+    }
     if params:
         payload["params"] = params
     timeout = httpx.Timeout(
@@ -252,7 +278,9 @@ def _proxy_jsonrpc_sync(method: str, params: Dict[str, Any] | None = None) -> Di
             response = client.post(f"{PROXY_BASE}/mcp", json=payload)
             response.raise_for_status()
             return _extract_result(method, response.json())
-    except httpx.HTTPError as exc:  # pragma: no cover - network issues need runtime inspection
+    except (
+        httpx.HTTPError
+    ) as exc:  # pragma: no cover - network issues need runtime inspection
         raise RuntimeError(f"Proxy {method} request failed: {exc}") from exc
 
 
@@ -262,7 +290,11 @@ async def _proxy_jsonrpc(
     *,
     read_timeout: float | None = None,
 ) -> Dict[str, Any]:
-    payload: Dict[str, Any] = {"jsonrpc": "2.0", "id": _next_rpc_id(method), "method": method}
+    payload: Dict[str, Any] = {
+        "jsonrpc": "2.0",
+        "id": _next_rpc_id(method),
+        "method": method,
+    }
     if params:
         payload["params"] = params
     timeout = _build_timeout(read_timeout)
@@ -420,7 +452,9 @@ def _convert_prompt_message(payload: Dict[str, Any]) -> types.PromptMessage:
     elif isinstance(content_payload, str):
         content = types.TextContent(type="text", text=content_payload)
     else:
-        content = types.TextContent(type="text", text=json.dumps(content_payload, ensure_ascii=False))
+        content = types.TextContent(
+            type="text", text=json.dumps(content_payload, ensure_ascii=False)
+        )
     message_data = {
         "role": payload.get("role", "assistant"),
         "content": content,
@@ -458,7 +492,9 @@ async def _proxy_call_tool(
                 try:
                     content_blocks.append(_convert_content_block(item))
                 except Exception as exc:
-                    LOGGER.warning("Failed to convert content block from proxy result: %s", exc)
+                    LOGGER.warning(
+                        "Failed to convert content block from proxy result: %s", exc
+                    )
             elif isinstance(item, str):
                 content_blocks.append(types.TextContent(type="text", text=item))
     if not content_blocks:
@@ -526,11 +562,15 @@ async def _proxy_list_resources(self: FastMCP) -> list[types.Resource]:
             try:
                 resources.append(_convert_resource_descriptor(descriptor))
             except Exception as exc:
-                LOGGER.warning("Skipping proxy resource descriptor due to error: %s", exc)
+                LOGGER.warning(
+                    "Skipping proxy resource descriptor due to error: %s", exc
+                )
     return resources
 
 
-async def _proxy_read_resource(self: FastMCP, uri: str) -> Iterable[types.ResourceContents]:
+async def _proxy_read_resource(
+    self: FastMCP, uri: str
+) -> Iterable[types.ResourceContents]:
     result = await _proxy_jsonrpc("resources/read", {"uri": uri})
     raw_contents = result.get("contents")
     contents: list[types.ResourceContents] = []
@@ -560,11 +600,17 @@ def _activate_proxy_handlers() -> None:
     app.read_resource = MethodType(_proxy_read_resource, app)
     app.list_resource_templates = MethodType(_proxy_list_resource_templates, app)
 
+    server = app._mcp_server
+    server.list_tools()(app.list_tools)
+    server.call_tool(validate_input=False)(app.call_tool)
+    server.list_prompts()(app.list_prompts)
+    server.get_prompt()(app.get_prompt)
+    server.list_resources()(app.list_resources)
+    server.read_resource()(app.read_resource)
+    server.list_resource_templates()(app.list_resource_templates)
+
 
 def _bootstrap_proxy_mode() -> bool:
-    if PROXY_SYNC_DISABLED:
-        LOGGER.info("Proxy catalog sync disabled via environment; using fallback tools.")
-        return False
     try:
         probe = _proxy_jsonrpc_sync("tools/list")
         tools = probe.get("tools")
@@ -620,7 +666,9 @@ async def search(
 
     arguments: Dict[str, Any] = {
         "pattern": query,
-        "paths": list(effective_paths) if len(effective_paths) > 1 else effective_paths[0],
+        "paths": list(effective_paths)
+        if len(effective_paths) > 1
+        else effective_paths[0],
         "recursive": True,
         "line_number": True,
         "max_count": max_results,
@@ -674,7 +722,12 @@ async def _maybe_refetch_raw(
         fallback = await _call_upstream_tool(
             "fetch",
             "fetch",
-            {"url": url, "max_length": max_length, "start_index": start_index, "raw": True},
+            {
+                "url": url,
+                "max_length": max_length,
+                "start_index": start_index,
+                "raw": True,
+            },
             read_timeout=180.0,
         )
         for content in fallback.content:
@@ -684,18 +737,33 @@ async def _maybe_refetch_raw(
 
 
 async def fetch(
-    url: str,
+    id: str | None = None,
+    url: str | None = None,
     max_length: int = FETCH_MAX_LENGTH,
     start_index: int = 0,
     raw: bool = False,
 ) -> str:
-    arguments = {
-        "url": url,
+    target_id = (id or url or "").strip()
+    if not target_id:
+        raise ValueError("fetch requires an id or url")
+
+    resolved_url = url
+    if resolved_url is None:
+        if target_id.startswith("http://") or target_id.startswith("https://"):
+            resolved_url = target_id
+        elif target_id.startswith("stelae://repo/"):
+            candidate = target_id.removeprefix("stelae://repo/")
+            resolved_url = str((SEARCH_ROOT / candidate).resolve())
+
+    proxy_arguments = {
+        "url": resolved_url or target_id,
         "max_length": max_length,
         "start_index": start_index,
         "raw": raw,
     }
-    upstream = await _call_upstream_tool("fetch", "fetch", arguments, read_timeout=180.0)
+    upstream = await _call_upstream_tool(
+        "fetch", "fetch", proxy_arguments, read_timeout=180.0
+    )
 
     payload_text = ""
     for content in upstream.content:
@@ -706,17 +774,19 @@ async def fetch(
     if not payload_text:
         payload_text = json.dumps(
             {
-                "id": url,
-                "title": url,
+                "id": target_id,
+                "title": target_id,
                 "text": "",
-                "url": url,
+                "url": resolved_url or target_id,
                 "metadata": {"note": "Empty response from upstream fetch server"},
             },
             ensure_ascii=False,
         )
 
     if not raw:
-        fallback = await _maybe_refetch_raw(url, max_length, start_index, payload_text)
+        fallback = await _maybe_refetch_raw(
+            resolved_url or target_id, max_length, start_index, payload_text
+        )
         if fallback is not None:
             payload_text = fallback
 
@@ -724,16 +794,19 @@ async def fetch(
         data = json.loads(payload_text)
     except json.JSONDecodeError:
         data = {
-            "id": url,
-            "title": url,
+            "id": target_id,
+            "title": target_id,
             "text": payload_text,
-            "url": url,
-            "metadata": {"raw": True if raw else False, "note": "Non-JSON fetch response"},
+            "url": resolved_url or target_id,
+            "metadata": {
+                "raw": True if raw else False,
+                "note": "Non-JSON fetch response",
+            },
         }
     else:
-        data.setdefault("id", url)
-        data.setdefault("title", data.get("url", url))
-        data.setdefault("url", url)
+        data.setdefault("id", target_id)
+        data.setdefault("title", data.get("url", resolved_url or target_id))
+        data.setdefault("url", resolved_url or target_id)
         data.setdefault("metadata", {})
 
     return json.dumps(data, ensure_ascii=False)
@@ -755,8 +828,12 @@ def run() -> None:
     if TRANSPORT == "stdio":
         ready_message = {
             "jsonrpc": "2.0",
-            "method": "notifications/server/ready",
-            "params": {},
+            "method": "notifications/message",
+            "params": {
+                "level": "info",
+                "data": "Stelae bridge ready",
+                "logger": "stelae.streamable_mcp",
+            },
         }
         try:
             sys.stdout.write(json.dumps(ready_message, separators=(",", ":")) + "\n")
@@ -771,7 +848,6 @@ def run() -> None:
         LOGGER.exception("FastMCP transport %s crashed", TRANSPORT)
         raise
     LOGGER.info("FastMCP transport %s terminated", TRANSPORT)
-
 
 
 if __name__ == "__main__":

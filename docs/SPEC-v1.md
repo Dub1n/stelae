@@ -33,7 +33,7 @@ Local dev (Codex CLI) ──> FastMCP bridge (`scripts/stelae_streamable_mcp.py`
 | --- | --- |
 | `mcp-proxy` (Go, `/home/gabri/apps/mcp-proxy`) | Aggregates all stdio MCP servers, exposes `/mcp` (SSE + JSON-RPC). Handles server discovery, tool filtering, and search stub responses. |
 | MCP servers (fs, rg, sh, docs, memory, strata, fetch, …) | Spawned and supervised by `mcp-proxy`. They register their tools/prompts/resources, but the facade decides what is exposed. |
-| `scripts/stelae_streamable_mcp.py` | FastMCP wrapper. Defaults to `STELAE_STREAMABLE_TRANSPORT=stdio` when invoked by Codex so local tooling has a hot MCP endpoint without extra startup latency. Static search hits are mirrored here for consistency. |
+| `scripts/stelae_streamable_mcp.py` | FastMCP wrapper. Defaults to `STELAE_STREAMABLE_TRANSPORT=stdio` when invoked by Codex so local tooling has a hot MCP endpoint without extra startup latency. Static search hits are mirrored here for consistency. Emits a standard `notifications/message` ("Stelae bridge ready") on startup so stdio clients can detect readiness without tripping protocol validators. |
 | `cloudflared` | Named tunnel publishing local port 9090 to `https://mcp.infotopology.xyz`. |
 | `pm2` | Keeps `mcp-proxy`, the STDIO FastMCP bridge, `cloudflared`, and the watchdog running, and auto-starts them via `pm2 startup` + `pm2 save`. |
 | Codex / ChatGPT clients | Both ultimately talk to the Go facade; Codex connects over STDIO via the FastMCP bridge, ChatGPT over HTTPS through Cloudflare. |
