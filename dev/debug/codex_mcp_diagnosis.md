@@ -27,3 +27,13 @@
 
 - Replaced the ad-hoc `notifications/server/ready` payload with a standards-compliant `notifications/message` (level=info, logger=`stelae.streamable_mcp`). MCP clients now treat the readiness hint as a normal log message, eliminating the validation warnings on stderr.
 - Verified via the local stdio probe and `codex exec --json` that startup logs are warning-free and the bridge still surfaces 67/71 tools respectively.
+
+## 2025-11-06 – Docs Server Availability Check
+
+- Confirmed through `curl` against `/mcp` that `documentation://sources` is present and readable (`resources/list` and `resources/read` succeed), which means the Docy MCP is launching under `mcp-proxy` as expected.
+- The returned payload currently shows an empty `sources` array. Failures like “Server 'docs' not found” likely stem from Docy not being initialized yet when the downstream query ran, or from offline sessions before the proxy came fully online. Once `make up` finishes (or `pm2 resurrect` is run at login), Docy should be reachable at `/docs/sse`.
+
+## 2025-11-06 – Tool Override Mechanics
+
+- The Go proxy only applies overrides defined in `config/tool_overrides.json` through the `ToolOverrideConfig` struct. Today it supports `enabled` flags and the four boolean annotation hints (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`). No description/name overrides exist yet.
+- To customize descriptions or display names, we’d need to expand the proxy: extend `ToolOverrideConfig` (and related merge helpers in `tool_overrides.go`) with new optional string fields, update `applyToolOverride` in `response_helpers.go` to write those values into the descriptor, and rebuild the `~/apps/mcp-proxy` binary. Stelae would then expose the new knobs through the same JSON file once the proxy supports them.

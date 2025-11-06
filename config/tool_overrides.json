@@ -10,27 +10,37 @@
     "fs": {
       "tools": {
         "read_file": {
+          "description": "Read a file from the workspace without mutating it.",
           "annotations": {
+            "title": "Read File",
             "readOnlyHint": true
           }
         },
         "read_text_file": {
+          "description": "Return a text file as UTF-8 content for quick inspection.",
           "annotations": {
+            "title": "Read Text",
             "readOnlyHint": true
           }
         },
         "directory_tree": {
+          "description": "List directories/files beneath the current path.",
           "annotations": {
+            "title": "List Tree",
             "readOnlyHint": true
           }
         },
         "search_files": {
+          "description": "Search file paths matching a glob within the workspace.",
           "annotations": {
+            "title": "Search Files",
             "readOnlyHint": true
           }
         },
         "search_files_content": {
+          "description": "Search file contents with ripgrep across the workspace.",
           "annotations": {
+            "title": "Search Contents",
             "readOnlyHint": true
           }
         }
@@ -62,7 +72,9 @@
     "fetch": {
       "tools": {
         "fetch": {
+          "description": "Fetch external HTTP content via the sandboxed fetch server.",
           "annotations": {
+            "title": "Fetch URL",
             "openWorldHint": true
           }
         }

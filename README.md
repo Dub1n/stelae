@@ -43,7 +43,7 @@ Path placeholders expand from `.env`; see setup below.
    make render-proxy
    \```
    This renders `config/proxy.json` from `config/proxy.template.json` using `.env` (with `.env.example` as fallback).
-3. (Optional) Tailor tool annotations with `config/tool_overrides.json`. The file includes per-server read-only hints but leaves the `master` block empty so overrides are opt-in. Extend it per downstream server, or globally via the `master` section:
+3. (Optional) Tailor tool metadata with `config/tool_overrides.json`. The file now supports per-tool `description`, aliasing via `name`, and richer annotation fields (including `title`). Extend it per downstream server, or globally via the `master` section:
    ```json
    {
      "servers": {
@@ -52,7 +52,12 @@ Path placeholders expand from `.env`; see setup below.
          "tools": {
            "read_file": {
          "enabled": true,
-         "annotations": {}
+         "name": "fs_read_file",
+         "description": "Read a file from the workspace without mutating it.",
+         "annotations": {
+           "title": "Read File",
+           "readOnlyHint": true
+         }
            }
          }
        },
@@ -61,7 +66,11 @@ Path placeholders expand from `.env`; see setup below.
          "tools": {
            "fetch": {
              "enabled": true,
-             "annotations": { "openWorldHint": true }
+            "description": "Fetch a cached document by id via the sandboxed fetch server.",
+            "annotations": {
+              "title": "Fetch URL",
+              "openWorldHint": true
+            }
            }
          }
        }
@@ -74,10 +83,12 @@ Path placeholders expand from `.env`; see setup below.
          "annotations": {}
          }
        }
-     }
    }
+  }
   ```
-   The optional `master` block lets you override tools regardless of which server registered them; use `"*"` to target every tool, or list specific names. Setting `"enabled": false` at the server or tool level hides those entries from the manifest, `initialize`, and `tools/list` responses (and therefore from remote clients). Only the hints you specify are changed; unspecified hints keep the proxy defaults.
+   The optional `master` block lets you override tools regardless of which server registered them; use `"*"` to target every tool, or list specific names. Setting `"enabled": false` at the server or tool level hides those entries from the manifest, `initialize`, and `tools/list` responses (and therefore from remote clients). Only the hints you specify are changed; unspecified hints keep the proxy defaults. Master-level renames are rejected on startup, and master-level description/title overrides emit a warning so you know global copy was applied.
+
+   Aliases defined via `name` automatically flow through manifests, `initialize`, `tools/list`, and `tools/call`. Client requests using the alias are resolved back to the original downstream tool, while the original name remains available as a fallback for compatibility.
 4. Ensure the FastMCP bridge virtualenv (`.venv/` by default) includes `mcp`, `fastmcp`, `anyio`, and `httpx`:
    \```bash
    .venv/bin/python -m pip install --upgrade mcp fastmcp anyio httpx
