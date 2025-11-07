@@ -27,3 +27,4 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started · `[!]` broken · 
 ## Action Items
 
 - Summarise next steps or coordination needs.
+- [ ] Remove legacy Python shim (scripts/mcp_output_shim.py) and all references from docs/templates. Keep only proxy call-path adapter; confirm no server routes through shim; update README and ARCHITECTURE accordingly.
