@@ -30,8 +30,8 @@ The workflow should also cover manual JSON blobs and provide guardrails (dry-run
   - Merge entries alphabetically to keep diffs neat.
   - Ensure `.env` keys exist and binaries are resolvable; surface actionable errors.
 - [ ] Seed `config/tool_overrides.json` for new tools:
-  - Reuse the “prepopulate defaults” logic.
-  - Provide a command-line fallback (e.g., `scripts/sync_overrides.py`) in case servers are added manually.
+  - Reuse the “prepopulate defaults” logic now implemented by `scripts/populate_tool_overrides.py`.
+  - Provide a command-line fallback (e.g., `scripts/populate_tool_overrides.py --servers <name> --dry-run`) in case servers are added manually or discovery is disabled.
 - [ ] Execute `make render-proxy` and `scripts/restart_stelae.sh --full` inside the tool, streaming logs and catching failures (fail fast with clear messaging).
 - [ ] Add regression tests:
   - Unit tests for config merge/sanitisation.

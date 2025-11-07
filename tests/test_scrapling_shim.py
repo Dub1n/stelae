@@ -3,12 +3,13 @@ from pathlib import Path
 
 from mcp import types
 
-from scripts.scrapling_shim_mcp import (
+from scripts.mcp_output_shim import (
     GenericResultWrapper,
     OverrideManager,
     ScraplingMetadataWrapper,
     ToolStateStore,
     extract_text,
+    _string_field_from_schema,
 )
 
 
@@ -58,3 +59,13 @@ def test_extract_text_prefers_text_content():
         types.TextContent(type="text", text="later"),
     ]
     assert extract_text(content) == "needle"
+
+
+def test_string_field_selector():
+    schema = {
+        "type": "object",
+        "properties": {"result": {"type": "string"}},
+        "required": ["result"],
+    }
+    assert _string_field_from_schema(schema) == "result"
+    assert _string_field_from_schema({"properties": {"meta": {"type": "object"}}}) is None

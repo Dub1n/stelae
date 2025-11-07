@@ -46,6 +46,16 @@ SCRAPLING_OUTPUT_SCHEMA = {
 LOGGER = logging.getLogger("stelae.shim")
 
 
+def _env(*names: str, default: str | None = None) -> str | None:
+    for name in names:
+        if not name:
+            continue
+        value = os.getenv(name)
+        if value is not None:
+            return value
+    return default
+
+
 def _setup_logger() -> None:
     level = os.getenv("SHIM_LOG_LEVEL", "INFO").upper()
     logging.basicConfig(level=getattr(logging, level, logging.INFO), format="%(asctime)s [%(levelname)s] %(message)s")
@@ -182,15 +192,50 @@ class ScraplingMetadataWrapper:
         return text, payload
 
 
+class DeclaredFieldWrapper:
+    def __init__(self, schema: Mapping[str, Any], field: str) -> None:
+        self.schema = json.loads(json.dumps(schema))
+        self.field = field
+        self.name = f"declared:{field}"
+
+    def wrap(self, text: str) -> tuple[str, dict[str, Any]]:
+        return text, {self.field: text}
+
+
 WRAPPERS: dict[str, Any] = {
     "generic_result": GenericResultWrapper(),
     "scrapling_metadata": ScraplingMetadataWrapper(),
 }
 
 
+class SchemaCatalog:
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self.data = self._load()
+
+    def _load(self) -> dict[str, Any]:
+        if not self.path.exists():
+            return {}
+        try:
+            return json.loads(self.path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            LOGGER.warning("Failed to parse overrides for schema catalog %s: %s", self.path, exc)
+            return {}
+
+    def output_schema(self, server: str, tool: str) -> Mapping[str, Any] | None:
+        return (
+            self.data.get("servers", {})
+            .get(server, {})
+            .get("tools", {})
+            .get(tool, {})
+            .get("outputSchema")
+        )
+
+
 class UpstreamBridge:
     def __init__(self, command: str, args: Sequence[str]) -> None:
-        self._params = StdioServerParameters(command=command, args=list(args), env=dict(os.environ), cwd=os.getenv("SCRAPLING_SHIM_CWD"))
+        cwd = _env("MCP_SHIM_CWD", "SHIM_CWD", "SCRAPLING_SHIM_CWD")
+        self._params = StdioServerParameters(command=command, args=list(args), env=dict(os.environ), cwd=cwd)
         self._client_cm = None
         self._session_cm = None
         self._session: ClientSession | None = None
@@ -247,6 +292,7 @@ class ShimController:
         self.bridge = UpstreamBridge(config.command, config.args)
         self.state_store = ToolStateStore(config.status_path)
         self.override_manager = OverrideManager(config.override_path)
+        self.schema_catalog = SchemaCatalog(config.override_path)
 
     def install(self, app: FastMCP) -> None:
         controller = self
@@ -265,13 +311,14 @@ class ShimController:
     def _select_wrapper_name(self, tool: str) -> str:
         return self.config.tool_wrappers.get(tool, self.config.default_wrapper)
 
-    def _wrapper_for(self, tool: str) -> Any:
+    def _wrapper_for(self, tool: str) -> tuple[str, Any]:
         name = self._select_wrapper_name(tool)
         wrapper = WRAPPERS.get(name)
         if wrapper is None:
             LOGGER.warning("Unknown wrapper %s for tool %s; falling back to generic", name, tool)
-            return WRAPPERS["generic_result"]
-        return wrapper
+            name = "generic_result"
+            wrapper = WRAPPERS[name]
+        return name, wrapper
 
     async def _list_tools_impl(self) -> List[types.Tool]:
         upstream = await self.bridge.list_tools()
@@ -295,6 +342,9 @@ class ShimController:
         if state and state.get("state") == "wrapped":
             return self._wrap_and_return(name, upstream, state.get("wrapper"))
         if not isinstance(upstream.structuredContent, dict):
+            declared = self._wrap_with_declared_schema(name, upstream)
+            if declared is not None:
+                return declared
             return self._wrap_and_record(name, upstream)
         if not state or state.get("state") != "pass_through":
             self.state_store.set_state(self.config.server_name, name, state="pass_through", wrapper=None, note=None)
@@ -303,9 +353,9 @@ class ShimController:
         return list(upstream.content or [])
 
     def _wrap_and_record(self, name: str, upstream: types.CallToolResult) -> tuple[Iterable[types.Content], dict[str, Any]]:
-        wrapper = self._wrapper_for(name)
+        wrapper_name, wrapper = self._wrapper_for(name)
         wrapped = self._wrap_result(name, wrapper, upstream)
-        self.state_store.set_state(self.config.server_name, name, state="wrapped", wrapper=self._select_wrapper_name(name), note=None)
+        self._set_state(name, wrapper_name)
         if self.override_manager.apply_schema(self.config.server_name, name, wrapper.schema):
             LOGGER.info("Applied schema override for %s.%s; rerun make render-proxy && scripts/restart_stelae.sh to advertise it", self.config.server_name, name)
         return wrapped
@@ -334,6 +384,35 @@ class ShimController:
         content = [types.TextContent(type="text", text=body_text)]
         return content, structured
 
+    def _wrap_with_declared_schema(
+        self, name: str, upstream: types.CallToolResult
+    ) -> tuple[Iterable[types.Content], dict[str, Any]] | None:
+        schema = self.schema_catalog.output_schema(self.config.server_name, name)
+        if not schema:
+            return None
+        wrapper_name = self._ensure_declared_wrapper(name, schema)
+        if not wrapper_name:
+            return None
+        wrapper = WRAPPERS.get(wrapper_name)
+        if wrapper is None:
+            return None
+        wrapped = self._wrap_result(name, wrapper, upstream)
+        self._set_state(name, wrapper_name)
+        return wrapped
+
+    def _ensure_declared_wrapper(self, tool: str, schema: Mapping[str, Any]) -> str | None:
+        wrapper_name = f"declared:{self.config.server_name}:{tool}"
+        if wrapper_name in WRAPPERS:
+            return wrapper_name
+        field = _string_field_from_schema(schema)
+        if not field:
+            return None
+        WRAPPERS[wrapper_name] = DeclaredFieldWrapper(schema, field)
+        return wrapper_name
+
+    def _set_state(self, tool: str, wrapper_name: str) -> None:
+        self.state_store.set_state(self.config.server_name, tool, state="wrapped", wrapper=wrapper_name, note=None)
+
 
 def extract_text(blocks: Sequence[types.Content] | None) -> str:
     if not blocks:
@@ -344,21 +423,38 @@ def extract_text(blocks: Sequence[types.Content] | None) -> str:
     return ""
 
 
+def _string_field_from_schema(schema: Mapping[str, Any]) -> str | None:
+    if not isinstance(schema, Mapping):
+        return None
+    props = schema.get("properties")
+    if not isinstance(props, Mapping):
+        return None
+    required = schema.get("required")
+    required_list = required if isinstance(required, list) else []
+    for field, desc in props.items():
+        if isinstance(desc, Mapping) and desc.get("type") == "string":
+            extra_required = [r for r in required_list if r != field]
+            if extra_required:
+                continue
+            return field
+    return None
+
+
 def parse_args() -> ShimConfig:
     root = _default_root()
     parser = argparse.ArgumentParser(description="Shim MCP outputs into structured JSON")
-    parser.add_argument("--server-name", default=os.getenv("SHIM_SERVER_NAME", "scrapling"))
-    parser.add_argument("--command", default=os.getenv("SCRAPLING_SHIM_COMMAND", os.getenv("SCRAPLING_COMMAND", "uvx")))
+    parser.add_argument("--server-name", default=_env("MCP_SHIM_SERVER_NAME", "SHIM_SERVER_NAME", "SCRAPLING_SERVER_NAME", default="scrapling"))
+    parser.add_argument("--command", default=_env("MCP_SHIM_COMMAND", "SHIM_COMMAND", "SCRAPLING_SHIM_COMMAND", "SCRAPLING_COMMAND", default="uvx"))
     parser.add_argument(
         "--args",
         nargs="*",
-        default=shlex.split(os.getenv("SCRAPLING_SHIM_ARGS", os.getenv("SCRAPLING_ARGS", "scrapling-fetch-mcp")) or "scrapling-fetch-mcp"),
+        default=shlex.split(_env("MCP_SHIM_ARGS", "SHIM_ARGS", "SCRAPLING_SHIM_ARGS", "SCRAPLING_ARGS", default="scrapling-fetch-mcp") or "scrapling-fetch-mcp"),
     )
-    parser.add_argument("--transport", default=os.getenv("SCRAPLING_SHIM_TRANSPORT", "stdio"))
-    parser.add_argument("--status-file", default=os.getenv("SHIM_STATUS_PATH", str(root / "config/tool_schema_status.json")))
-    parser.add_argument("--override-file", default=os.getenv("SHIM_OVERRIDE_PATH", str(root / "config/tool_overrides.json")))
-    parser.add_argument("--default-wrapper", default=os.getenv("SHIM_DEFAULT_WRAPPER", "generic_result"))
-    parser.add_argument("--tool-wrappers", default=os.getenv("MCP_SHIM_TOOL_WRAPPERS", ""))
+    parser.add_argument("--transport", default=_env("MCP_SHIM_TRANSPORT", "SHIM_TRANSPORT", "SCRAPLING_SHIM_TRANSPORT", default="stdio"))
+    parser.add_argument("--status-file", default=_env("MCP_SHIM_STATUS_PATH", "SHIM_STATUS_PATH", default=str(root / "config/tool_schema_status.json")))
+    parser.add_argument("--override-file", default=_env("MCP_SHIM_OVERRIDE_PATH", "SHIM_OVERRIDE_PATH", default=str(root / "config/tool_overrides.json")))
+    parser.add_argument("--default-wrapper", default=_env("MCP_SHIM_DEFAULT_WRAPPER", "SHIM_DEFAULT_WRAPPER", "SCRAPLING_DEFAULT_WRAPPER", default="generic_result"))
+    parser.add_argument("--tool-wrappers", default=_env("MCP_SHIM_TOOL_WRAPPERS", "SHIM_TOOL_WRAPPERS", "SCRAPLING_TOOL_WRAPPERS", default=""))
     args = parser.parse_args()
 
     wrapper_map = dict(DEFAULT_WRAPPER_MAP)

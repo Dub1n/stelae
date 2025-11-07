@@ -73,7 +73,7 @@
       "type": "stdio",
       "command": "{{PYTHON}}",
       "args": [
-        "{{STELAE_DIR}}/scripts/scrapling_shim_mcp.py"
+        "{{STELAE_DIR}}/scripts/mcp_output_shim.py"
       ]
     },
     "strata": {

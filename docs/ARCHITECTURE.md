@@ -72,7 +72,7 @@ flowchart LR
   3. Master (`*`) overrides apply last.
 * Overrides can rewrite names, descriptions, annotations, and now full `inputSchema`/`outputSchema` blocks. We use this to advertise the shimmed Scrapling contract and any future fallback wrappers.
 * The proxy filters out any tool/server marked `enabled: false` before producing `initialize`, `tools/list`, and manifest payloads.
-* `scripts/scrapling_shim_mcp.py` records per-tool schema states in `config/tool_schema_status.json` and patches `config/tool_overrides.json` whenever it discovers a server that needs wrapping. After rerunning `make render-proxy` + restarting PM2, external clients see the updated schemas.
+* `scripts/mcp_output_shim.py` records per-tool schema states in `config/tool_schema_status.json` and patches `config/tool_overrides.json` whenever it discovers a server that needs wrapping. After rerunning `make render-proxy` + restarting PM2, external clients see the updated schemas. `scripts/populate_tool_overrides.py` bootstraps the overrides file by querying downstream servers for their advertised `inputSchema`/`outputSchema`, ensuring the shim can rely on declared defaults before attempting fallbacks.
 * Facade fallback descriptors (`search`, `fetch`) remain available even if no downstream server supplies them, and they can also be overridden via the master block.
 
 ## Request / Response Paths

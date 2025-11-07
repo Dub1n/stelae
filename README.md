@@ -16,7 +16,7 @@ A WSL-native deployment of [mcp-proxy](https://github.com/TBXark/mcp-proxy) that
 | Basic Memory MCP | stdio | `${MEMORY_BIN}` | Persistent project memory. |
 | Strata MCP | stdio | `${STRATA_BIN}` | Progressive discovery / intent routing. |
 | Fetch MCP | HTTP | `${LOCAL_BIN}/mcp-server-fetch` | Official MCP providing canonical `fetch`. |
-| Scrapling MCP | stdio | `python3 scripts/scrapling_shim_mcp.py` | Shim-wrapped Scrapling fetcher (basic/stealth/max-stealth). |
+| Scrapling MCP | stdio | `python3 scripts/mcp_output_shim.py` | Shim-wrapped Scrapling fetcher (basic/stealth/max-stealth). |
 | FastMCP bridge | streamable HTTP (`/mcp`) / stdio | `python -m scripts.stelae_streamable_mcp` | Exposes the full proxy catalog to desktop agents; falls back to local search/fetch if the proxy is unavailable. |
 | 1mcp agent | stdio | `${ONE_MCP_BIN} --transport stdio` | Discovery/promotion sidecar for capability lookups *(not yet implemented in this stack)*. |
 
@@ -98,9 +98,11 @@ Path placeholders expand from `.env`; see setup below.
 
    Aliases defined via `name` automatically flow through manifests, `initialize`, `tools/list`, and `tools/call`. Client requests using the alias are resolved back to the original downstream tool, while the original name remains available as a fallback for compatibility.
 4. Schema shim automation keeps flaky MCP servers usable without touching upstream code:
-   - `scripts/scrapling_shim_mcp.py` now launches the downstream server, records whether each tool needs wrapping in `config/tool_schema_status.json`, and rewrites responses as needed (`generic_result` by default, Scrapling uses the richer metadata/content wrapper).
+   - `scripts/mcp_output_shim.py` now launches the downstream server, records whether each tool needs wrapping in `config/tool_schema_status.json`, and rewrites responses as needed. It first attempts the declared `outputSchema` from `config/tool_overrides.json`, then falls back to specialized wrappers (Scrapling) and finally the generic `{ "result": "..." }` adapter.
    - When the shim detects a server that needs wrapping, it updates `config/tool_overrides.json` so the next `make render-proxy && scripts/restart_stelae.sh --full` cycle advertises the correct `outputSchema`. Until you restart, the shim still returns compliant structured payloads so callers stay unblocked.
    - Customize behaviour via env vars: `SHIM_SERVER_NAME`, `SCRAPLING_SHIM_COMMAND`, `SCRAPLING_SHIM_ARGS`, `MCP_SHIM_TOOL_WRAPPERS` (JSON mapping tool→wrapper), and `SHIM_STATUS_PATH`/`SHIM_OVERRIDE_PATH` if you need alternative storage.
+4. Prime new servers’ schemas by running `python3 scripts/populate_tool_overrides.py` (optionally `--servers fs rg` to scope). This script launches each stdio MCP client, captures its advertised `inputSchema`/`outputSchema`, and fills any missing entries in `config/tool_overrides.json` without touching existing overrides.
+
 5. Ensure the FastMCP bridge virtualenv (`.venv/` by default) includes `mcp`, `fastmcp`, `anyio`, and `httpx`:
    \```bash
    .venv/bin/python -m pip install --upgrade mcp fastmcp anyio httpx
