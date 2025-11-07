@@ -21,10 +21,7 @@ from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.server import FastMCP
 
-DEFAULT_WRAPPER_MAP = {
-    "s_fetch_page": "scrapling_metadata",
-    "s_fetch_pattern": "scrapling_metadata",
-}
+DEFAULT_WRAPPER_MAP: dict[str, str] = {}
 
 GENERIC_OUTPUT_SCHEMA = {
     "type": "object",
@@ -44,6 +41,12 @@ SCRAPLING_OUTPUT_SCHEMA = {
 }
 
 LOGGER = logging.getLogger("stelae.shim")
+
+# Timeouts (seconds) to avoid hangs when upstream servers fail to start/handshake.
+CONNECT_TIMEOUT = float(os.getenv("MCP_SHIM_CONNECT_TIMEOUT", "10.0"))
+LIST_TIMEOUT = float(os.getenv("MCP_SHIM_LIST_TIMEOUT", "15.0"))
+CALL_TIMEOUT = float(os.getenv("MCP_SHIM_CALL_TIMEOUT", "30.0"))
+GENERIC_PROMOTE_THRESHOLD = int(os.getenv("MCP_SHIM_GENERIC_PROMOTE_THRESHOLD", "2"))
 
 
 def _env(*names: str, default: str | None = None) -> str | None:
@@ -100,15 +103,31 @@ class ToolStateStore:
     def get(self, server: str, tool: str) -> dict[str, Any] | None:
         return self._data.get(server, {}).get(tool)
 
-    def set_state(self, server: str, tool: str, *, state: str, wrapper: str | None = None, note: str | None = None) -> None:
+    def set_state(
+        self,
+        server: str,
+        tool: str,
+        *,
+        state: str,
+        wrapper: str | None = None,
+        note: str | None = None,
+        consecutive_generic: int | None = None,
+        last_adapter: str | None = None,
+    ) -> None:
         if server not in self._data:
             self._data[server] = {}
-        self._data[server][tool] = {
+        entry = self._data[server].get(tool, {})
+        entry.update({
             "state": state,
             "wrapper": wrapper,
             "note": note,
             "updated_at": time.time(),
-        }
+        })
+        if consecutive_generic is not None:
+            entry["consecutive_generic_count"] = int(consecutive_generic)
+        if last_adapter is not None:
+            entry["last_adapter"] = last_adapter
+        self._data[server][tool] = entry
         self._write()
 
     def _write(self) -> None:
@@ -231,6 +250,17 @@ class SchemaCatalog:
             .get("outputSchema")
         )
 
+    def list_declared_tools(self, server: str) -> list[tuple[str, Mapping[str, Any]]]:
+        servers = self.data.get("servers", {})
+        server_block = servers.get(server, {})
+        tools = server_block.get("tools", {})
+        result: list[tuple[str, Mapping[str, Any]]] = []
+        if isinstance(tools, dict):
+            for name, block in tools.items():
+                if isinstance(name, str) and isinstance(block, Mapping):
+                    result.append((name, block))
+        return result
+
 
 class UpstreamBridge:
     def __init__(self, command: str, args: Sequence[str]) -> None:
@@ -241,6 +271,18 @@ class UpstreamBridge:
         self._session: ClientSession | None = None
         self._connect_lock = asyncio.Lock()
         self._call_lock = asyncio.Lock()
+        # Snap effective env hints for diagnostics
+        try:
+            LOGGER.info(
+                "Shim upstream launch plan: cmd=%s args=%s cwd=%s PATH=%s",
+                command,
+                " ".join(args),
+                cwd or os.getcwd(),
+                (self._params.env or {}).get("PATH", os.getenv("PATH", ""))[:200],
+            )
+        except Exception:
+            # best-effort logging; never block startup
+            pass
 
     async def _ensure_session(self) -> ClientSession:
         if self._session is not None:
@@ -249,10 +291,30 @@ class UpstreamBridge:
             if self._session is not None:
                 return self._session
             client_cm = stdio_client(self._params)
-            read_stream, write_stream = await client_cm.__aenter__()
-            session_cm = ClientSession(read_stream, write_stream)
-            session = await session_cm.__aenter__()
-            await session.initialize()
+            try:
+                read_stream, write_stream = await asyncio.wait_for(
+                    client_cm.__aenter__(), timeout=CONNECT_TIMEOUT
+                )
+                session_cm = ClientSession(read_stream, write_stream)
+                session = await asyncio.wait_for(
+                    session_cm.__aenter__(), timeout=CONNECT_TIMEOUT
+                )
+                await asyncio.wait_for(session.initialize(), timeout=CONNECT_TIMEOUT)
+            except (asyncio.TimeoutError, FileNotFoundError) as exc:
+                # Emit targeted diagnostics for PATH/command issues and timeouts
+                LOGGER.error(
+                    "Failed to start upstream server (timeout or missing command). cmd=%s args=%s cwd=%s err=%s",
+                    self._params.command,
+                    " ".join(self._params.args or ()),
+                    self._params.cwd,
+                    exc,
+                )
+                # Ensure contexts are closed if partially opened
+                try:
+                    await client_cm.__aexit__(None, None, None)
+                except Exception:
+                    pass
+                raise
             self._client_cm = client_cm
             self._session_cm = session_cm
             self._session = session
@@ -269,21 +331,29 @@ class UpstreamBridge:
     async def list_tools(self) -> List[types.Tool]:
         session = await self._ensure_session()
         async with self._call_lock:
-            try:
-                result = await session.list_tools()
-                return list(result.tools)
-            except Exception:
-                await self._reset()
-                raise
+            for attempt in (1, 2):
+                try:
+                    result = await asyncio.wait_for(session.list_tools(), timeout=LIST_TIMEOUT)
+                    return list(result.tools)
+                except Exception as exc:
+                    LOGGER.warning("list_tools attempt %d failed: %s", attempt, exc)
+                    await self._reset()
+                    if attempt == 2:
+                        raise
+                    session = await self._ensure_session()
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> types.CallToolResult:
         session = await self._ensure_session()
         async with self._call_lock:
-            try:
-                return await session.call_tool(name, arguments)
-            except Exception:
-                await self._reset()
-                raise
+            for attempt in (1, 2):
+                try:
+                    return await asyncio.wait_for(session.call_tool(name, arguments), timeout=CALL_TIMEOUT)
+                except Exception as exc:
+                    LOGGER.warning("call_tool %s attempt %d failed: %s", name, attempt, exc)
+                    await self._reset()
+                    if attempt == 2:
+                        raise
+                    session = await self._ensure_session()
 
 
 class ShimController:
@@ -321,7 +391,17 @@ class ShimController:
         return name, wrapper
 
     async def _list_tools_impl(self) -> List[types.Tool]:
-        upstream = await self.bridge.list_tools()
+        # Fast-path: try a very short upstream list, then fall back immediately
+        try:
+            upstream = await asyncio.wait_for(self.bridge.list_tools(), timeout=1.5)
+        except Exception as exc:
+            LOGGER.warning(
+                "Upstream list_tools unavailable for %s; serving fallback: %s",
+                self.config.server_name,
+                exc,
+            )
+            return self._fallback_tools_from_overrides()
+
         tools: List[types.Tool] = []
         for tool in upstream:
             data = tool.model_dump(mode="json")
@@ -331,6 +411,45 @@ class ShimController:
                 data["outputSchema"] = wrapper.schema
             tools.append(types.Tool.model_validate(data))
         return tools
+
+    def _fallback_tools_from_overrides(self) -> List[types.Tool]:
+        """Synthesize a minimal tool list when upstream is unavailable.
+
+        Preference order for each tool's schema:
+        - outputSchema from overrides (if present and valid)
+        - wrapper default schema (if known)
+        - omit outputSchema
+        Input schema defaults to an empty object if not provided.
+        """
+        # Tool names declared in overrides plus well-known defaults for this server
+        declared = dict(self.schema_catalog.list_declared_tools(self.config.server_name))
+        names = set(declared.keys())
+
+        synthesized: List[types.Tool] = []
+        for name in sorted(names):
+            block = declared.get(name) or {}
+            # sanitize schemas
+            input_schema = block.get("inputSchema") if isinstance(block, Mapping) else None
+            if not isinstance(input_schema, Mapping):
+                input_schema = {"type": "object", "properties": {}}
+            output_schema = block.get("outputSchema") if isinstance(block, Mapping) else None
+            if not isinstance(output_schema, Mapping):
+                # fall back to wrapper schema if known
+                _, wrapper = self._wrapper_for(name)
+                output_schema = getattr(wrapper, "schema", None)
+
+            descriptor: Dict[str, Any] = {
+                "name": name,
+                "description": block.get("description") if isinstance(block, Mapping) else None,
+                "inputSchema": input_schema,
+            }
+            if isinstance(output_schema, Mapping):
+                descriptor["outputSchema"] = output_schema
+            try:
+                synthesized.append(types.Tool.model_validate(descriptor))
+            except Exception as exc:
+                LOGGER.warning("Skipping synthesized tool %s due to validation error: %s", name, exc)
+        return synthesized
 
     async def _call_tool_impl(
         self, name: str, arguments: dict[str, Any]
@@ -347,7 +466,15 @@ class ShimController:
                 return declared
             return self._wrap_and_record(name, upstream)
         if not state or state.get("state") != "pass_through":
-            self.state_store.set_state(self.config.server_name, name, state="pass_through", wrapper=None, note=None)
+            self.state_store.set_state(
+                self.config.server_name,
+                name,
+                state="pass_through",
+                wrapper=None,
+                note=None,
+                consecutive_generic=0,
+                last_adapter="pass_through",
+            )
         if upstream.structuredContent:
             return list(upstream.content or []), upstream.structuredContent
         return list(upstream.content or [])
@@ -355,9 +482,48 @@ class ShimController:
     def _wrap_and_record(self, name: str, upstream: types.CallToolResult) -> tuple[Iterable[types.Content], dict[str, Any]]:
         wrapper_name, wrapper = self._wrapper_for(name)
         wrapped = self._wrap_result(name, wrapper, upstream)
-        self._set_state(name, wrapper_name)
-        if self.override_manager.apply_schema(self.config.server_name, name, wrapper.schema):
-            LOGGER.info("Applied schema override for %s.%s; rerun make render-proxy && scripts/restart_stelae.sh to advertise it", self.config.server_name, name)
+        server = self.config.server_name
+        # Persistence rules for generic fallback
+        if wrapper_name == "generic_result":
+            declared_schema = self.schema_catalog.output_schema(server, name)
+            prior = self.state_store.get(server, name) or {}
+            prior_count = int(prior.get("consecutive_generic_count") or 0)
+            new_count = prior_count + 1
+            # Record state + counters
+            self.state_store.set_state(
+                server,
+                name,
+                state="wrapped",
+                wrapper=wrapper_name,
+                note=None,
+                consecutive_generic=new_count,
+                last_adapter="generic",
+            )
+            # Apply override immediately when no declared schema exists; otherwise after threshold
+            should_apply = declared_schema is None or new_count >= GENERIC_PROMOTE_THRESHOLD
+            if should_apply and self.override_manager.apply_schema(server, name, wrapper.schema):
+                LOGGER.info(
+                    "Applied generic schema override for %s.%s; rerun make render-proxy && scripts/restart_stelae.sh",
+                    server,
+                    name,
+                )
+        else:
+            # Non-generic wrapper: treat as declared/specific; reset counters
+            self.state_store.set_state(
+                server,
+                name,
+                state="wrapped",
+                wrapper=wrapper_name,
+                note=None,
+                consecutive_generic=0,
+                last_adapter="declared",
+            )
+            if self.override_manager.apply_schema(server, name, wrapper.schema):
+                LOGGER.info(
+                    "Applied schema override for %s.%s; rerun make render-proxy && scripts/restart_stelae.sh to advertise it",
+                    server,
+                    name,
+                )
         return wrapped
 
     def _wrap_and_return(
@@ -390,6 +556,16 @@ class ShimController:
         schema = self.schema_catalog.output_schema(self.config.server_name, name)
         if not schema:
             return None
+        # Heuristic: if declared schema expects {metadata: object, content: string},
+        # use the ScraplingMetadataWrapper inline under the declared step
+        if _schema_is_metadata_content(schema):
+            wrapper = WRAPPERS.get("scrapling_metadata") or ScraplingMetadataWrapper()
+            WRAPPERS["scrapling_metadata"] = wrapper
+            wrapped = self._wrap_result(name, wrapper, upstream)
+            # Treat as declared mapping and reset counters
+            self._set_state(name, "scrapling_metadata")
+            return wrapped
+        # Heuristic: single-string field mapping
         wrapper_name = self._ensure_declared_wrapper(name, schema)
         if not wrapper_name:
             return None
@@ -411,7 +587,16 @@ class ShimController:
         return wrapper_name
 
     def _set_state(self, tool: str, wrapper_name: str) -> None:
-        self.state_store.set_state(self.config.server_name, tool, state="wrapped", wrapper=wrapper_name, note=None)
+        # Convenience for declared-success path
+        self.state_store.set_state(
+            self.config.server_name,
+            tool,
+            state="wrapped",
+            wrapper=wrapper_name,
+            note=None,
+            consecutive_generic=0,
+            last_adapter="declared",
+        )
 
 
 def extract_text(blocks: Sequence[types.Content] | None) -> str:
@@ -438,6 +623,24 @@ def _string_field_from_schema(schema: Mapping[str, Any]) -> str | None:
                 continue
             return field
     return None
+
+
+def _schema_is_metadata_content(schema: Mapping[str, Any]) -> bool:
+    if not isinstance(schema, Mapping):
+        return False
+    props = schema.get("properties")
+    if not isinstance(props, Mapping):
+        return False
+    meta = props.get("metadata")
+    content = props.get("content")
+    if not (isinstance(meta, Mapping) and isinstance(content, Mapping)):
+        return False
+    if meta.get("type") != "object" or content.get("type") != "string":
+        return False
+    required = schema.get("required")
+    if isinstance(required, list):
+        return "metadata" in required and "content" in required
+    return True
 
 
 def parse_args() -> ShimConfig:
@@ -483,12 +686,30 @@ def parse_args() -> ShimConfig:
 def run() -> None:
     _setup_logger()
     config = parse_args()
+    # Guard against libraries printing to stdout (which corrupts stdio protocol).
+    # Route bare print() calls to stderr while leaving sys.stdout for JSON-RPC only.
+    try:
+        import builtins as _builtins  # type: ignore
+
+        _orig_print = _builtins.print  # type: ignore[attr-defined]
+
+        def _stderr_print(*args: Any, **kwargs: Any) -> None:  # type: ignore[misc]
+            kwargs.setdefault("file", sys.stderr)
+            _orig_print(*args, **kwargs)
+
+        _builtins.print = _stderr_print  # type: ignore[attr-defined]
+    except Exception:
+        # Non-fatal if monkey patching fails; proceed
+        pass
     app = FastMCP(
         name=f"{config.server_name}-shim",
         instructions="Normalizes downstream MCP tool outputs into schema-compliant payloads.",
     )
     controller = ShimController(config)
     controller.install(app)
+    server = app._mcp_server
+    server.list_tools()(app.list_tools)
+    server.call_tool(validate_input=False)(app.call_tool)
     LOGGER.info(
         "Starting shim for server=%s command=%s args=%s status=%s overrides=%s",
         config.server_name,

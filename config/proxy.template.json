@@ -18,7 +18,8 @@
     "publicBaseURL": "{{PUBLIC_BASE_URL}}",
     "serverName": "stelae",
     "resources": [],
-    "toolOverridesPath": "{{STELAE_DIR}}/config/tool_overrides.json"
+    "toolOverridesPath": "{{STELAE_DIR}}/config/tool_overrides.json",
+    "toolSchemaStatusPath": "{{STELAE_DIR}}/config/tool_schema_status.json"
   },
   "mcpServers": {
     "fs": {
@@ -71,10 +72,15 @@
     },
     "scrapling": {
       "type": "stdio",
-      "command": "{{PYTHON}}",
+      "command": "uvx",
       "args": [
-        "{{STELAE_DIR}}/scripts/mcp_output_shim.py"
-      ]
+        "scrapling-fetch-mcp",
+        "--stdio"
+      ],
+      "env": {
+        "PATH": "{{ PATH }}",
+        "PLAYWRIGHT_BROWSERS_PATH": "{{PLAYWRIGHT_BROWSERS_PATH}}"
+      }
     },
     "strata": {
       "type": "stdio",
