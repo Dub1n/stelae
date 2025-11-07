@@ -1,0 +1,16 @@
+{
+  "scrapling": {
+    "s_fetch_page": {
+      "state": "wrapped",
+      "wrapper": "scrapling_metadata",
+      "note": null,
+      "updated_at": 0
+    },
+    "s_fetch_pattern": {
+      "state": "wrapped",
+      "wrapper": "scrapling_metadata",
+      "note": null,
+      "updated_at": 0
+    }
+  }
+}

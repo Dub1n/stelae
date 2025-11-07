@@ -1,34 +1,60 @@
-import scripts.scrapling_shim_mcp as shim
+import json
+from pathlib import Path
+
 from mcp import types
 
-
-def _result(text: str, structured: dict | None = None) -> types.CallToolResult:
-    return types.CallToolResult(
-        content=[types.TextContent(type="text", text=text)],
-        structuredContent=structured,
-    )
-
-
-def test_parse_payload_with_metadata():
-    payload = shim._parse_payload("METADATA: {\"foo\": 1}\n\nhello")
-    assert payload["metadata"]["foo"] == 1
-    assert payload["metadata"]["adapter"] == "scrapling-shim"
-    assert payload["content"] == "hello"
+from scripts.scrapling_shim_mcp import (
+    GenericResultWrapper,
+    OverrideManager,
+    ScraplingMetadataWrapper,
+    ToolStateStore,
+    extract_text,
+)
 
 
-def test_normalize_uses_existing_structured_block():
-    content, structured = shim._normalize(
-        "s_fetch_page",
-        _result(
-            "ignored",
-            structured={"metadata": {"percent_retrieved": 50}, "content": "body"},
-        ),
-    )
-    assert structured["metadata"]["percent_retrieved"] == 50
-    assert content[0].text == "ignored"
+def test_generic_wrapper_creates_structured_payload():
+    wrapper = GenericResultWrapper()
+    text, structured = wrapper.wrap("hello world")
+    assert text == "hello world"
+    assert structured == {"result": "hello world"}
+    assert "result" in wrapper.schema["properties"]
 
 
-def test_normalize_wraps_string_payload():
-    content, structured = shim._normalize("s_fetch_pattern", _result("plain result"))
-    assert structured["metadata"]["note"] == "metadata prefix missing"
-    assert content[0].text == "plain result"
+def test_scrapling_wrapper_parses_metadata_block():
+    payload = "METADATA: {\"total_length\": 10}\n\ncontent here"
+    wrapper = ScraplingMetadataWrapper()
+    text, structured = wrapper.wrap(payload)
+    assert text == "content here"
+    assert structured["metadata"]["adapter"] == "scrapling-shim"
+    assert structured["metadata"]["total_length"] == 10
+
+
+def test_tool_state_store_round_trip(tmp_path: Path):
+    store_path = tmp_path / "state.json"
+    store = ToolStateStore(store_path)
+    store.set_state("scrapling", "s_fetch_page", state="wrapped", wrapper="scrapling_metadata", note=None)
+    reloaded = ToolStateStore(store_path)
+    state = reloaded.get("scrapling", "s_fetch_page")
+    assert state["state"] == "wrapped"
+    assert state["wrapper"] == "scrapling_metadata"
+
+
+def test_override_manager_writes_schema(tmp_path: Path):
+    schema = {"type": "object", "properties": {"result": {"type": "string"}}, "required": ["result"]}
+    override_path = tmp_path / "overrides.json"
+    manager = OverrideManager(override_path)
+    changed = manager.apply_schema("scrapling", "s_fetch_page", schema)
+    assert changed is True
+    second = manager.apply_schema("scrapling", "s_fetch_page", schema)
+    assert second is False
+    with override_path.open("r", encoding="utf-8") as fh:
+        data = json.load(fh)
+    assert data["servers"]["scrapling"]["tools"]["s_fetch_page"]["outputSchema"]["required"] == ["result"]
+
+
+def test_extract_text_prefers_text_content():
+    content = [
+        types.TextContent(type="text", text="needle"),
+        types.TextContent(type="text", text="later"),
+    ]
+    assert extract_text(content) == "needle"

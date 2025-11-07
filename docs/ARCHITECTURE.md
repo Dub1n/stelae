@@ -48,9 +48,9 @@ flowchart LR
     MAN_CFG ==>|template overrides| toSet
 
     PROXY ==> |merge descriptors| toSet
-    toSet ==>|enabled? + annotations| TOOLJSON
-    toSet ==>|enabled? + annotations| INITJSON
-    toSet ==>|enabled? + annotations| MANIFEST
+    toSet ==>|enabled? + annotations + schemas| TOOLJSON
+    toSet ==>|enabled? + annotations + schemas| INITJSON
+    toSet ==>|enabled? + annotations + schemas| MANIFEST
 
     PROXY ==> |fallback| TOOLJSON
     PROXY ==> |fallback| INITJSON
@@ -70,7 +70,9 @@ flowchart LR
   1. `manifest.toolOverrides` from `config/proxy.json`.
   2. `config/tool_overrides.json` (optional per-server and master blocks).
   3. Master (`*`) overrides apply last.
+* Overrides can rewrite names, descriptions, annotations, and now full `inputSchema`/`outputSchema` blocks. We use this to advertise the shimmed Scrapling contract and any future fallback wrappers.
 * The proxy filters out any tool/server marked `enabled: false` before producing `initialize`, `tools/list`, and manifest payloads.
+* `scripts/scrapling_shim_mcp.py` records per-tool schema states in `config/tool_schema_status.json` and patches `config/tool_overrides.json` whenever it discovers a server that needs wrapping. After rerunning `make render-proxy` + restarting PM2, external clients see the updated schemas.
 * Facade fallback descriptors (`search`, `fetch`) remain available even if no downstream server supplies them, and they can also be overridden via the master block.
 
 ## Request / Response Paths

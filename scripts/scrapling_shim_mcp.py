@@ -1,35 +1,196 @@
 #!/usr/bin/env python3
+"""Generic stdio shim that enforces structured MCP outputs."""
+
 from __future__ import annotations
 
-import asyncio, json, os, shlex, sys
+import argparse
+import asyncio
+import json
+import logging
+import os
+import shlex
+import sys
+import time
+from dataclasses import dataclass
+from pathlib import Path
 from types import MethodType
-from typing import Any, Iterable, List, Sequence
+from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Sequence
 
 from mcp import types
 from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.server import FastMCP
 
-COMMAND = os.getenv("SCRAPLING_SHIM_COMMAND", os.getenv("SCRAPLING_COMMAND", "uvx"))
-ARGS: Sequence[str] = shlex.split(os.getenv("SCRAPLING_SHIM_ARGS", os.getenv("SCRAPLING_ARGS", "scrapling-fetch-mcp")) or "scrapling-fetch-mcp")
-TARGET_TOOLS = {"s_fetch_page", "s_fetch_pattern"}
-OUTPUT_SCHEMA: dict[str, Any] = {
+DEFAULT_WRAPPER_MAP = {
+    "s_fetch_page": "scrapling_metadata",
+    "s_fetch_pattern": "scrapling_metadata",
+}
+
+GENERIC_OUTPUT_SCHEMA = {
     "type": "object",
-    "properties": {"metadata": {"type": "object", "additionalProperties": True}, "content": {"type": "string"}},
+    "properties": {
+        "result": {"type": "string"},
+    },
+    "required": ["result"],
+}
+
+SCRAPLING_OUTPUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "metadata": {"type": "object", "additionalProperties": True},
+        "content": {"type": "string"},
+    },
     "required": ["metadata", "content"],
 }
 
-app = FastMCP(name="scrapling-shim", instructions="Wraps scrapling-fetch outputs with structured metadata for MCP clients.")
+LOGGER = logging.getLogger("stelae.shim")
 
 
-class ScraplingBridge:
-    def __init__(self) -> None:
-        self._params = StdioServerParameters(
-            command=COMMAND,
-            args=list(ARGS),
-            env=dict(os.environ),
-            cwd=os.getenv("SCRAPLING_SHIM_CWD"),
-        )
+def _setup_logger() -> None:
+    level = os.getenv("SHIM_LOG_LEVEL", "INFO").upper()
+    logging.basicConfig(level=getattr(logging, level, logging.INFO), format="%(asctime)s [%(levelname)s] %(message)s")
+
+
+def _default_root() -> Path:
+    env_root = os.getenv("STELAE_DIR")
+    if env_root:
+        return Path(env_root).expanduser().resolve()
+    return Path(__file__).resolve().parents[1]
+
+
+@dataclass(frozen=True)
+class ShimConfig:
+    server_name: str
+    command: str
+    args: Sequence[str]
+    transport: str
+    status_path: Path
+    override_path: Path
+    default_wrapper: str
+    tool_wrappers: Mapping[str, str]
+
+
+class ToolStateStore:
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self._data = self._load()
+
+    def _load(self) -> dict[str, dict[str, dict[str, Any]]]:
+        if not self.path.exists():
+            return {}
+        try:
+            with self.path.open("r", encoding="utf-8") as fh:
+                payload = json.load(fh)
+                if isinstance(payload, dict):
+                    return payload
+        except json.JSONDecodeError as exc:
+            LOGGER.warning("Failed to parse %s: %s", self.path, exc)
+        return {}
+
+    def get(self, server: str, tool: str) -> dict[str, Any] | None:
+        return self._data.get(server, {}).get(tool)
+
+    def set_state(self, server: str, tool: str, *, state: str, wrapper: str | None = None, note: str | None = None) -> None:
+        if server not in self._data:
+            self._data[server] = {}
+        self._data[server][tool] = {
+            "state": state,
+            "wrapper": wrapper,
+            "note": note,
+            "updated_at": time.time(),
+        }
+        self._write()
+
+    def _write(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.path.with_suffix(".tmp")
+        with tmp.open("w", encoding="utf-8") as fh:
+            json.dump(self._data, fh, indent=2, ensure_ascii=False)
+            fh.write("\n")
+        tmp.replace(self.path)
+
+
+class OverrideManager:
+    def __init__(self, path: Path) -> None:
+        self.path = path
+
+    def _load(self) -> MutableMapping[str, Any]:
+        if self.path.exists():
+            try:
+                with self.path.open("r", encoding="utf-8") as fh:
+                    data = json.load(fh)
+                    if isinstance(data, dict):
+                        return data
+            except json.JSONDecodeError as exc:
+                LOGGER.warning("Failed to parse overrides %s: %s", self.path, exc)
+        return {}
+
+    def _write(self, data: MutableMapping[str, Any]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.path.with_suffix(".tmp")
+        with tmp.open("w", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=2, ensure_ascii=False)
+            fh.write("\n")
+        tmp.replace(self.path)
+
+    def apply_schema(self, server: str, tool: str, schema: Mapping[str, Any]) -> bool:
+        data = self._load()
+        servers = data.setdefault("servers", {})
+        server_block = servers.setdefault(server, {})
+        server_block.setdefault("enabled", True)
+        tools = server_block.setdefault("tools", {})
+        tool_block = tools.setdefault(tool, {"enabled": True})
+        existing = tool_block.get("outputSchema")
+        if _schemas_equal(existing, schema):
+            return False
+        tool_block["outputSchema"] = json.loads(json.dumps(schema))
+        self._write(data)
+        return True
+
+
+def _schemas_equal(first: Any, second: Any) -> bool:
+    return json.dumps(first, sort_keys=True) == json.dumps(second, sort_keys=True)
+
+
+class GenericResultWrapper:
+    name = "generic-shim"
+    schema = GENERIC_OUTPUT_SCHEMA
+
+    def wrap(self, text: str) -> tuple[str, dict[str, Any]]:
+        return text, {"result": text}
+
+
+class ScraplingMetadataWrapper:
+    name = "scrapling-shim"
+    schema = SCRAPLING_OUTPUT_SCHEMA
+
+    def wrap(self, text: str) -> tuple[str, dict[str, Any]]:
+        if text.startswith("METADATA:"):
+            body = text[len("METADATA:") :].lstrip()
+            meta_block, sep, content = body.partition("\n\n")
+            try:
+                metadata = json.loads(meta_block.strip() or "{}")
+            except json.JSONDecodeError as exc:
+                metadata = {"raw_metadata": meta_block.strip(), "parse_error": str(exc)}
+            metadata.setdefault("adapter", self.name)
+            payload = {"metadata": metadata, "content": content if sep else ""}
+            return payload["content"], payload
+        payload = {
+            "metadata": {"adapter": self.name, "note": "metadata prefix missing"},
+            "content": text,
+        }
+        return text, payload
+
+
+WRAPPERS: dict[str, Any] = {
+    "generic_result": GenericResultWrapper(),
+    "scrapling_metadata": ScraplingMetadataWrapper(),
+}
+
+
+class UpstreamBridge:
+    def __init__(self, command: str, args: Sequence[str]) -> None:
+        self._params = StdioServerParameters(command=command, args=list(args), env=dict(os.environ), cwd=os.getenv("SCRAPLING_SHIM_CWD"))
         self._client_cm = None
         self._session_cm = None
         self._session: ClientSession | None = None
@@ -60,15 +221,6 @@ class ScraplingBridge:
         if client_cm is not None:
             await client_cm.__aexit__(None, None, None)
 
-    async def call_tool(self, name: str, arguments: dict[str, Any]) -> types.CallToolResult:
-        session = await self._ensure_session()
-        async with self._call_lock:
-            try:
-                return await session.call_tool(name, arguments)
-            except Exception:
-                await self._reset()
-                raise
-
     async def list_tools(self) -> List[types.Tool]:
         session = await self._ensure_session()
         async with self._call_lock:
@@ -79,65 +231,177 @@ class ScraplingBridge:
                 await self._reset()
                 raise
 
-
-BRIDGE = ScraplingBridge()
-
-
-def _parse_payload(payload: str) -> dict[str, Any]:
-    if payload.startswith("METADATA:"):
-        body = payload[len("METADATA:") :].lstrip()
-        meta_block, sep, content = body.partition("\n\n")
-        try:
-            metadata = json.loads(meta_block.strip() or "{}")
-        except json.JSONDecodeError as exc:
-            metadata = {"raw_metadata": meta_block.strip(), "parse_error": str(exc)}
-        metadata.setdefault("adapter", "scrapling-shim")
-        return {"metadata": metadata, "content": content if sep else ""}
-    return {"metadata": {"adapter": "scrapling-shim", "note": "metadata prefix missing"}, "content": payload}
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> types.CallToolResult:
+        session = await self._ensure_session()
+        async with self._call_lock:
+            try:
+                return await session.call_tool(name, arguments)
+            except Exception:
+                await self._reset()
+                raise
 
 
-def _normalize(tool: str, result: types.CallToolResult) -> tuple[List[types.Content], dict[str, Any]]:
-    content = list(result.content or [])
-    structured = result.structuredContent
-    if tool not in TARGET_TOOLS:
-        return content, structured or {}
-    if structured and {"metadata", "content"}.issubset(structured):
-        metadata = dict(structured["metadata"])
-        metadata.setdefault("adapter", "scrapling-shim")
-        return content, {"metadata": metadata, "content": structured["content"]}
-    text = ""
-    for block in content:
-        if isinstance(block, types.TextContent) and block.text:
-            text = block.text
-            break
-    payload = _parse_payload(text)
-    return [types.TextContent(type="text", text=payload["content"])], payload
+class ShimController:
+    def __init__(self, config: ShimConfig) -> None:
+        self.config = config
+        self.bridge = UpstreamBridge(config.command, config.args)
+        self.state_store = ToolStateStore(config.status_path)
+        self.override_manager = OverrideManager(config.override_path)
 
+    def install(self, app: FastMCP) -> None:
+        controller = self
 
-async def _list_tools(self: FastMCP) -> List[types.Tool]:  # pragma: no cover - passthrough
-    tools = []
-    for tool in await BRIDGE.list_tools():
-        if tool.name in TARGET_TOOLS:
+        async def _list_tools(_: FastMCP) -> List[types.Tool]:
+            return await controller._list_tools_impl()
+
+        async def _call_tool(
+            __: FastMCP, name: str, arguments: dict[str, Any]
+        ) -> Iterable[types.Content] | tuple[Iterable[types.Content], dict[str, Any]]:
+            return await controller._call_tool_impl(name, arguments)
+
+        app.list_tools = MethodType(_list_tools, app)
+        app.call_tool = MethodType(_call_tool, app)
+
+    def _select_wrapper_name(self, tool: str) -> str:
+        return self.config.tool_wrappers.get(tool, self.config.default_wrapper)
+
+    def _wrapper_for(self, tool: str) -> Any:
+        name = self._select_wrapper_name(tool)
+        wrapper = WRAPPERS.get(name)
+        if wrapper is None:
+            LOGGER.warning("Unknown wrapper %s for tool %s; falling back to generic", name, tool)
+            return WRAPPERS["generic_result"]
+        return wrapper
+
+    async def _list_tools_impl(self) -> List[types.Tool]:
+        upstream = await self.bridge.list_tools()
+        tools: List[types.Tool] = []
+        for tool in upstream:
             data = tool.model_dump(mode="json")
-            data["outputSchema"] = OUTPUT_SCHEMA
+            state = self.state_store.get(self.config.server_name, tool.name)
+            if state and state.get("state") == "wrapped":
+                wrapper = self._wrapper_for(tool.name)
+                data["outputSchema"] = wrapper.schema
             tools.append(types.Tool.model_validate(data))
-        else:
-            tools.append(tool)
-    return tools
+        return tools
 
+    async def _call_tool_impl(
+        self, name: str, arguments: dict[str, Any]
+    ) -> Iterable[types.Content] | tuple[Iterable[types.Content], dict[str, Any]]:
+        state = self.state_store.get(self.config.server_name, name)
+        if state and state.get("state") == "failed":
+            raise RuntimeError(state.get("note") or f"tool {name} previously failed schema adaptation")
+        upstream = await self.bridge.call_tool(name, arguments or {})
+        if state and state.get("state") == "wrapped":
+            return self._wrap_and_return(name, upstream, state.get("wrapper"))
+        if not isinstance(upstream.structuredContent, dict):
+            return self._wrap_and_record(name, upstream)
+        if not state or state.get("state") != "pass_through":
+            self.state_store.set_state(self.config.server_name, name, state="pass_through", wrapper=None, note=None)
+        if upstream.structuredContent:
+            return list(upstream.content or []), upstream.structuredContent
+        return list(upstream.content or [])
 
-async def _call_tool(
-    self: FastMCP, name: str, arguments: dict[str, Any]
-) -> Iterable[types.Content] | tuple[Iterable[types.Content], dict[str, Any]]:
-    content, structured = _normalize(name, await BRIDGE.call_tool(name, arguments or {}))
-    if name in TARGET_TOOLS or structured:
+    def _wrap_and_record(self, name: str, upstream: types.CallToolResult) -> tuple[Iterable[types.Content], dict[str, Any]]:
+        wrapper = self._wrapper_for(name)
+        wrapped = self._wrap_result(name, wrapper, upstream)
+        self.state_store.set_state(self.config.server_name, name, state="wrapped", wrapper=self._select_wrapper_name(name), note=None)
+        if self.override_manager.apply_schema(self.config.server_name, name, wrapper.schema):
+            LOGGER.info("Applied schema override for %s.%s; rerun make render-proxy && scripts/restart_stelae.sh to advertise it", self.config.server_name, name)
+        return wrapped
+
+    def _wrap_and_return(
+        self, name: str, upstream: types.CallToolResult, override_wrapper: str | None
+    ) -> tuple[Iterable[types.Content], dict[str, Any]]:
+        wrapper = WRAPPERS.get(override_wrapper or self._select_wrapper_name(name)) or WRAPPERS["generic_result"]
+        return self._wrap_result(name, wrapper, upstream)
+
+    def _wrap_result(
+        self, tool_name: str, wrapper: Any, upstream: types.CallToolResult
+    ) -> tuple[Iterable[types.Content], dict[str, Any]]:
+        text = extract_text(upstream.content)
+        try:
+            body_text, structured = wrapper.wrap(text)
+        except Exception as exc:
+            self.state_store.set_state(
+                self.config.server_name,
+                tool_name,
+                state="failed",
+                wrapper=self._select_wrapper_name(tool_name),
+                note=str(exc),
+            )
+            raise
+        content = [types.TextContent(type="text", text=body_text)]
         return content, structured
-    return content
+
+
+def extract_text(blocks: Sequence[types.Content] | None) -> str:
+    if not blocks:
+        return ""
+    for block in blocks:
+        if isinstance(block, types.TextContent) and block.text:
+            return block.text
+    return ""
+
+
+def parse_args() -> ShimConfig:
+    root = _default_root()
+    parser = argparse.ArgumentParser(description="Shim MCP outputs into structured JSON")
+    parser.add_argument("--server-name", default=os.getenv("SHIM_SERVER_NAME", "scrapling"))
+    parser.add_argument("--command", default=os.getenv("SCRAPLING_SHIM_COMMAND", os.getenv("SCRAPLING_COMMAND", "uvx")))
+    parser.add_argument(
+        "--args",
+        nargs="*",
+        default=shlex.split(os.getenv("SCRAPLING_SHIM_ARGS", os.getenv("SCRAPLING_ARGS", "scrapling-fetch-mcp")) or "scrapling-fetch-mcp"),
+    )
+    parser.add_argument("--transport", default=os.getenv("SCRAPLING_SHIM_TRANSPORT", "stdio"))
+    parser.add_argument("--status-file", default=os.getenv("SHIM_STATUS_PATH", str(root / "config/tool_schema_status.json")))
+    parser.add_argument("--override-file", default=os.getenv("SHIM_OVERRIDE_PATH", str(root / "config/tool_overrides.json")))
+    parser.add_argument("--default-wrapper", default=os.getenv("SHIM_DEFAULT_WRAPPER", "generic_result"))
+    parser.add_argument("--tool-wrappers", default=os.getenv("MCP_SHIM_TOOL_WRAPPERS", ""))
+    args = parser.parse_args()
+
+    wrapper_map = dict(DEFAULT_WRAPPER_MAP)
+    if args.tool_wrappers:
+        try:
+            override_map = json.loads(args.tool_wrappers)
+            if isinstance(override_map, dict):
+                for key, value in override_map.items():
+                    if isinstance(key, str) and isinstance(value, str):
+                        wrapper_map[key] = value
+        except json.JSONDecodeError as exc:
+            LOGGER.warning("Failed to parse MCP_SHIM_TOOL_WRAPPERS: %s", exc)
+
+    return ShimConfig(
+        server_name=args.server_name,
+        command=args.command,
+        args=args.args,
+        transport=args.transport,
+        status_path=Path(args.status_file).expanduser().resolve(),
+        override_path=Path(args.override_file).expanduser().resolve(),
+        default_wrapper=args.default_wrapper,
+        tool_wrappers=wrapper_map,
+    )
+
 
 def run() -> None:
-    app.list_tools = MethodType(_list_tools, app)
-    app.call_tool = MethodType(_call_tool, app)
-    app.run(transport=os.getenv("SCRAPLING_SHIM_TRANSPORT", "stdio"))
+    _setup_logger()
+    config = parse_args()
+    app = FastMCP(
+        name=f"{config.server_name}-shim",
+        instructions="Normalizes downstream MCP tool outputs into schema-compliant payloads.",
+    )
+    controller = ShimController(config)
+    controller.install(app)
+    LOGGER.info(
+        "Starting shim for server=%s command=%s args=%s status=%s overrides=%s",
+        config.server_name,
+        config.command,
+        " ".join(config.args),
+        config.status_path,
+        config.override_path,
+    )
+    app.run(transport=config.transport)
 
 
 if __name__ == "__main__":

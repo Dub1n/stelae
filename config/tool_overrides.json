@@ -198,7 +198,7 @@
       },
       "search_files_content": {
         "name": "search_files_content",
-        "description": "Searches for text or regex patterns in the content of files matching matching a GLOB pattern.Returns detailed matches with file path, line number, column number and a preview of matched text.By default, it performs a literal text search; if the 'is_regex' parameter is set to true, it performs a regular expression (regex) search instead.Optional 'min_bytes' and 'max_bytes' arguments can be used to filter files by size, ensuring that only files within the specified byte range are included in the search. Ideal for finding specific code, comments, or text when you don\u2019t know their exact location."
+        "description": "Searches for text or regex patterns in the content of files matching matching a GLOB pattern.Returns detailed matches with file path, line number, column number and a preview of matched text.By default, it performs a literal text search; if the 'is_regex' parameter is set to true, it performs a regular expression (regex) search instead.Optional 'min_bytes' and 'max_bytes' arguments can be used to filter files by size, ensuring that only files within the specified byte range are included in the search. Ideal for finding specific code, comments, or text when you don’t know their exact location."
       },
       "search_notes": {
         "name": "search_notes",
@@ -316,6 +316,49 @@
           "annotations": {
             "title": "Fetch URL",
             "openWorldHint": true
+          }
+        }
+      }
+    },
+    "scrapling": {
+      "enabled": true,
+      "tools": {
+        "s_fetch_page": {
+          "enabled": true,
+          "outputSchema": {
+            "type": "object",
+            "properties": {
+              "metadata": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "content": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "metadata",
+              "content"
+            ]
+          }
+        },
+        "s_fetch_pattern": {
+          "enabled": true,
+          "outputSchema": {
+            "type": "object",
+            "properties": {
+              "metadata": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "content": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "metadata",
+              "content"
+            ]
           }
         }
       }

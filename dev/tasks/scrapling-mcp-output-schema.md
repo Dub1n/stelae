@@ -19,7 +19,8 @@ Root cause: the Scrapling MCP server (scrapling-fetch-mcp) returns a single stri
 - ✅ Added `scripts/scrapling_shim_mcp.py`, a FastMCP adapter that launches `scrapling-fetch-mcp`, rewrites `s_fetch_page` / `s_fetch_pattern` descriptors to advertise a `{metadata, content}` schema, and normalizes raw `METADATA: {...}\n\n<body>` strings into structured payloads.
 - ✅ Updated `config/proxy.template.json` (rendered into `config/proxy.json`) so the `scrapling` entry now invokes the shim via `python3 scripts/scrapling_shim_mcp.py`.
 - ✅ Added unit coverage in `tests/test_scrapling_shim.py` to lock parsing behaviour before generalizing the adapter.
-- 🔜 General-purpose fallback: expand the shim + proxy overrides so any MCP server can be auto-detected, wrapped once, and have its schema advertised via overrides without touching upstream code.
+- ✅ Upstream Go proxy now supports schema overrides (input/output) via `config/tool_overrides.json`, so once a tool is flagged as wrapped we can advertise the correct schema without bespoke code.
+- ✅ General-purpose fallback: expanded the shim + proxy overrides so any MCP server can be auto-detected, wrapped once, and have its schema advertised via overrides without touching upstream code. State is persisted in `config/tool_schema_status.json`, and overrides are patched automatically (with log guidance to rerun `make render-proxy` so manifests catch up).
 
 ## Environment
 
@@ -124,12 +125,12 @@ B) Relax proxy schema for Scrapling tools (accept `string` or mark FREEFORM)
 C) Adapter shim in proxy (generalized from `scripts/scrapling_shim_mcp.py`)
 
 - Extend the shim so it can wrap any downstream tool, defaulting to the generic `{ "result": "..." }` shape while still supporting specialized parsers (e.g., Scrapling’s `{metadata, content}`) when configured.
-- Teach the Go proxy overrides to accept `outputSchema` (and `inputSchema`) entries, letting us advertise the wrapped shape via `config/tool_overrides.json` once a tool is known to require it.
-- Add a persistence file (working name: `config/tool_schema_status.json`) recording per-tool states (`unknown`, `pass_through`, `wrapped`, `failed`).
-- Runtime flow:
-  - On first call (`unknown`): run tool normally. If it passes, mark `pass_through` and skip shimming thereafter. If the proxy throws the schema error, rerun through the shim with the generic wrapper.
-  - On shim success: persist `wrapped`, update overrides with the new schema, and annotate responses (e.g., `metadata.adapter = "generic-shim"`). Future calls go straight through the shim with no extra detection.
-  - On repeated failure: persist `failed` and surface the upstream error (possibly adding a hint to enable manual investigation).
+- Teach the Go proxy overrides to accept `outputSchema` (and `inputSchema`) entries, letting us advertise the wrapped shape via `config/tool_overrides.json` once a tool is known to require it. ✅
+- Add a persistence file (`config/tool_schema_status.json`) recording per-tool states (`unknown`, `pass_through`, `wrapped`, `failed`). ✅
+- Runtime flow (implemented in `scripts/scrapling_shim_mcp.py`):
+  - On first call (`unknown`): run tool normally. If the downstream server already provides structured content, mark `pass_through`. Otherwise wrap the raw text using the configured wrapper (default `{ "result": "..." }`, Scrapling keeps `{metadata, content}`), retry the response, and persist `wrapped`.
+  - On shim success: update overrides with the new schema and log that a restart (`make render-proxy` + `scripts/restart_stelae.sh --full`) is required to advertise the change. Future calls go straight through the shim with no extra detection.
+  - On repeated failure: persist `failed` and surface the upstream error (with guidance to reset/remove the state entry once the root cause is fixed).
 - Pros: Transparent to clients; once a tool is classified the manifest + `tools/list` always advertise the correct schema. No upstream edits required.
 - Cons: Requires changes to the Go proxy (override support + result capture) and a new persistence workflow.
 
