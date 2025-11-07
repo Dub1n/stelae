@@ -12,6 +12,15 @@ Additionally, attempting to invoke via a named server produced:
 
 Root cause: the Scrapling MCP server (scrapling-fetch-mcp) returns a single string payload ("METADATA: {json}\n\n[content]") rather than a structured object. Our Go MCP proxy expects tool outputs to satisfy a structured `outputSchema`, hence it rejects plain strings.
 
+**Implementation note (2025-02-15):** we are proceeding with a shim-style fix inside the Stelae repo, leaving the upstream Scrapling MCP server untouched for now. If this approach fails to resolve the issue, we will revisit the upstream adjustment option.
+
+### Current Status (Shim V1)
+
+- ✅ Added `scripts/scrapling_shim_mcp.py`, a FastMCP adapter that launches `scrapling-fetch-mcp`, rewrites `s_fetch_page` / `s_fetch_pattern` descriptors to advertise a `{metadata, content}` schema, and normalizes raw `METADATA: {...}\n\n<body>` strings into structured payloads.
+- ✅ Updated `config/proxy.template.json` (rendered into `config/proxy.json`) so the `scrapling` entry now invokes the shim via `python3 scripts/scrapling_shim_mcp.py`.
+- ✅ Added unit coverage in `tests/test_scrapling_shim.py` to lock parsing behaviour before generalizing the adapter.
+- 🔜 General-purpose fallback: reuse the shim runtime by parameterizing target tools and activation flow so any downstream server that fails schema validation can be routed through the same wrapper without per-server code.
+
 ## Environment
 
 - Agent: Codex CLI (danger-full-access; network enabled)
@@ -112,19 +121,19 @@ B) Relax proxy schema for Scrapling tools (accept `string` or mark FREEFORM)
   - `wrapStringResult` first checks for the `METADATA:` prefix. If present, it parses the JSON metadata and returns `{ "metadata": parsed, "content": body }`. Otherwise it falls back to `{ "result": raw }`.
   - `rememberAdapter` stores a flag (e.g., in `ToolOverrideSet` or an in-memory map) so the adapter runs immediately on subsequent invocations without re-triggering the error path.
 
-C) Adapter shim in proxy
+C) Adapter shim in proxy (generalized from `scripts/scrapling_shim_mcp.py`)
 
-- If proxy supports per-tool response adapters, wrap String → JSON object:
-  - Detect `^METADATA: {…}\n\n` prefix; parse JSON; return `{ metadata, content }`.
-- Pros: Transparent to clients; no upstream change.
-- Cons: Adds brittle parsing logic.
- - Preferred implementation: integrate with the automatic fallback described above so special-cases are tracked per tool and short-circuit after first success.
+- Reuse the existing shim runtime by parameterizing which servers/tools it watches (e.g., env vars `SHIM_SERVER`, `SHIM_TOOLS`, metadata prefix hints).
+- When the proxy reports `outputSchema defined but no structured output returned`, reroute that tool through the shim and record the decision so future calls go straight through the adapter without another failure.
+- When a tool successfully emits structured data directly (either because the upstream server was fixed or never needed wrapping), flag it as “clean” so the shim can bypass parsing entirely and reduce overhead.
+- Pros: Transparent to clients; no per-server code once the shim is configurable.
+- Cons: Adds bookkeeping to record first-failure / first-success transitions.
 
 ## Recommended Fix (A)
 
 Implement structured JSON return in scrapling-fetch-mcp.
 
-Additionally, build a general-purpose adapter in the Go proxy so future text-only MCP servers can “just work” without upstream patches. The adapter activates automatically when a call fails with the schema error and the downstream payload is a raw string. The retry wraps the string as `{ "result": … }` (or parses `METADATA:` blocks into `{ metadata, content }` if present), records the decision, and succeeds transparently thereafter.
+Additionally, generalize the newly landed `scripts/scrapling_shim_mcp.py` so the Go proxy (or the FastMCP bridge) can delegate any offending server to it on demand. The adapter should activate automatically when a call fails with the schema error, replay the call through the shim to produce `{ metadata, content }`, remember that the tool now requires wrapping, and skip the extra work once that server emits compliant JSON on its own.
 
 ### Patch outline (upstream)
 
@@ -170,6 +179,7 @@ Additionally, build a general-purpose adapter in the Go proxy so future text-onl
 - `s_fetch_pattern` returns `match_count` and matched snippets in `content` (still chunked with positions or simplified text—either is fine if documented).
 - Works across modes: `basic`, `stealth`, `max-stealth`.
 - Proxy adapter persists per tool after first successful fallback (e.g., map keyed by tool name) so subsequent calls bypass the detection step.
+- Once the general-purpose shim is in place, tools that succeed on the first attempt are marked “pass-through” so they avoid unnecessary wrapping, while tools that fail once are permanently routed through the shim until they emit valid structured output again.
 
 ## Validation Plan
 

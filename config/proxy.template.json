@@ -71,9 +71,9 @@
     },
     "scrapling": {
       "type": "stdio",
-      "command": "uvx",
+      "command": "{{PYTHON}}",
       "args": [
-        "scrapling-fetch-mcp"
+        "{{STELAE_DIR}}/scripts/scrapling_shim_mcp.py"
       ]
     },
     "strata": {
