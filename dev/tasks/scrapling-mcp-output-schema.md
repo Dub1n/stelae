@@ -19,7 +19,7 @@ Root cause: the Scrapling MCP server (scrapling-fetch-mcp) returns a single stri
 - ✅ Added `scripts/scrapling_shim_mcp.py`, a FastMCP adapter that launches `scrapling-fetch-mcp`, rewrites `s_fetch_page` / `s_fetch_pattern` descriptors to advertise a `{metadata, content}` schema, and normalizes raw `METADATA: {...}\n\n<body>` strings into structured payloads.
 - ✅ Updated `config/proxy.template.json` (rendered into `config/proxy.json`) so the `scrapling` entry now invokes the shim via `python3 scripts/scrapling_shim_mcp.py`.
 - ✅ Added unit coverage in `tests/test_scrapling_shim.py` to lock parsing behaviour before generalizing the adapter.
-- 🔜 General-purpose fallback: reuse the shim runtime by parameterizing target tools and activation flow so any downstream server that fails schema validation can be routed through the same wrapper without per-server code.
+- 🔜 General-purpose fallback: expand the shim + proxy overrides so any MCP server can be auto-detected, wrapped once, and have its schema advertised via overrides without touching upstream code.
 
 ## Environment
 
@@ -123,17 +123,21 @@ B) Relax proxy schema for Scrapling tools (accept `string` or mark FREEFORM)
 
 C) Adapter shim in proxy (generalized from `scripts/scrapling_shim_mcp.py`)
 
-- Reuse the existing shim runtime by parameterizing which servers/tools it watches (e.g., env vars `SHIM_SERVER`, `SHIM_TOOLS`, metadata prefix hints).
-- When the proxy reports `outputSchema defined but no structured output returned`, reroute that tool through the shim and record the decision so future calls go straight through the adapter without another failure.
-- When a tool successfully emits structured data directly (either because the upstream server was fixed or never needed wrapping), flag it as “clean” so the shim can bypass parsing entirely and reduce overhead.
-- Pros: Transparent to clients; no per-server code once the shim is configurable.
-- Cons: Adds bookkeeping to record first-failure / first-success transitions.
+- Extend the shim so it can wrap any downstream tool, defaulting to the generic `{ "result": "..." }` shape while still supporting specialized parsers (e.g., Scrapling’s `{metadata, content}`) when configured.
+- Teach the Go proxy overrides to accept `outputSchema` (and `inputSchema`) entries, letting us advertise the wrapped shape via `config/tool_overrides.json` once a tool is known to require it.
+- Add a persistence file (working name: `config/tool_schema_status.json`) recording per-tool states (`unknown`, `pass_through`, `wrapped`, `failed`).
+- Runtime flow:
+  - On first call (`unknown`): run tool normally. If it passes, mark `pass_through` and skip shimming thereafter. If the proxy throws the schema error, rerun through the shim with the generic wrapper.
+  - On shim success: persist `wrapped`, update overrides with the new schema, and annotate responses (e.g., `metadata.adapter = "generic-shim"`). Future calls go straight through the shim with no extra detection.
+  - On repeated failure: persist `failed` and surface the upstream error (possibly adding a hint to enable manual investigation).
+- Pros: Transparent to clients; once a tool is classified the manifest + `tools/list` always advertise the correct schema. No upstream edits required.
+- Cons: Requires changes to the Go proxy (override support + result capture) and a new persistence workflow.
 
 ## Recommended Fix (A)
 
 Implement structured JSON return in scrapling-fetch-mcp.
 
-Additionally, generalize the newly landed `scripts/scrapling_shim_mcp.py` so the Go proxy (or the FastMCP bridge) can delegate any offending server to it on demand. The adapter should activate automatically when a call fails with the schema error, replay the call through the shim to produce `{ metadata, content }`, remember that the tool now requires wrapping, and skip the extra work once that server emits compliant JSON on its own.
+Additionally, generalize the newly landed `scripts/scrapling_shim_mcp.py` so the Go proxy (or the FastMCP bridge) can delegate any offending server to it on demand. The adapter should activate automatically when a call fails with the schema error, replay the call through the shim to produce the configured wrapper (generic `{result: ...}` by default, `{metadata, content}` for Scrapling), remember that the tool now requires wrapping, and skip the extra work once that server emits compliant JSON on its own.
 
 ### Patch outline (upstream)
 
@@ -179,7 +183,8 @@ Additionally, generalize the newly landed `scripts/scrapling_shim_mcp.py` so the
 - `s_fetch_pattern` returns `match_count` and matched snippets in `content` (still chunked with positions or simplified text—either is fine if documented).
 - Works across modes: `basic`, `stealth`, `max-stealth`.
 - Proxy adapter persists per tool after first successful fallback (e.g., map keyed by tool name) so subsequent calls bypass the detection step.
-- Once the general-purpose shim is in place, tools that succeed on the first attempt are marked “pass-through” so they avoid unnecessary wrapping, while tools that fail once are permanently routed through the shim until they emit valid structured output again.
+- Generic fallback uses `{ "result": "..." }` wrapping unless a per-tool override specifies a richer structure (e.g., Scrapling keeps `{metadata, content}`).
+- Once the general-purpose shim is in place, tools that succeed on the first attempt are marked “pass-through” so they avoid unnecessary wrapping, while tools that fail once are permanently routed through the shim until they emit valid structured output again (and the override schema/manifest stay in sync).
 
 ## Validation Plan
 
