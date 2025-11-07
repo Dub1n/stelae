@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Generic stdio shim that enforces structured MCP outputs."""
+"""Generic stdio shim that enforces structured MCP outputs.
+
+NOTE: Development-only. The production stack no longer routes through this
+shim; the Go proxy adapts call results at response time. Keep this script
+for local experiments or ad-hoc wrapping outside the proxy.
+"""
 
 from __future__ import annotations
 
