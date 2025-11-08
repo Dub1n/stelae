@@ -169,6 +169,34 @@ def test_discover_servers_appends_metadata(monkeypatch, integrator_workspace):
     assert duck["transport"] == "metadata"
 
 
+def test_discover_servers_hydrates_qdrant(monkeypatch, integrator_workspace):
+    results = [
+        DiscoveryResult(
+            name="Qdrant",
+            description="Vector search engine",
+            url="https://github.com/qdrant/mcp-server-qdrant/",
+            score=0.5,
+        )
+    ]
+
+    def _factory(*_args, **_kwargs):
+        return DummyDiscovery(results)
+
+    monkeypatch.setattr(core_module, "OneMCPDiscovery", _factory)
+    service = _service(integrator_workspace)
+    response = service.dispatch("discover_servers", {"query": "vector"})
+    assert response["status"] == "ok"
+    entries = json.loads(integrator_workspace["discovery"].read_text(encoding="utf-8"))
+    entry = next(item for item in entries if item["name"] == "qdrant")
+    assert entry["transport"] == "stdio"
+    assert entry["command"] == "uvx"
+    assert entry["args"] == ["mcp-server-qdrant", "--transport", "stdio"]
+    assert entry["env"]["COLLECTION_NAME"] == "{{QDRANT_COLLECTION_NAME}}"
+    assert entry["options"]["hydrated"] is True
+    env_text = integrator_workspace["env"].read_text(encoding="utf-8")
+    assert "QDRANT_LOCAL_PATH=${STELAE_DIR}/var/qdrant" in env_text
+    assert "QDRANT_COLLECTION_NAME=your-qdrant-collection" in env_text
+
 def test_discover_servers_overwrite(monkeypatch, integrator_workspace):
     results = [
         DiscoveryResult(name="NewServer", description="Desc", url="https://github.com/new", score=0.95)

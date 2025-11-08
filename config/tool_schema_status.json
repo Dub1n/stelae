@@ -22,7 +22,7 @@
     "manage_stelae": {
       "last_adapter": "pass_through",
       "consecutive_generic_count": 0,
-      "updated_at": 1762615030
+      "updated_at": 1762631728
     }
   },
   "rg": {
@@ -45,10 +45,15 @@
     }
   },
   "strata": {
-    "execute_action": {
+    "discover_server_actions": {
       "last_adapter": "generic",
-      "consecutive_generic_count": 6,
-      "updated_at": 1762614772
+      "consecutive_generic_count": 1,
+      "updated_at": 1762629536
+    },
+    "execute_action": {
+      "last_adapter": "declared",
+      "consecutive_generic_count": 0,
+      "updated_at": 1762629781
     }
   }
 }

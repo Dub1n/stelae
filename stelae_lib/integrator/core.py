@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Sequence
 
+from .catalog_overrides import hydrate_descriptor
 from .discovery import DiscoveryEntry, DiscoveryStore
 from .one_mcp import OneMCPDiscovery, OneMCPDiscoveryError
 from .proxy_template import ProxyTemplate
@@ -91,6 +92,7 @@ class StelaeIntegratorService:
         self.discovery_store = DiscoveryStore(self.discovery_path)
         # Load .env.example first so concrete .env overrides placeholder values.
         env_candidates = env_files or [self.root / ".env.example", self.root / ".env"]
+        self.env_file = env_candidates[-1] if env_candidates else self.root / ".env"
         values: Dict[str, str] = {}
         for candidate in env_candidates:
             values.update(_parse_env_file(candidate))
@@ -222,8 +224,12 @@ class StelaeIntegratorService:
                 entries_by_name[entry["name"]] = entry
         added = 0
         server_summaries: List[Dict[str, Any]] = []
+        pending_env_defaults: Dict[str, str] = {}
         for result in results:
             payload = result.to_entry(search_query or None)
+            payload, env_defaults = hydrate_descriptor(payload)
+            for key, value in env_defaults.items():
+                pending_env_defaults.setdefault(key, value)
             name = payload["name"]
             existing = entries_by_name.get(name)
             status = "added"
@@ -260,7 +266,28 @@ class StelaeIntegratorService:
             "filters": {"tags": tags, "preset": preset or None},
             "servers": server_summaries,
         }
+        self._ensure_env_defaults(pending_env_defaults)
+        for key, value in pending_env_defaults.items():
+            self.env_values.setdefault(key, value)
+
         return IntegratorResponse(status="ok", details=details, files_updated=files)
+
+    def _ensure_env_defaults(self, defaults: Dict[str, str]) -> None:
+        if not defaults:
+            return
+        env_path = Path(self.env_file)
+        existing = _parse_env_file(env_path)
+        missing = {k: v for k, v in defaults.items() if k not in existing}
+        if not missing:
+            return
+        env_path.parent.mkdir(parents=True, exist_ok=True)
+        needs_newline = env_path.exists() and env_path.stat().st_size > 0
+        with env_path.open("a", encoding="utf-8") as handle:
+            if needs_newline:
+                handle.write("\n")
+            handle.write("# Added by manage_stelae to satisfy hydrated descriptors\n")
+            for key, value in sorted(missing.items()):
+                handle.write(f"{key}={value}\n")
 
     def _install_server(self, params: Dict[str, Any]) -> IntegratorResponse:
         name = params.get("name") or params.get("server")

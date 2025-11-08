@@ -6,9 +6,11 @@ Scenario: prove Codex CLI can run the full discovery → install flow using only
 
 1. `. .venv/bin/activate` (or whichever venv you use for scripts) and `source ~/.nvm/nvm.sh` so PM2 + uv are on PATH.
 2. Run the bootstrapper once after cloning (re-run if paths change):
+
    ```bash
    python scripts/bootstrap_one_mcp.py
    ```
+
    This guarantees `~/apps/vendor/1mcpserver` exists, `uv sync` ran, `config/discovered_servers.json` is tracked, and `~/.config/1mcp/mcp.json` points at the vendored repo.
 3. Ensure the stack is healthy: `make render-proxy && make restart-proxy` (or `scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --full`).
 4. Launch Codex CLI pointing at the streamable proxy (`codex --profile stelae`). Confirm `tools/list` shows the synthetic `manage_stelae` entry.
@@ -16,6 +18,7 @@ Scenario: prove Codex CLI can run the full discovery → install flow using only
 ## Golden-path flow
 
 1. **Discover candidates** (Codex `tools/call`). Send:
+
    ```json
    {
      "name": "manage_stelae",
@@ -30,8 +33,10 @@ Scenario: prove Codex CLI can run the full discovery → install flow using only
      }
    }
    ```
+
    Expected: `status: ok`, `details.servers[*].descriptor` hydrated, `files_updated[0].dryRun` set. Capture one of the returned `name` fields for the next step.
 2. **Dry-run install** to preview diffs without touching files:
+
    ```json
    {
      "name": "manage_stelae",
@@ -44,6 +49,7 @@ Scenario: prove Codex CLI can run the full discovery → install flow using only
      }
    }
    ```
+
    Expected: the template/override diffs render under `files_updated`, `commands_run` is empty.
 3. **Real install** (same payload with `"dry_run": false`). The tool streams logs while it executes `make render-proxy` and `scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --full`, then waits for the proxy readiness probe before replying. `commands_run[*].status` should all be `ok`.
 4. **Optional reconciler / removal**: send `{"operation": "run_reconciler"}` to confirm restart automation works without edits, or `{"operation": "remove_server", "params": {"name": "<server>"}}` to validate cleanup.
@@ -58,3 +64,26 @@ Scenario: prove Codex CLI can run the full discovery → install flow using only
 
 - Remove any demo servers you installed: `python scripts/stelae_integrator_server.py --cli --operation remove_server --params '{"name": "<server>"}'`.
 - Re-run `python scripts/bootstrap_one_mcp.py --skip-update --skip-sync` if you relocate repos so the CLI config stays accurate.
+
+## 2025-11-08 Run Notes
+
+- `stelae.manage_stelae` *does* answer via MCP/Codex: `mcp__stelae__manage_stelae({"operation":"discover_servers","params":{"query":"vector search","tags":["search"],"limit":5,"dry_run":true}})` returned `status: ok`, appended five entries, and echoed the descriptors under `details.servers[*].descriptor`. `files_updated[0]` shows `changed: false` because the cache already contained those metadata stubs.
+- Every discovery result is still `transport: "metadata"` with neither `command` nor `url`, so step 2 (install by `name`) fails immediately with `"stdio descriptor missing command"`. We need either (a) richer descriptors from 1mcp, or (b) a follow-up step that hydrates the descriptor before calling `install_server`.
+- Because install/remove cannot proceed past the validation, the remainder of the golden path (dry-run diffs, restart orchestration, real install) is still blocked. Once a descriptor includes concrete transport details, re-run from step 2.
+
+### Follow-up plan (in flight)
+
+- Extend `discover_servers` so it hydrates descriptors immediately rather than leaving them metadata-only. Target at least the `qdrant` entry (vector database MCP) by populating its actual transport + command/args/env sourced from 1mcp’s descriptor.
+- After hydration, rerun the full smoke sequence via `stelae.manage_stelae` (discover → dry-run install → real install → optional reconciler/removal) and remove the temporary server again so the repo stays clean.
+
+### 2025-11-08 Hydration + Smoke Upgrade
+
+- `discover_servers` now applies a catalog override for the `qdrant` slug. Returned descriptors include `transport: "stdio"`, `command: "uvx"`, and args/env placeholders (`COLLECTION_NAME`, `QDRANT_LOCAL_PATH`, `EMBEDDING_MODEL`). The overrides are tracked in `stelae_lib/integrator/catalog_overrides.py`, with new `.env` defaults for the placeholders.
+- Codex MCP runs (all via `mcp__stelae__manage_stelae`):
+  1. **Discover (dry-run)** – confirmed hydrated descriptor surfaced in `details.servers[*].descriptor` (qdrant shows stdio + command/args/env). `files_updated` stayed `dryRun:true`.
+  2. **Discover (real)** – same payload with `"dry_run": false` persisted the hydrated entry to `config/discovered_servers.json`.
+  3. **Install (dry-run)** – `{"operation":"install_server","params":{"name":"qdrant","dry_run":true}}` produced the expected diffs for `config/proxy.template.json` and `config/tool_overrides.json`.
+  4. **Install (real)** – the first execution completed server-side (logs show `qdrant` tools registering) but the MCP response dropped when `run_restart_stelae.sh` restarted the proxy. A follow-up install (no changes, so no restart) returned `status: ok` to capture the final state.
+  5. **Remove (dry-run + real)** – verified diffs, then removed the server. As with install, the real removal restarts the stack and drops the in-flight response; after the restart we brought `mcp-proxy` back via pm2 and confirmed the template/overrides were clean.
+- `DISCOVER_QUERY="vector search" ... make discover-servers` mirrors the MCP output and now shows `qdrant` as `status: "cached"` with the hydrated descriptor embedded in the cache.
+- Known behavior: real installs/removals currently sever the Codex MCP request when the proxy restarts; rerunning the tool after the stack is back online confirms the final state, and pm2 restarts are required to resume service. Future work: improve restart flow so the bridge can keep long-running tool calls alive.

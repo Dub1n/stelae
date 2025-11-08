@@ -1,11 +1,12 @@
-# Copy to ~/.cloudflared/stelae.yml or keep per-repo and point CF_CONF to it.
-# Replace the TUNNEL UUID below (or use the template + renderer instead).
+# Sample cloudflared config.
+# Use ops/cloudflared.template.yml + scripts/render_cloudflared_config.py
+# for real deployments. This file intentionally uses placeholders only.
 
-tunnel: 7a74f696-46b7-4573-b575-1ac25d038899
-credentials-file: /home/gabri/.cloudflared/7a74f696-46b7-4573-b575-1ac25d038899.json
+tunnel: <your-tunnel-uuid-or-name>
+credentials-file: /path/to/your/tunnel.json
 
 protocol: quic
-ha-connections: 8
+ha-connections: 4
 
 originRequest:
   disableChunkedEncoding: true
@@ -14,6 +15,6 @@ originRequest:
   tcpKeepAlive: 60s
 
 ingress:
-  - hostname: mcp.infotopology.xyz
+  - hostname: mcp.your-domain.example
     service: http://127.0.0.1:9090
   - service: http_status:404

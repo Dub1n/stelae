@@ -189,6 +189,7 @@ Path placeholders expand from `.env`; see setup below.
   python scripts/stelae_integrator_server.py --cli --operation install_server \
     --params '{"name": "demo_server", "dry_run": true}'
   ```
+- Catalog overrides that hydrate descriptors (for example the Qdrant MCP) may require new environment keys. When `manage_stelae` encounters missing keys it appends safe defaults to your local `.env` automatically, keeping `.env.example` generic for fresh clones.
 - Supported operations:
   - `discover_servers` – Calls the vendored 1mcp catalogue to find candidates. Accepts `query`, `tags` (list or comma-separated), `preset`, `limit`, `min_score`, `append`, and `dry_run`. The response now echoes the matching descriptors under `details.servers` so you can immediately pick a `name` to install without running `list_discovered_servers`.
   - `list_discovered_servers` – Normalized entries + validation issues, helpful when vetting 1mcp output.

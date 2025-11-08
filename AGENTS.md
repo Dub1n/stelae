@@ -69,6 +69,7 @@ Keep secrets out of git: `.env` stays local and values flow through PM2 environm
 ### Shared Agent Practices
 
 - Default to bash commands via `["bash","-lc", …]` and only switch shells when the task explicitly requires it; never introduce mocks or placeholders unless requested.
+- Never assume the MCP tool roster you see is authoritative—if a task calls for `foo.bar_tool`, actually send the MCP invocation (e.g., `stelae.manage_stelae`) even if it isn’t listed yet. Attempt the real call first, then report the concrete error instead of short-circuiting through a different tool.
 - Eliminate duplicate logic by extracting reusable helpers and regression-testing shared code; design changes with SOLID guardrails—treat ~400 lines as the cue to split files, keep functions under ~40 lines, prefer composition, and watch for red flags like god classes or behavior-flipping boolean flags.
 - Prefer TDD for new features and infrastructure while relaxing it for small fixes when speed matters; target ≥80% coverage, exercise both success and failure paths, and document any missing tests you uncover before waiting for user direction.
 - Keep modules interchangeable and isolated, separating UI, business logic, and flow control (e.g., ViewModel/Manager/Coordinator) and check for existing CLI tooling before adding new scripts.
