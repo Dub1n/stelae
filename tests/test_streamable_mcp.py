@@ -206,7 +206,8 @@ async def test_proxy_mode_exposes_remote_catalog(monkeypatch):
     monkeypatch.setattr(hub, "_proxy_jsonrpc", fake_proxy_jsonrpc)
 
     tools = await hub.app.list_tools()
-    assert tools and tools[0].name == "read_file"
+    names = [tool.name for tool in tools]
+    assert "read_file" in names
     prompts = await hub.app.list_prompts()
     assert prompts and prompts[0].name == "documentation_sources"
     resources = await hub.app.list_resources()

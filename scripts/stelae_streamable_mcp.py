@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import itertools
 import json
 import logging
@@ -18,6 +19,8 @@ from mcp import types
 from mcp.client.sse import sse_client
 from mcp.client.session import ClientSession
 from mcp.server import FastMCP
+
+from stelae_lib.integrator.core import StelaeIntegratorService
 
 DEFAULT_PROXY_BASE = "http://localhost:9090"
 DEFAULT_STREAMABLE_HOST = "0.0.0.0"
@@ -55,6 +58,34 @@ DEFAULT_SEARCH_PATHS: Sequence[str] = tuple(
 ) or (str(SEARCH_ROOT),)
 
 TRANSPORT = os.getenv("STELAE_STREAMABLE_TRANSPORT", "streamable-http")
+MANAGE_TOOL_NAME = "manage_stelae"
+MANAGE_TOOL_DESCRIPTOR: Dict[str, Any] = {
+    "name": MANAGE_TOOL_NAME,
+    "description": (
+        "Install, remove, or reconcile downstream MCP servers discovered by 1mcp. "
+        "Every call must provide {'operation': '<name>', 'params': {...}}."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "operation": {
+                "type": "string",
+                "description": "Operation enum such as discover_servers, install_server, remove_server, run_reconciler.",
+            },
+            "params": {
+                "type": "object",
+                "description": "Optional parameters for the selected operation (use {} when not required).",
+            },
+        },
+        "required": ["operation"],
+    },
+    "annotations": {
+        "title": "Stelae Stack Manager",
+        "destructiveHint": True,
+    },
+}
+_MANAGE_SERVICE: StelaeIntegratorService | None = None
+_MANAGE_TOOL_AVAILABLE = False
 
 
 def _configure_logger() -> logging.Logger:
@@ -463,18 +494,29 @@ def _convert_prompt_message(payload: Dict[str, Any]) -> types.PromptMessage:
 
 
 async def _proxy_list_tools(self: FastMCP) -> list[types.Tool]:
+    global _MANAGE_TOOL_AVAILABLE
     result = await _proxy_jsonrpc("tools/list")
     raw_tools = result.get("tools")
-    tools: list[types.Tool] = []
+    tools_by_name: dict[str, types.Tool] = {}
     if isinstance(raw_tools, list):
         for descriptor in raw_tools:
             if not isinstance(descriptor, dict):
                 continue
             try:
-                tools.append(_convert_tool_descriptor(descriptor))
+                tool = _convert_tool_descriptor(descriptor)
             except Exception as exc:
                 LOGGER.warning("Skipping proxy tool descriptor due to error: %s", exc)
-    return tools
+                continue
+            tools_by_name[tool.name] = tool
+    if not tools_by_name:
+        for tool in (_local_search_tool(), _local_fetch_tool()):
+            tools_by_name[tool.name] = tool
+    if MANAGE_TOOL_NAME in tools_by_name:
+        _MANAGE_TOOL_AVAILABLE = True
+    else:
+        _MANAGE_TOOL_AVAILABLE = False
+        tools_by_name[MANAGE_TOOL_NAME] = _local_manage_tool_descriptor()
+    return sorted(tools_by_name.values(), key=lambda tool: tool.name)
 
 
 async def _proxy_call_tool(
@@ -482,6 +524,8 @@ async def _proxy_call_tool(
     name: str,
     arguments: Dict[str, Any],
 ) -> Iterable[types.Content] | tuple[Iterable[types.Content], Dict[str, Any]]:
+    if _is_manage_tool(name) and not _MANAGE_TOOL_AVAILABLE:
+        return await _call_manage_tool(arguments or {})
     params = {"name": name, "arguments": arguments or {}}
     result = await _proxy_jsonrpc("tools/call", params, read_timeout=PROXY_CALL_TIMEOUT)
     raw_content = result.get("content")
@@ -635,6 +679,41 @@ def _register_fallback_tools() -> None:
         description="Connector-compliant fetch built atop Docy/fetch servers.",
     )(fetch)
     LOGGER.info("Fallback search/fetch tools registered")
+
+
+def _is_manage_tool(name: str) -> bool:
+    if not name:
+        return False
+    return name.split(".", 1)[-1] == MANAGE_TOOL_NAME
+
+
+def _get_manage_service() -> StelaeIntegratorService:
+    global _MANAGE_SERVICE
+    if _MANAGE_SERVICE is None:
+        _MANAGE_SERVICE = StelaeIntegratorService()
+    return _MANAGE_SERVICE
+
+
+async def _call_manage_tool(arguments: Dict[str, Any]) -> tuple[Iterable[types.Content], Dict[str, Any]]:
+    operation = str(arguments.get("operation") or "").strip()
+    if not operation:
+        raise RuntimeError("manage_stelae requires a non-empty 'operation'")
+    params = arguments.get("params") or {}
+    if params is not None and not isinstance(params, dict):
+        raise RuntimeError("manage_stelae 'params' must be an object when provided")
+    payload = await asyncio.to_thread(_run_manage_operation, operation, params)
+    text = json.dumps(payload, indent=2, ensure_ascii=False)
+    content = [types.TextContent(type="text", text=text)]
+    return content, {"result": payload}
+
+
+def _run_manage_operation(operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    service = _get_manage_service()
+    return service.run(operation, params)
+
+
+def _local_manage_tool_descriptor() -> types.Tool:
+    return _convert_tool_descriptor(json.loads(json.dumps(MANAGE_TOOL_DESCRIPTOR)))
 
 
 def _initialize_bridge() -> None:
@@ -812,10 +891,8 @@ async def fetch(
     return json.dumps(data, ensure_ascii=False)
 
 
-_initialize_bridge()
-
-
 def run() -> None:
+    _initialize_bridge()
     LOGGER.info(
         "Launching FastMCP transport=%s proxy=%s mode=%s cwd=%s search_root=%s default_paths=%s",
         TRANSPORT,

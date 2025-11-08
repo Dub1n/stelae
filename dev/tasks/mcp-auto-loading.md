@@ -114,21 +114,45 @@ The workflow should also cover manual JSON blobs and provide guardrails (dry-run
 
 ## Follow-on Tasks
 
-1. **Managed 1mcp discovery operation**
-   - Extend `manage_stelae` with a `discover_servers` operation that shells out to the 1mcp CLI, optionally taking filters (e.g., tag lists, preset names).
-   - Capture the CLI output or generated catalog and normalize entries directly into `config/discovered_servers.json` so users don’t have to copy files manually.
-   - Document the new operation, including how to pass filters via MCP/CLI and any expected prerequisites (e.g., valid `~/.config/1mcp/mcp.json`).
-   - Add tests that stub the 1mcp command and verify the discovery payload is parsed and written correctly.
+- [x] **Managed 1mcp discovery operation** – `discover_servers` now lives inside `StelaeIntegratorService`, feeds `details.servers[*].descriptor`, and has regression coverage in `tests/test_stelae_integrator.py`.
+- [x] **Self-contained 1mcp bootstrap** – `scripts/bootstrap_one_mcp.py` clones/syncs `~/apps/vendor/1mcpserver`, seeds `config/discovered_servers.json`, and writes `~/.config/1mcp/mcp.json`. README documents the workflow.
+- [x] **CI/automation hooks** – `make discover-servers` shells into `scripts/discover_servers_cli.py`, allowing env-driven queries (`DISCOVER_QUERY`, `DISCOVER_TAGS`, etc.) without leaving the terminal. The target doubles as the dry-run smoke test when you set `DISCOVER_DRY_RUN=1`.
+- [x] **Codex CLI end-to-end smoke test** – `dev/tasks/codex-manage-stelae-smoke.md` captures the full golden path (discover → dry-run install → install → reconciler) with ready-to-paste payloads plus validation commands (`curl` + CLI fallbacks).
 
-2. **Self-contained 1mcp bootstrap**
-   - Provide a helper script (and README guidance) that configures the local 1mcp CLI using repo-local defaults (e.g., pointing at `~/apps/vendor/1mcpserver`, setting output paths) so a fresh clone can run discovery without manual edits inside the upstream repo.
-   - Ensure the helper lives inside this repo (no upstream modifications) and records any generated config under version control if appropriate (or documents how to generate it).
+## Progress Report (2025-11-08)
 
-3. **CI/automation hooks**
-   - Consider a `make discover-servers` target that calls `manage_stelae discover_servers` for non-MCP workflows, mirroring the install/remove commands.
-   - Optionally add a smoke test that runs the new operation in dry-run mode to ensure the wrapper still works when 1mcp updates.
+### What’s done
 
-4. **Codex CLI end-to-end smoke test**
-   - Author a checklist-driven scenario (under `dev/tasks/` or `dev/debug/`) describing how to use the Codex CLI to: run `discover_servers`, inspect entries, dry-run + real `install_server`, and verify the proxy restart + manifest updates via the managed tools only.
-   - Capture required environment preparation (e.g., `. .venv/bin/activate`, `PYTHONPATH=.`) so another contributor can follow the script verbatim.
-   - Include validation commands (manifest `curl`, `manage_stelae list_discovered_servers`, etc.) and expected outputs, marking where human intervention is needed (e.g., editing metadata entries).
+- `StelaeIntegratorService` now exposes `run()` so MCP + CLI callers share the same structured responses and error envelopes.
+- Restart orchestration runs `make render-proxy` followed by `scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --full`, capturing command transcripts and blocking on a JSON-RPC `tools/list` probe to avoid disconnecting Codex mid-install.
+- Discovery/search UX now accepts `tags`, `preset`, `limit`, `min_score`, and returns a single response containing both the catalog delta and the install-ready descriptors (`details.servers[*]`), eliminating the “discover → list” shuffle.
+- README + docs updated to highlight the enforced `stelae.manage_stelae` payload, restart flags, and the new smoke-test flow; `tests/test_stelae_integrator.py` expanded with readiness/diff coverage (`PYTHONPATH=. .venv/bin/pytest tests/test_stelae_integrator.py`).
+- The streamable bridge injects a synthetic `manage_stelae` tool into `tools/list` and routes invocations through the integrator service using `asyncio.to_thread`, so local connectors can stay in-band.
+
+### Still open
+
+- The Go proxy currently logs `<integrator> Connecting` but never “Successfully initialized MCP client” after the latest restarts, so the public manifest lacks the `manage_stelae` tool. Need to debug why the stdio process fails to bind (likely environment/venv drift after pip installs into `.venv` instead of `~/.venvs/stelae-bridge`).
+- Codex smoke test against `https://mcp.infotopology.xyz/mcp` still returns “Unknown tool: manage_stelae”. Once the proxy successfully mounts the integrator server again, re-run the probe and capture the successful transcript.
+- Local bridge smoke test (port 9999) currently fails with 400/406 because we hit the streamable endpoint with plain HTTP instead of SSE + session flow—need to finish that harness or rely on the standard SSE-based probe.
+- `discover_servers` only has dry-run coverage; add integration tests that stub the 1mcp backend and verify metadata merges + `status` flags.
+- After creating a new `.venv` for pytest/httpx we restarted pm2 manually; confirm `scripts/run_restart_stelae.sh` still succeeds with the new restart flags and doesn’t break Cloudflared/bridge processes.
+
+## Progress Report (2025-11-09)
+
+### What’s done
+
+- Added `scripts/bootstrap_one_mcp.py` so new checkouts can clone/sync the vendored repo, seed the discovery cache, and emit `~/.config/1mcp/mcp.json` without hand-editing upstream files. README now references the workflow and sample config.
+- Introduced `scripts/discover_servers_cli.py` plus the `make discover-servers` target. Operators can drive `discover_servers` from the terminal via env knobs (`DISCOVER_QUERY`, `DISCOVER_LIMIT`, `DISCOVER_DRY_RUN`, etc.), which doubles as the CLI smoke test.
+- Authored `dev/tasks/codex-manage-stelae-smoke.md`, capturing the Codex CLI golden path along with validation commands and cleanup steps. The checklist documents the JSON payloads requested in item 4.5.
+
+### Next up
+
+- Triage the open issues from the previous session (“integrator not initializing under pm2”, public manifest lacking `manage_stelae`, etc.) once the bootstrap + CLI hooks land in main.
+- Extend the new smoke checklist with concrete server names once the proxy consistently advertises `manage_stelae` to external clients.
+
+### Next session checklist
+
+1. Investigate why the `integrator` stdio server never finishes initialization under pm2 (check env vars, binary path, and any crash logs under `logs/mcp-proxy.err.log`).
+2. Once fixed, re-run the Codex smoke flow via `stelae.manage_stelae` (discover → install dry-run → install real) and capture the transcript in this doc.
+3. Add the pending tests (discovery summary + restart readiness) and ensure the bridge-only tool injection doesn’t regress the manifest.
+4. Evaluate whether the streamable bridge should continue injecting the synthetic tool or whether the Go proxy should advertise it directly to keep the public manifest accurate.

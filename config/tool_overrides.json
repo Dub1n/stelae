@@ -28,6 +28,10 @@
         "description": "Create a new Basic Memory project.\n\nCreates a new project with the specified name and path. The project directory\nwill be created if it doesn't exist. Optionally sets the new project as default.\n\nArgs:\n    project_name: Name for the new project (must be unique)\n    project_path: File system path where the project will be stored\n    set_default: Whether to set this project as the default (optional, defaults to False)\n\nReturns:\n    Confirmation message with project details\n\nExample:\n    create_memory_project(\"my-research\", \"~/Documents/research\")\n    create_memory_project(\"work-notes\", \"/home/user/work\", set_default=True)",
         "name": "create_memory_project"
       },
+      "deep_search": {
+        "description": "Plan requirements and auto-select compatible MCP servers.",
+        "name": "deep_search"
+      },
       "delete_file_content": {
         "description": "\n    Delete content at specific row(s) from a file\n    \n    Args:\n        path: Path to the file\n        row: Row number to delete (0-based, optional)\n        rows: List of row numbers to delete (0-based, optional)\n        substring: If provided, only delete this substring within the specified row(s), not the entire row (optional)\n    \n    Returns:\n        Operation result information\n    ",
         "name": "delete_file_content"
@@ -141,6 +145,10 @@
         "description": "List all available projects with their status.\n\nShows all Basic Memory projects that are available, indicating which one\nis currently active and which is the default.\n\nReturns:\n    Formatted list of projects with status indicators\n\nExample:\n    list_memory_projects()",
         "name": "list_memory_projects"
       },
+      "list_servers": {
+        "description": "Return server descriptors and setup guidance.",
+        "name": "list_servers"
+      },
       "move_file": {
         "description": "Move or rename files and directories. Can move files between directories and rename them in a single operation. If the destination exists, the operation will fail. Works across different directories and can be used for simple renaming within the same directory. Both source and destination must be within allowed directories.",
         "name": "move_file"
@@ -245,14 +253,6 @@
       "zip_files": {
         "description": "Creates a ZIP archive by compressing files. It takes a list of files to compress and a target path for the resulting ZIP file. Both the source files and the target ZIP file should reside within allowed directories.",
         "name": "zip_files"
-      },
-      "deep_search": {
-        "name": "deep_search",
-        "description": "Plan requirements and auto-select compatible MCP servers."
-      },
-      "list_servers": {
-        "name": "list_servers",
-        "description": "Return server descriptors and setup guidance."
       }
     }
   },
@@ -357,6 +357,23 @@
         }
       }
     },
+    "public_mcp_catalog": {
+      "enabled": true,
+      "tools": {
+        "deep_search": {
+          "description": "Plan requirements and auto-select compatible MCP servers.",
+          "enabled": true
+        },
+        "list_servers": {
+          "description": "Return server descriptors and setup guidance.",
+          "enabled": true
+        }
+      },
+      "metadata": {
+        "description": "Remote 1mcp discovery endpoint exposed over HTTP/SSE.",
+        "source": "https://github.com/Dub1n/stelae-1mcpserver"
+      }
+    },
     "rg": {
       "tools": {
         "grep": {
@@ -377,21 +394,22 @@
         }
       }
     },
-    "public_mcp_catalog": {
-      "enabled": true,
+    "strata": {
       "tools": {
-        "deep_search": {
+        "execute_action": {
           "enabled": true,
-          "description": "Plan requirements and auto-select compatible MCP servers."
-        },
-        "list_servers": {
-          "enabled": true,
-          "description": "Return server descriptors and setup guidance."
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object"
+          }
         }
-      },
-      "metadata": {
-        "description": "Remote 1mcp discovery endpoint exposed over HTTP/SSE.",
-        "source": "https://github.com/Dub1n/stelae-1mcpserver"
       }
     }
   }

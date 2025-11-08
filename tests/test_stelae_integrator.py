@@ -61,7 +61,7 @@ def integrator_workspace(tmp_path: Path):
     }
 
 
-def _service(workspace, runner=None):
+def _service(workspace, runner=None, readiness_probe=None):
     return StelaeIntegratorService(
         root=workspace["root"],
         discovery_path=workspace["discovery"],
@@ -69,6 +69,7 @@ def _service(workspace, runner=None):
         overrides_path=workspace["overrides"],
         env_files=[workspace["env"]],
         command_runner=runner or FakeRunner(),
+        readiness_probe=readiness_probe or (lambda: True),
     )
 
 
@@ -111,6 +112,19 @@ def test_install_server_applies_changes(integrator_workspace):
     assert runner.invocations, "commands should run"
 
 
+def test_install_server_waits_for_readiness(integrator_workspace):
+    runner = FakeRunner()
+    probes = {"count": 0}
+
+    def _probe():
+        probes["count"] += 1
+        return probes["count"] >= 2
+
+    service = _service(integrator_workspace, runner, readiness_probe=_probe)
+    service.dispatch("install_server", {"name": "demo_server"})
+    assert probes["count"] >= 2
+
+
 def test_refresh_discovery_uses_one_mcp_dir(integrator_workspace):
     service = _service(integrator_workspace)
     response = service.dispatch("refresh_discovery", {})
@@ -143,6 +157,10 @@ def test_discover_servers_appends_metadata(monkeypatch, integrator_workspace):
     service = _service(integrator_workspace)
     response = service.dispatch("discover_servers", {"query": "search"})
     assert response["status"] == "ok"
+    servers = response["details"]["servers"]
+    assert len(servers) == 2
+    assert {server["status"] for server in servers} == {"added"}
+    assert all("descriptor" in server for server in servers)
     data = json.loads(integrator_workspace["discovery"].read_text(encoding="utf-8"))
     names = {entry["name"] for entry in data}
     assert "ducksearch" in names
@@ -163,5 +181,14 @@ def test_discover_servers_overwrite(monkeypatch, integrator_workspace):
     service = _service(integrator_workspace)
     response = service.dispatch("discover_servers", {"append": False})
     assert response["details"]["added"] == 1
+    summary = response["details"]["servers"][0]
+    assert summary["status"] == "added"
     data = json.loads(integrator_workspace["discovery"].read_text(encoding="utf-8"))
     assert [entry["name"] for entry in data] == ["newserver"]
+
+
+def test_run_wraps_errors(integrator_workspace):
+    service = _service(integrator_workspace)
+    response = service.run("unknown_op", {})
+    assert response["status"] == "error"
+    assert response["details"]["operation"] == "unknown_op"

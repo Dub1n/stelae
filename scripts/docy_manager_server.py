@@ -132,7 +132,7 @@ def main() -> None:
         result = _run_cli(args.operation, raw_params)
         print(json.dumps(result, indent=2, ensure_ascii=False))
         return
-    app.run_stdio()
+    app.run()
 
 
 if __name__ == "__main__":

@@ -119,7 +119,7 @@ def main() -> None:
             "No custom tools configured; edit %s to register commands", CONFIG_PATH
         )
     _register_tools(specs)
-    app.run_stdio()
+    app.run()
 
 
 if __name__ == "__main__":

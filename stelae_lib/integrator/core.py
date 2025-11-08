@@ -4,10 +4,14 @@ import difflib
 import json
 import os
 import re
+import shlex
 import shutil
+import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import Any, Callable, Dict, Iterable, List, Sequence
 
 from .discovery import DiscoveryEntry, DiscoveryStore
 from .one_mcp import OneMCPDiscovery, OneMCPDiscoveryError
@@ -75,6 +79,10 @@ class StelaeIntegratorService:
         overrides_path: Path | None = None,
         env_files: Sequence[Path] | None = None,
         command_runner: CommandRunner | None = None,
+        readiness_probe: Callable[[], bool] | None = None,
+        proxy_endpoint: str | None = None,
+        readiness_timeout: float | None = None,
+        readiness_interval: float | None = None,
     ) -> None:
         self.root = root or Path(__file__).resolve().parents[2]
         self.discovery_path = discovery_path or self.root / "config" / "discovered_servers.json"
@@ -91,11 +99,22 @@ class StelaeIntegratorService:
                 values.setdefault(key, value)
         self.env_values = values
         self.command_runner = command_runner or CommandRunner(self.root)
+        restart_args = os.getenv("STELAE_RESTART_ARGS", "--keep-pm2 --no-bridge --full").strip()
+        parsed_restart = shlex.split(restart_args) if restart_args else []
         self.default_commands: List[List[str]] = [
             ["make", "render-proxy"],
-            [str(self.root / "scripts" / "run_restart_stelae.sh"), "--full"],
+            [str(self.root / "scripts" / "run_restart_stelae.sh"), *parsed_restart],
         ]
         self._one_mcp: OneMCPDiscovery | None = None
+        proxy_base = (proxy_endpoint or os.getenv("STELAE_PROXY_BASE") or "http://127.0.0.1:9090").strip()
+        proxy_base = proxy_base.rstrip("/") or "http://127.0.0.1:9090"
+        if proxy_base.endswith("/mcp"):
+            self.proxy_endpoint = proxy_base
+        else:
+            self.proxy_endpoint = f"{proxy_base}/mcp"
+        self._readiness_timeout = readiness_timeout or float(os.getenv("STELAE_PROXY_READY_TIMEOUT", "90"))
+        self._readiness_interval = readiness_interval or float(os.getenv("STELAE_PROXY_READY_INTERVAL", "2"))
+        self._readiness_probe = readiness_probe or self._probe_proxy
 
     def dispatch(self, operation: str, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
         params = params or {}
@@ -112,6 +131,19 @@ class StelaeIntegratorService:
             raise ValueError(f"Unsupported operation '{operation}'")
         response = handler(params)
         return response.to_dict()
+
+    def run(self, operation: str, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
+        try:
+            return self.dispatch(operation, params or {})
+        except Exception as exc:  # pragma: no cover - defensive wrapper for MCP contexts
+            return {
+                "status": "error",
+                "details": {"operation": operation},
+                "files_updated": [],
+                "commands_run": [],
+                "warnings": [],
+                "errors": [str(exc)],
+            }
 
     # operations -----------------------------------------------------------------
     def _list_discovered_servers(self, params: Dict[str, Any]) -> IntegratorResponse:
@@ -149,12 +181,38 @@ class StelaeIntegratorService:
         min_score_val = float(min_score) if min_score is not None else None
         append = bool(params.get("append", True))
         dry_run = bool(params.get("dry_run"))
+        tags_param = params.get("tags")
+        preset = str(params.get("preset") or "").strip()
+
+        def _normalize_list(value: Any) -> List[str]:
+            if value is None:
+                return []
+            if isinstance(value, str):
+                parts = [part.strip() for part in value.split(",")]
+                return [part for part in parts if part]
+            result_list: List[str] = []
+            for item in value:
+                text = str(item).strip()
+                if text:
+                    result_list.append(text)
+            return result_list
+
+        tags = _normalize_list(tags_param)
+        search_terms = [query] if query else []
+        search_terms.extend(tags)
+        if preset:
+            search_terms.append(preset)
+        search_query = " ".join(term for term in search_terms if term).strip() or "mcp"
         discovery = self._get_one_mcp_discovery()
-        results = discovery.search(query, limit=limit, min_score=min_score_val)
+        results = discovery.search(search_query, limit=limit, min_score=min_score_val)
         if not results:
             return IntegratorResponse(
                 status="ok",
-                details={"query": query, "results": 0},
+                details={
+                    "query": search_query,
+                    "results": 0,
+                    "filters": {"tags": tags, "preset": preset or None},
+                },
                 warnings=["No results returned from 1mcp search"],
             )
         base_entries = [] if not append else self._load_discovery_data()
@@ -163,22 +221,44 @@ class StelaeIntegratorService:
             if isinstance(entry, dict) and entry.get("name"):
                 entries_by_name[entry["name"]] = entry
         added = 0
+        server_summaries: List[Dict[str, Any]] = []
         for result in results:
-            payload = result.to_entry(query or None)
-            existing = entries_by_name.get(payload["name"])
+            payload = result.to_entry(search_query or None)
+            name = payload["name"]
+            existing = entries_by_name.get(name)
+            status = "added"
+            descriptor = payload
             if existing and existing.get("transport") != "metadata":
-                continue
-            entries_by_name[payload["name"]] = payload
-            added += 1
+                status = "cached"
+                descriptor = existing
+            else:
+                entries_by_name[name] = payload
+                if existing:
+                    status = "updated"
+                added += 1
+            server_summaries.append(
+                {
+                    "name": name,
+                    "description": payload.get("description"),
+                    "source": payload.get("source"),
+                    "score": result.score,
+                    "status": status,
+                    "descriptor": descriptor,
+                }
+            )
         ordered = sorted(entries_by_name.values(), key=lambda item: item.get("name", ""))
         files = self._persist_discovery_data(ordered, dry_run=dry_run)
         details = {
-            "query": query,
+            "query": search_query,
             "limit": limit,
             "results": len(results),
             "added": added,
             "dryRun": dry_run,
             "minScore": min_score_val,
+            "append": append,
+            "cachePath": str(self.discovery_path),
+            "filters": {"tags": tags, "preset": preset or None},
+            "servers": server_summaries,
         }
         return IntegratorResponse(status="ok", details=details, files_updated=files)
 
@@ -338,6 +418,7 @@ class StelaeIntegratorService:
                     "returncode": result.returncode,
                 }
             )
+        self._await_proxy_ready()
         return results
 
     def _validate_entry(self, entry: DiscoveryEntry) -> None:
@@ -382,6 +463,44 @@ class StelaeIntegratorService:
     def _reload_template_overrides(self) -> None:
         self.template = ProxyTemplate(self.template.path)
         self.overrides = ToolOverridesStore(self.overrides.path)
+
+    def _probe_proxy(self) -> bool:
+        payload = json.dumps(
+            {"jsonrpc": "2.0", "id": "health", "method": "tools/list"},
+            ensure_ascii=False,
+        ).encode("utf-8")
+        request = urllib.request.Request(
+            self.proxy_endpoint,
+            data=payload,
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                data = json.loads(response.read().decode("utf-8") or "{}")
+        except (urllib.error.URLError, json.JSONDecodeError, TimeoutError, OSError):
+            return False
+        result = data.get("result")
+        if not isinstance(result, dict):
+            return False
+        tools = result.get("tools")
+        return isinstance(tools, list) and len(tools) > 0
+
+    def _await_proxy_ready(self) -> None:
+        deadline = time.time() + self._readiness_timeout
+        attempt = 0
+        while time.time() < deadline:
+            attempt += 1
+            try:
+                if self._readiness_probe():
+                    return
+            except Exception:
+                pass
+            time.sleep(self._readiness_interval)
+        raise RuntimeError(
+            f"Proxy at {self.proxy_endpoint} did not become ready within {self._readiness_timeout:.0f}s "
+            f"(attempts={attempt})"
+        )
 
     def _load_discovery_data(self) -> List[Dict[str, Any]]:
         try:

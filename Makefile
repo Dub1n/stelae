@@ -30,6 +30,13 @@ CONNECTOR_BASE  ?= https://mcp.infotopology.xyz/mcp
 CONNECTOR_TIMEOUT ?= 20
 PROBE_LOG_DIR   ?= $(STELAE_DIR)/dev/logs
 CHECK_CONNECTOR_SCRIPT ?= $(STELAE_DIR)/dev/debug/check_connector.py
+DISCOVER_QUERY ?=
+DISCOVER_TAGS ?=
+DISCOVER_PRESET ?=
+DISCOVER_LIMIT ?= 10
+DISCOVER_MIN_SCORE ?=
+DISCOVER_APPEND ?= 1
+DISCOVER_DRY_RUN ?= 0
 
 .PHONY: render-cloudflared
 render-cloudflared:
@@ -42,7 +49,7 @@ render-cloudflared:
 up-with-tunnel: render-proxy render-cloudflared up
 	@echo "Cloudflared config ready. Ensure CF_CONF points to $(CF_OUTPUT) before pm2 start --only cloudflared."
 
-.PHONY: up down restart-proxy logs status render-proxy help
+.PHONY: up down restart-proxy logs status render-proxy help discover-servers
 
 help:
 	@echo "Targets:"
@@ -52,6 +59,7 @@ help:
 	@echo "  render-proxy     - Render config from template"
 	@echo "  logs             - Tail pm2 logs"
 	@echo "  status           - Show pm2 status"
+	@echo "  discover-servers - Run manage_stelae discover_servers via inline CLI"
 
 up: render-proxy
 	@if [ ! -f "$(PM2_ECOSYSTEM)" ]; then echo "ERROR: Missing $(PM2_ECOSYSTEM)"; exit 1; fi
@@ -84,3 +92,13 @@ check-connector:
 		--timeout "$(CONNECTOR_TIMEOUT)" \
 		--probe "$(CONNECTOR_PROBE)" \
 		--log-dir "$(PROBE_LOG_DIR)"
+
+discover-servers:
+	@DISCOVER_QUERY="$(DISCOVER_QUERY)" \
+		DISCOVER_TAGS="$(DISCOVER_TAGS)" \
+		DISCOVER_PRESET="$(DISCOVER_PRESET)" \
+		DISCOVER_LIMIT="$(DISCOVER_LIMIT)" \
+		DISCOVER_MIN_SCORE="$(DISCOVER_MIN_SCORE)" \
+		DISCOVER_APPEND="$(DISCOVER_APPEND)" \
+		DISCOVER_DRY_RUN="$(DISCOVER_DRY_RUN)" \
+		$(PYTHON) scripts/discover_servers_cli.py

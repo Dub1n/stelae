@@ -38,17 +38,7 @@ def _build_service() -> StelaeIntegratorService:
 
 def _execute(operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
     service = _build_service()
-    try:
-        return service.dispatch(operation, params)
-    except Exception as exc:  # pragma: no cover - surfaced via response payload
-        return {
-            "status": "error",
-            "details": {"operation": operation},
-            "files_updated": [],
-            "commands_run": [],
-            "warnings": [],
-            "errors": [str(exc)],
-        }
+    return service.run(operation, params)
 
 
 @app.tool(name="manage_stelae", description="Install/remove MCP servers discovered by 1mcp or manual JSON blobs.")
@@ -74,7 +64,9 @@ def main() -> None:
         result = _execute(args.operation, payload)
         print(json.dumps(result, indent=2, ensure_ascii=False))
         return
-    app.run_stdio()
+    # FastMCP auto-selects stdio when run without extra transport flags, matching
+    # how every other local server launches under the proxy.
+    app.run()
 
 
 if __name__ == "__main__":
