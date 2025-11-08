@@ -13,12 +13,14 @@ A WSL-native deployment of [mcp-proxy](https://github.com/TBXark/mcp-proxy) that
 | ripgrep MCP | stdio | `${RG_BIN} --stdio --root ${SEARCH_ROOT}` | Code search backend powering the `grep` tool. |
 | Terminal Controller MCP | stdio | `${SHELL_BIN}` | Allowlisted command execution in Phoenix workspace. |
 | Docy MCP | stdio | `${DOCY_BIN} --stdio` | Documentation / URL ingestion (feeds canonical `fetch`). |
+| Docy manager MCP | stdio | `${PYTHON} ${STELAE_DIR}/scripts/docy_manager_server.py` | Adds/removes Docy documentation sources via MCP/CLI, rendering `.docy.urls`. |
 | Basic Memory MCP | stdio | `${MEMORY_BIN}` | Persistent project memory. |
 | Strata MCP | stdio | `${STRATA_BIN}` | Progressive discovery / intent routing. |
 | Fetch MCP | HTTP | `${LOCAL_BIN}/mcp-server-fetch` | Official MCP providing canonical `fetch`. |
 | Scrapling MCP | stdio | `uvx scrapling-fetch-mcp --stdio` | Scrapling fetcher (basic/stealth/max-stealth), adapted by the Go proxy at call time. |
 | FastMCP bridge | streamable HTTP (`/mcp`) / stdio | `python -m scripts.stelae_streamable_mcp` | Exposes the full proxy catalog to desktop agents; falls back to local search/fetch if the proxy is unavailable. |
 | 1mcp agent | stdio | `${ONE_MCP_BIN} --transport stdio` | Discovery/promotion sidecar for capability lookups *(not yet implemented in this stack)*. |
+| Custom tools MCP | stdio | `${PYTHON} ${STELAE_DIR}/scripts/custom_tools_server.py` | Config-driven wrapper that exposes scripts listed in `config/custom_tools.json`. |
 
 Path placeholders expand from `.env`; see setup below.
 
@@ -114,6 +116,35 @@ Path placeholders expand from `.env`; see setup below.
    uv tool install scrapling-fetch-mcp
    uvx --from scrapling-fetch-mcp scrapling install
    \```
+
+### Custom Script Tools
+
+- `scripts/custom_tools_server.py` loads `config/custom_tools.json` (override with `STELAE_CUSTOM_TOOLS_CONFIG`) and registers each entry as part of the `custom` stdio server now declared in `config/proxy.template.json`.
+- Every tool definition can include `name`, `description`, `command`, optional `args`, `cwd`, `env`, `timeout`, and `inputMode` (`json` to send arguments on stdin/`STELAE_TOOL_ARGS`, or `none` for fire-and-forget scripts).
+- Sample config:
+  ```json
+  {
+    "tools": [
+      {
+        "name": "sync_assets",
+        "description": "Run the asset sync helper with JSON arguments.",
+        "command": "./scripts/sync_assets.sh",
+        "cwd": "${STELAE_DIR}",
+        "timeout": 120,
+        "inputMode": "json"
+      }
+    ]
+  }
+  ```
+- After editing `config/custom_tools.json`, rerun `make render-proxy` and restart the proxy via PM2 so the manifest reflects the new tools.
+- Legacy connector-only fallbacks (`search`, `fetch`) are disabled through `config/tool_overrides.json`, keeping the catalog limited to real servers and your custom scripts.
+
+### Docy Source Catalog
+
+- `config/docy_sources.json` is the canonical list of documentation URLs. Each entry can carry `id`, `url`, `title`, `tags`, `notes`, `enabled`, and `refresh_hours` metadata so we can track provenance in git.
+- `scripts/render_docy_sources.py` converts the catalog into `.docy.urls`, which Docy reads live on every request (no restart needed). The renderer writes comments next to each URL so operators know not to edit the generated file manually.
+- The dedicated Docy manager MCP server (`scripts/docy_manager_server.py`) exposes the `manage_docy` tool. Operations cover `list_sources`, `add_source`, `remove_source`, and `sync_catalog`, mirroring the CLI mode (`python scripts/docy_manager_server.py --cli --operation add_source --params '{"url": "https://docs.crawl4ai.com/"}'`).
+- Set `STELAE_DOCY_CATALOG` / `STELAE_DOCY_URL_FILE` if you relocate the catalog; otherwise defaults are `config/docy_sources.json` and `.docy.urls` at the repo root.
 
 ---
 

@@ -55,6 +55,17 @@
         "--stdio"
       ]
     },
+    "docy_manager": {
+      "type": "stdio",
+      "command": "{{PYTHON}}",
+      "args": [
+        "{{STELAE_DIR}}/scripts/docy_manager_server.py"
+      ],
+      "env": {
+        "STELAE_DOCY_CATALOG": "{{STELAE_DIR}}/config/docy_sources.json",
+        "STELAE_DOCY_URL_FILE": "{{STELAE_DIR}}/.docy.urls"
+      }
+    },
     "mem": {
       "type": "stdio",
       "command": "{{MEMORY_BIN}}",
@@ -96,6 +107,16 @@
         "server.py",
         "--local"
       ]
+    },
+    "custom": {
+      "type": "stdio",
+      "command": "{{PYTHON}}",
+      "args": [
+        "{{STELAE_DIR}}/scripts/custom_tools_server.py"
+      ],
+      "env": {
+        "STELAE_CUSTOM_TOOLS_CONFIG": "{{STELAE_DIR}}/config/custom_tools.json"
+      }
     }
   }
 }
