@@ -84,7 +84,7 @@ Verification
 gofmt -w http.go response_helpers.go http_test.go
 go test ./...
 go build -o build/mcp-proxy ./...
-./scripts/restart_stelae.sh (rebuilds binary, restarts pm2, reruns probes)
+./scripts/run_restart_stelae.sh (rebuilds binary, restarts pm2, reruns probes)
 curl checks for /mcp HEAD/GET, search, tools/call search
 Updated probe run (dev/debug/chatgpt_connector_probe.py) showing ~2 s initialize, zero-data mock search
 The mock search is now in place; you can re-run the ChatGPT connector setup to see if the verifier finally gets past its 30 s POST. If it still times out, the next place to look is OpenAI’s backend logs (the 500/timeout) with the new SSE session log line so we can correlate timings.

@@ -508,7 +508,7 @@ class ShimController:
             should_apply = declared_schema is None or new_count >= GENERIC_PROMOTE_THRESHOLD
             if should_apply and self.override_manager.apply_schema(server, name, wrapper.schema):
                 LOGGER.info(
-                    "Applied generic schema override for %s.%s; rerun make render-proxy && scripts/restart_stelae.sh",
+                    "Applied generic schema override for %s.%s; rerun make render-proxy && scripts/run_restart_stelae.sh",
                     server,
                     name,
                 )
@@ -525,7 +525,7 @@ class ShimController:
             )
             if self.override_manager.apply_schema(server, name, wrapper.schema):
                 LOGGER.info(
-                    "Applied schema override for %s.%s; rerun make render-proxy && scripts/restart_stelae.sh to advertise it",
+                    "Applied schema override for %s.%s; rerun make render-proxy && scripts/run_restart_stelae.sh to advertise it",
                     server,
                     name,
                 )

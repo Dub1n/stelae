@@ -1,0 +1,167 @@
+import json
+from pathlib import Path
+
+import pytest
+
+import stelae_lib.integrator.core as core_module
+from stelae_lib.integrator.core import StelaeIntegratorService
+from stelae_lib.integrator.one_mcp import DiscoveryResult
+from stelae_lib.integrator.runner import CommandResult
+
+
+SAMPLE_DISCOVERY = {
+    "name": "demo_server",
+    "transport": "stdio",
+    "command": "echo",
+    "args": ["demo"],
+    "tools": [
+        {"name": "demo_tool", "description": "Demo helper"},
+    ],
+    "description": "Demo server",
+    "source": "https://example.com/demo",
+}
+
+
+class FakeRunner:
+    def __init__(self) -> None:
+        self.invocations: list[list[list[str]]] = []
+
+    def sequence(self, commands):
+        self.invocations.append([list(cmd) for cmd in commands])
+        return [
+            CommandResult(command=list(cmd), status="ok", output="", returncode=0)
+            for cmd in commands
+        ]
+
+
+def _write_json(path: Path, payload) -> None:
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+@pytest.fixture()
+def integrator_workspace(tmp_path: Path):
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    template_path = config_dir / "proxy.template.json"
+    overrides_path = config_dir / "tool_overrides.json"
+    discovery_path = config_dir / "discovered_servers.json"
+    _write_json(template_path, {"mcpServers": {}})
+    _write_json(overrides_path, {"master": {"tools": {}}, "servers": {}})
+    _write_json(discovery_path, [SAMPLE_DISCOVERY])
+    env_file = tmp_path / ".env"
+    (tmp_path / "one_mcp").mkdir()
+    _write_json(tmp_path / "one_mcp" / "discovered_servers.json", [SAMPLE_DISCOVERY | {"name": "refreshed"}])
+    env_file.write_text(f"ONE_MCP_DIR={tmp_path / 'one_mcp'}\n", encoding="utf-8")
+    return {
+        "root": tmp_path,
+        "template": template_path,
+        "overrides": overrides_path,
+        "discovery": discovery_path,
+        "env": env_file,
+    }
+
+
+def _service(workspace, runner=None):
+    return StelaeIntegratorService(
+        root=workspace["root"],
+        discovery_path=workspace["discovery"],
+        template_path=workspace["template"],
+        overrides_path=workspace["overrides"],
+        env_files=[workspace["env"]],
+        command_runner=runner or FakeRunner(),
+    )
+
+
+class DummyDiscovery:
+    def __init__(self, results):
+        self._results = results
+
+    def search(self, query, limit=25, min_score=None):
+        return self._results
+
+
+def test_list_discovered_servers(integrator_workspace):
+    service = _service(integrator_workspace)
+    response = service.dispatch("list_discovered_servers", {})
+    assert response["status"] == "ok"
+    servers = response["details"]["servers"]
+    assert servers[0]["name"] == "demo_server"
+
+
+def test_install_server_dry_run_keeps_files(integrator_workspace):
+    runner = FakeRunner()
+    service = _service(integrator_workspace, runner)
+    before_template = integrator_workspace["template"].read_text(encoding="utf-8")
+    response = service.dispatch("install_server", {"name": "demo_server", "dry_run": True})
+    assert response["status"] == "ok"
+    assert response["details"]["dryRun"] is True
+    assert integrator_workspace["template"].read_text(encoding="utf-8") == before_template
+    assert runner.invocations == []
+
+
+def test_install_server_applies_changes(integrator_workspace):
+    runner = FakeRunner()
+    service = _service(integrator_workspace, runner)
+    response = service.dispatch("install_server", {"name": "demo_server"})
+    assert response["status"] == "ok"
+    data = json.loads(integrator_workspace["template"].read_text(encoding="utf-8"))
+    assert "demo_server" in data["mcpServers"]
+    overrides = json.loads(integrator_workspace["overrides"].read_text(encoding="utf-8"))
+    assert "demo_tool" in overrides["master"]["tools"]
+    assert runner.invocations, "commands should run"
+
+
+def test_refresh_discovery_uses_one_mcp_dir(integrator_workspace):
+    service = _service(integrator_workspace)
+    response = service.dispatch("refresh_discovery", {})
+    assert response["status"] == "ok"
+    data = json.loads(integrator_workspace["discovery"].read_text(encoding="utf-8"))
+    assert data[0]["name"] == "refreshed"
+
+
+def test_remove_server(integrator_workspace):
+    runner = FakeRunner()
+    service = _service(integrator_workspace, runner)
+    service.dispatch("install_server", {"name": "demo_server"})
+    response = service.dispatch("remove_server", {"name": "demo_server"})
+    assert response["status"] == "ok"
+    data = json.loads(integrator_workspace["template"].read_text(encoding="utf-8"))
+    assert "demo_server" not in data["mcpServers"]
+    assert runner.invocations, "remove should trigger restart"
+
+
+def test_discover_servers_appends_metadata(monkeypatch, integrator_workspace):
+    results = [
+        DiscoveryResult(name="DuckSearch", description="Search", url="https://github.com/foo", score=0.9),
+        DiscoveryResult(name="DocsFetcher", description="Docs", url="https://github.com/bar", score=0.8),
+    ]
+
+    def _factory(*_args, **_kwargs):
+        return DummyDiscovery(results)
+
+    monkeypatch.setattr(core_module, "OneMCPDiscovery", _factory)
+    service = _service(integrator_workspace)
+    response = service.dispatch("discover_servers", {"query": "search"})
+    assert response["status"] == "ok"
+    data = json.loads(integrator_workspace["discovery"].read_text(encoding="utf-8"))
+    names = {entry["name"] for entry in data}
+    assert "ducksearch" in names
+    assert "docsfetcher" in names
+    duck = next(entry for entry in data if entry["name"] == "ducksearch")
+    assert duck["transport"] == "metadata"
+
+
+def test_discover_servers_overwrite(monkeypatch, integrator_workspace):
+    results = [
+        DiscoveryResult(name="NewServer", description="Desc", url="https://github.com/new", score=0.95)
+    ]
+
+    def _factory(*_args, **_kwargs):
+        return DummyDiscovery(results)
+
+    monkeypatch.setattr(core_module, "OneMCPDiscovery", _factory)
+    service = _service(integrator_workspace)
+    response = service.dispatch("discover_servers", {"append": False})
+    assert response["details"]["added"] == 1
+    data = json.loads(integrator_workspace["discovery"].read_text(encoding="utf-8"))
+    assert [entry["name"] for entry in data] == ["newserver"]

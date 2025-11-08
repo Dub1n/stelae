@@ -129,6 +129,7 @@ flowchart TD
         MEM[Memory]
         FETCH[Fetch]
         STRATA[Strata]
+        INT[Integrator]
     end
 
     A ==▷|stdio| FS
@@ -138,6 +139,7 @@ flowchart TD
     A ==▷|stdio| MEM
     A ==▷|stdio| FETCH
     A ==▷|stdio| STRATA
+    A ==▷|stdio| INT
 
     B ==▷|stdio| A
     A --▶|HTTP/SSE :9090| C
@@ -150,10 +152,21 @@ flowchart TD
     Overrides["┌──────────────┐<br>config/tool_overrides.json"] --> A
 ```
 
+## Discovery & Auto-Loading Pipeline
+
+1. The 1mcp agent watches the workspace and writes normalized descriptors to `config/discovered_servers.json` (one array of `{name, transport, command|url, args, env, tools, options}` objects). The file is tracked in git so proposed additions can be reviewed. The new `discover_servers` operation in `manage_stelae` can also populate this cache directly by querying the vendored 1mcp catalogue (`scripts/one_mcp_discovery.py` exposes the same flow for CLI users).
+2. `scripts/stelae_integrator_server.py` exposes the `manage_stelae` tool (and CLI) which loads the discovery cache, validates descriptors, and transforms them through three focussed helpers:
+   - `DiscoveryStore` normalises transports (`stdio`, `http`, `streamable-http`), cleans args/env, and flags incomplete entries.
+   - `ProxyTemplate` ensures `config/proxy.template.json` gains sorted server stanzas, raising unless `force` is set when a duplicate exists.
+   - `ToolOverridesStore` pre-populates `config/tool_overrides.json` (master + per-server) with descriptions and tool metadata so manifests stay descriptive from the first render.
+3. After writing files (or emitting diffs during dry-runs) the integrator re-runs `make render-proxy` and `scripts/run_restart_stelae.sh --full`, guaranteeing that Cloudflare + streamable clients receive the new catalog immediately.
+4. Operations available through `manage_stelae`/CLI: `list_discovered_servers`, `install_server`, `remove_server`, `refresh_discovery`, and `run_reconciler` (re-run render/restart without edits). Every response shares a single envelope containing `status`, `details`, `files_updated`, `commands_run`, `warnings`, and `errors` for easier automation.
+5. Guardrails: commands referenced in descriptors must resolve on disk or via `.env` placeholders (`{{KEY}}`). The tool fails fast if binaries/vars are missing, before any template changes occur.
+
 ## Operational Notes
 
 1. `make render-proxy` regenerates `config/proxy.json`, preserving the override file path.
-2. `bash scripts/restart_stelae.sh --full` rebuilds the proxy, restarts PM2 processes, redeploys the Cloudflare worker, and republishes the manifest (ensuring overrides take effect everywhere).
+2. `bash scripts/run_restart_stelae.sh --full` rebuilds the proxy, restarts PM2 processes, redeploys the Cloudflare worker, and republishes the manifest (ensuring overrides take effect everywhere).
 3. To temporarily hide a tool or server from clients, set `"enabled": false` in `config/tool_overrides.json`, rerun `make render-proxy`, then execute the restart script.
 
 This document should serve as the reference for future diagnostics or enhancements to the catalog pipeline and transport topology.

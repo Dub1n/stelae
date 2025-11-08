@@ -16,11 +16,11 @@ Root cause: the Scrapling MCP server (scrapling-fetch-mcp) returns a single stri
 
 ### Current Status (Shim V1)
 
-- ✅ Added `scripts/mcp_output_shim.py`, a FastMCP adapter that launches `scrapling-fetch-mcp`, rewrites `s_fetch_page` / `s_fetch_pattern` descriptors to advertise a `{metadata, content}` schema, and normalizes raw `METADATA: {...}\n\n<body>` strings into structured payloads.
-- ✅ Updated `config/proxy.template.json` (rendered into `config/proxy.json`) so the `scrapling` entry now invokes the shim via `python3 scripts/mcp_output_shim.py`.
-- ✅ Added unit coverage in `tests/test_scrapling_shim.py` to lock parsing behaviour before generalizing the adapter.
-- ✅ Upstream Go proxy now supports schema overrides (input/output) via `config/tool_overrides.json`, so once a tool is flagged as wrapped we can advertise the correct schema without bespoke code.
-- ✅ General-purpose fallback: expanded the shim + proxy overrides so any MCP server can be auto-detected, wrapped once, and have its schema advertised via overrides without touching upstream code. State is persisted in `config/tool_schema_status.json`, and overrides are patched automatically (with log guidance to rerun `make render-proxy` so manifests catch up).
+- [x] Added `scripts/mcp_output_shim.py`, a FastMCP adapter that launches `scrapling-fetch-mcp`, rewrites `s_fetch_page` / `s_fetch_pattern` descriptors to advertise a `{metadata, content}` schema, and normalizes raw `METADATA: {...}\n\n<body>` strings into structured payloads.
+- [x] Updated `config/proxy.template.json` (rendered into `config/proxy.json`) so the `scrapling` entry now invokes the shim via `python3 scripts/mcp_output_shim.py`.
+- [x] Added unit coverage in `tests/test_scrapling_shim.py` to lock parsing behaviour before generalizing the adapter.
+- [x] Upstream Go proxy now supports schema overrides (input/output) via `config/tool_overrides.json`, so once a tool is flagged as wrapped we can advertise the correct schema without bespoke code.
+- [x] General-purpose fallback: expanded the shim + proxy overrides so any MCP server can be auto-detected, wrapped once, and have its schema advertised via overrides without touching upstream code. State is persisted in `config/tool_schema_status.json`, and overrides are patched automatically (with log guidance to rerun `make render-proxy` so manifests catch up).
 
 ## Environment
 
@@ -70,7 +70,7 @@ Root cause: the Scrapling MCP server (scrapling-fetch-mcp) returns a single stri
   ```
 
   Returning a raw string therefore violates the schema and triggers `outputSchema defined but no structured output returned`.
-- We already load Scrapling through the proxy (`config/proxy.template.json:68`), so connectivity issues appear only when the pm2 process is down. The recent `restart_stelae.sh` change ensures `cloudflared` restarts automatically, reducing the “Server not found” symptom for external clients.
+- We already load Scrapling through the proxy (`config/proxy.template.json:68`), so connectivity issues appear only when the pm2 process is down. The recent `run_restart_stelae.sh` change ensures `cloudflared` restarts automatically, reducing the “Server not found” symptom for external clients.
 
 ## Remediation Options
 
@@ -125,11 +125,11 @@ B) Relax proxy schema for Scrapling tools (accept `string` or mark FREEFORM)
 C) Adapter shim in proxy (generalized from `scripts/mcp_output_shim.py`)
 
 - Extend the shim so it can wrap any downstream tool, defaulting to the generic `{ "result": "..." }` shape while still supporting specialized parsers (e.g., Scrapling’s `{metadata, content}`) when configured.
-- Teach the Go proxy overrides to accept `outputSchema` (and `inputSchema`) entries, letting us advertise the wrapped shape via `config/tool_overrides.json` once a tool is known to require it. ✅
-- Add a persistence file (`config/tool_schema_status.json`) recording per-tool states (`unknown`, `pass_through`, `wrapped`, `failed`). ✅
+- Teach the Go proxy overrides to accept `outputSchema` (and `inputSchema`) entries, letting us advertise the wrapped shape via `config/tool_overrides.json` once a tool is known to require it. [x]
+- Add a persistence file (`config/tool_schema_status.json`) recording per-tool states (`unknown`, `pass_through`, `wrapped`, `failed`). [x]
 - Runtime flow (implemented in `scripts/mcp_output_shim.py`):
   - On first call (`unknown`): run tool normally. If the downstream server already provides structured content, mark `pass_through`. Otherwise wrap the raw text using the configured wrapper (default `{ "result": "..." }`, Scrapling keeps `{metadata, content}`), retry the response, and persist `wrapped`.
-  - On shim success: update overrides with the new schema and log that a restart (`make render-proxy` + `scripts/restart_stelae.sh --full`) is required to advertise the change. Future calls go straight through the shim with no extra detection.
+  - On shim success: update overrides with the new schema and log that a restart (`make render-proxy` + `scripts/run_restart_stelae.sh --full`) is required to advertise the change. Future calls go straight through the shim with no extra detection.
   - On repeated failure: persist `failed` and surface the upstream error (with guidance to reset/remove the state entry once the root cause is fixed).
 - Pros: Transparent to clients; once a tool is classified the manifest + `tools/list` always advertise the correct schema. No upstream edits required.
 - Cons: Requires changes to the Go proxy (override support + result capture) and a new persistence workflow.
@@ -174,7 +174,7 @@ Additionally, generalize the newly landed `scripts/mcp_output_shim.py` so the Go
 - File: `src/scrapling_fetch_mcp/mcp.py`
 
   Keep tool signatures; they can return dict. No consumer code changes beyond return type.
-- After the change, re-run `uv tool install --upgrade scrapling-fetch-mcp` on the host and restart the proxy (`scripts/restart_stelae.sh --full`) so pm2 picks up the new binary.
+- After the change, re-run `uv tool install --upgrade scrapling-fetch-mcp` on the host and restart the proxy (`scripts/run_restart_stelae.sh --full`) so pm2 picks up the new binary.
 - Guard against legacy clients: if both upstream JSON and the proxy adapter are deployed, the adapter should detect that the downstream result is already an object and no longer wrap it.
 
 ### Acceptance Criteria

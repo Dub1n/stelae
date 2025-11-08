@@ -21,7 +21,7 @@
   - `stelae/scripts/render_proxy_config.py` (renderer)
 - Process supervisor
   - `stelae/ecosystem.config.js` (pm2 apps: proxy, cloudflared, watchdog, etc.)
-  - `stelae/scripts/restart_stelae.sh` (single-shot restart + probes)
+  - `stelae/scripts/run_restart_stelae.sh` (single-shot restart + probes)
 - Cloudflared
   - `~/.cloudflared/stelae.yml` (or) `stelae/ops/cloudflared.yml` (rendered)
   - `stelae/scripts/render_cloudflared_config.py` (if using the template)
@@ -178,7 +178,7 @@ curl -s https://mcp.infotopology.xyz/mcp -H 'Content-Type: application/json' \
 
 ```bash
 # restart everything (no bridge in this architecture)
-bash stelae/scripts/restart_stelae.sh
+bash stelae/scripts/run_restart_stelae.sh
 
 # just render + restart proxy
 make render-proxy && pm2 restart mcp-proxy --update-env && pm2 save

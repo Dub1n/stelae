@@ -22,31 +22,15 @@
     "toolSchemaStatusPath": "{{STELAE_DIR}}/config/tool_schema_status.json"
   },
   "mcpServers": {
-    "fs": {
+    "custom": {
       "type": "stdio",
-      "command": "{{FILESYSTEM_BIN}}",
+      "command": "{{PYTHON}}",
       "args": [
-        "{{STELAE_DIR}}"
-      ]
-    },
-    "rg": {
-      "type": "stdio",
-      "command": "{{RG_BIN}}",
-      "args": [
-        "--stdio",
-        "--root",
-        "{{STELAE_DIR}}"
-      ]
-    },
-    "sh": {
-      "type": "stdio",
-      "command": "{{SHELL_BIN}}",
-      "args": [
-        "--workdir",
-        "{{PHOENIX_ROOT}}",
-        "--allow",
-        "npm,pytest,make,python,git"
-      ]
+        "{{STELAE_DIR}}/scripts/custom_tools_server.py"
+      ],
+      "env": {
+        "STELAE_CUSTOM_TOOLS_CONFIG": "{{STELAE_DIR}}/config/custom_tools.json"
+      }
     },
     "docs": {
       "type": "stdio",
@@ -66,6 +50,27 @@
         "STELAE_DOCY_URL_FILE": "{{STELAE_DIR}}/.docy.urls"
       }
     },
+    "fetch": {
+      "type": "http",
+      "command": "{{LOCAL_BIN}}/mcp-server-fetch"
+    },
+    "fs": {
+      "type": "stdio",
+      "command": "{{FILESYSTEM_BIN}}",
+      "args": [
+        "{{STELAE_DIR}}"
+      ]
+    },
+    "integrator": {
+      "type": "stdio",
+      "command": "{{PYTHON}}",
+      "args": [
+        "{{STELAE_DIR}}/scripts/stelae_integrator_server.py"
+      ],
+      "env": {
+        "STELAE_DISCOVERY_PATH": "{{STELAE_DIR}}/config/discovered_servers.json"
+      }
+    },
     "mem": {
       "type": "stdio",
       "command": "{{MEMORY_BIN}}",
@@ -77,9 +82,36 @@
         "stdio"
       ]
     },
-    "fetch": {
+    "one_mcp": {
+      "type": "stdio",
+      "command": "{{ONE_MCP_BIN}}",
+      "args": [
+        "--directory",
+        "{{ONE_MCP_DIR}}",
+        "run",
+        "server.py",
+        "--local"
+      ]
+    },
+    "public_mcp_catalog": {
       "type": "http",
-      "command": "{{LOCAL_BIN}}/mcp-server-fetch"
+      "url": "https://mcp.1mcpserver.com/mcp/",
+      "headers": {
+        "Accept": "text/event-stream",
+        "Cache-Control": "no-store"
+      },
+      "options": {
+        "enableAsync": false
+      }
+    },
+    "rg": {
+      "type": "stdio",
+      "command": "{{RG_BIN}}",
+      "args": [
+        "--stdio",
+        "--root",
+        "{{STELAE_DIR}}"
+      ]
     },
     "scrapling": {
       "type": "stdio",
@@ -93,30 +125,19 @@
         "PLAYWRIGHT_BROWSERS_PATH": "{{PLAYWRIGHT_BROWSERS_PATH}}"
       }
     },
+    "sh": {
+      "type": "stdio",
+      "command": "{{SHELL_BIN}}",
+      "args": [
+        "--workdir",
+        "{{PHOENIX_ROOT}}",
+        "--allow",
+        "npm,pytest,make,python,git"
+      ]
+    },
     "strata": {
       "type": "stdio",
       "command": "{{STRATA_BIN}}"
-    },
-    "one_mcp": {
-      "type": "stdio",
-      "command": "{{ONE_MCP_BIN}}",
-      "args": [
-        "--directory",
-        "{{ONE_MCP_DIR}}",
-        "run",
-        "server.py",
-        "--local"
-      ]
-    },
-    "custom": {
-      "type": "stdio",
-      "command": "{{PYTHON}}",
-      "args": [
-        "{{STELAE_DIR}}/scripts/custom_tools_server.py"
-      ],
-      "env": {
-        "STELAE_CUSTOM_TOOLS_CONFIG": "{{STELAE_DIR}}/config/custom_tools.json"
-      }
     }
   }
 }

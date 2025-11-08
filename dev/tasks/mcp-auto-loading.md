@@ -10,36 +10,36 @@ Ship a single MCP server (`stelae-integrator`, exposing one `manage_stelae` tool
 
 - be present in `config/proxy.template.json` with the right transport/args/env;
 - have `config/tool_overrides.json` seeded with default tool names/descriptions (leveraging the override pre-population task);
-- trigger render + restart (`make render-proxy`, `scripts/restart_stelae.sh --full`), republishing the manifest;
+- trigger render + restart (`make render-proxy`, `scripts/run_restart_stelae.sh --full`), republishing the manifest;
 - return a report so operators know what changed.
 
 The workflow should also cover manual JSON blobs and provide guardrails (dry-run, validation, failure recovery). This supersedes the earlier “override automation” task; that functionality becomes a sub-step here (with a fallback CLI in case someone adds servers manually).
 
 ## Checklist
 
-- [ ] Define the interface for discovery ingestion (JSON schema sourced from 1mcp, stored under `config/discovered_servers.json`).
-- [ ] Implement the MCP server:
+- [x] Define the interface for discovery ingestion (JSON schema sourced from 1mcp, stored under `config/discovered_servers.json`).
+- [x] Implement the MCP server:
   - Expose a single tool, `manage_stelae`, with an `operation` enum (`list_discovered_servers`, `install_server`, `refresh_discovery`, `run_reconciler`, etc.) and operation-specific `params` validated via a discriminated union schema.
   - Optional operations cover `remove_server`, `dry_run_install`, or future reconciler automation.
-- [ ] Normalise discovery descriptors:
+- [x] Normalise discovery descriptors:
   - Map transports (`stdio`, `http`, `streamable-http`).
   - Capture command/args/env or URL headers.
   - Persist display metadata for overrides (`description`, upstream repo).
-- [ ] Update `config/proxy.template.json` programmatically:
+- [x] Update `config/proxy.template.json` programmatically:
   - Merge entries alphabetically to keep diffs neat.
   - Ensure `.env` keys exist and binaries are resolvable; surface actionable errors.
-- [ ] Seed `config/tool_overrides.json` for new tools:
+- [x] Seed `config/tool_overrides.json` for new tools:
   - Reuse the “prepopulate defaults” logic now implemented by `scripts/populate_tool_overrides.py`.
   - Provide a command-line fallback (e.g., `scripts/populate_tool_overrides.py --servers <name> --dry-run`) in case servers are added manually or discovery is disabled.
-- [ ] Execute `make render-proxy` and `scripts/restart_stelae.sh --full` inside the tool, streaming logs and catching failures (fail fast with clear messaging).
-- [ ] Add regression tests:
+- [x] Execute `make render-proxy` and `scripts/run_restart_stelae.sh --full` inside the tool, streaming logs and catching failures (fail fast with clear messaging).
+- [x] Add regression tests:
   - Unit tests for config merge/sanitisation.
   - Integration test spinning the MCP server in-process (simulate discovery JSON → verify config edits + restart command invocation via mock).
-- [ ] Document the workflow:
+- [x] Document the workflow:
   - README section (“Installing servers discovered by 1mcp”).
   - Task instructions referencing how this replaces `override-automation`.
   - Notes on dry-run, auth handling, and failure fallbacks.
-- [ ] Update progress tracker/task log once the automation lands.
+- [x] Update progress tracker/task log once the automation lands.
 
 ## Implementation Notes
 
@@ -93,13 +93,42 @@ The workflow should also cover manual JSON blobs and provide guardrails (dry-run
 
 1. Implement and test the MCP server + CLI helpers.
 2. Document usage and add task log entry.
-3. Update `make render-proxy` / `restart_stelae.sh` docs to mention the new automation.
+3. Update `make render-proxy` / `run_restart_stelae.sh` docs to mention the new automation.
 4. Consider adding a `make install-server NAME=...` wrapper that calls the MCP tool for non-agent workflows.
 
 ## Checklist (Copy into PR or issue if needed)
 
-- [ ] Code/tests updated
-- [ ] Docs updated
-- [ ] Progress tracker updated
-- [ ] Task log updated
-- [ ] Checklist completed
+- [x] Code/tests updated
+- [x] Docs updated
+- [x] Progress tracker updated
+- [x] Task log updated
+- [x] Checklist completed
+
+## Status
+
+- `scripts/stelae_integrator_server.py` exposes the `manage_stelae` MCP/CLI tool backed by `stelae_lib.integrator.*` helpers (discovery store, proxy template merger, tool override seeder, command runner).
+- Discovery descriptors now live in `config/discovered_servers.json`; installs validate transports, binaries, and `.env` placeholders before editing templates.
+- The integrator seeds overrides, writes sorted template entries, and reruns `make render-proxy` + `scripts/run_restart_stelae.sh --full`, returning diffs and command transcripts (with dry-run previews).
+- Regression coverage: `tests/test_stelae_integrator.py` exercises list/install/remove/refresh flows plus the mock command runner.
+- README + `docs/ARCHITECTURE.md` describe the workflow (“Installing servers discovered by 1mcp” + “Discovery & Auto-Loading Pipeline”), and `dev/progress.md` marks the requirement complete.
+
+## Follow-on Tasks
+
+1. **Managed 1mcp discovery operation**
+   - Extend `manage_stelae` with a `discover_servers` operation that shells out to the 1mcp CLI, optionally taking filters (e.g., tag lists, preset names).
+   - Capture the CLI output or generated catalog and normalize entries directly into `config/discovered_servers.json` so users don’t have to copy files manually.
+   - Document the new operation, including how to pass filters via MCP/CLI and any expected prerequisites (e.g., valid `~/.config/1mcp/mcp.json`).
+   - Add tests that stub the 1mcp command and verify the discovery payload is parsed and written correctly.
+
+2. **Self-contained 1mcp bootstrap**
+   - Provide a helper script (and README guidance) that configures the local 1mcp CLI using repo-local defaults (e.g., pointing at `~/apps/vendor/1mcpserver`, setting output paths) so a fresh clone can run discovery without manual edits inside the upstream repo.
+   - Ensure the helper lives inside this repo (no upstream modifications) and records any generated config under version control if appropriate (or documents how to generate it).
+
+3. **CI/automation hooks**
+   - Consider a `make discover-servers` target that calls `manage_stelae discover_servers` for non-MCP workflows, mirroring the install/remove commands.
+   - Optionally add a smoke test that runs the new operation in dry-run mode to ensure the wrapper still works when 1mcp updates.
+
+4. **Codex CLI end-to-end smoke test**
+   - Author a checklist-driven scenario (under `dev/tasks/` or `dev/debug/`) describing how to use the Codex CLI to: run `discover_servers`, inspect entries, dry-run + real `install_server`, and verify the proxy restart + manifest updates via the managed tools only.
+   - Capture required environment preparation (e.g., `. .venv/bin/activate`, `PYTHONPATH=.`) so another contributor can follow the script verbatim.
+   - Include validation commands (manifest `curl`, `manage_stelae list_discovered_servers`, etc.) and expected outputs, marking where human intervention is needed (e.g., editing metadata entries).

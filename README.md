@@ -14,12 +14,13 @@ A WSL-native deployment of [mcp-proxy](https://github.com/TBXark/mcp-proxy) that
 | Terminal Controller MCP | stdio | `${SHELL_BIN}` | Allowlisted command execution in Phoenix workspace. |
 | Docy MCP | stdio | `${DOCY_BIN} --stdio` | Documentation / URL ingestion (feeds canonical `fetch`). |
 | Docy manager MCP | stdio | `${PYTHON} ${STELAE_DIR}/scripts/docy_manager_server.py` | Adds/removes Docy documentation sources via MCP/CLI, rendering `.docy.urls`. |
+| Stelae integrator MCP | stdio | `${PYTHON} ${STELAE_DIR}/scripts/stelae_integrator_server.py` | Consumes 1mcp discovery output, updates templates/overrides, and restarts the stack via `manage_stelae`. |
 | Basic Memory MCP | stdio | `${MEMORY_BIN}` | Persistent project memory. |
 | Strata MCP | stdio | `${STRATA_BIN}` | Progressive discovery / intent routing. |
 | Fetch MCP | HTTP | `${LOCAL_BIN}/mcp-server-fetch` | Official MCP providing canonical `fetch`. |
 | Scrapling MCP | stdio | `uvx scrapling-fetch-mcp --stdio` | Scrapling fetcher (basic/stealth/max-stealth), adapted by the Go proxy at call time. |
 | FastMCP bridge | streamable HTTP (`/mcp`) / stdio | `python -m scripts.stelae_streamable_mcp` | Exposes the full proxy catalog to desktop agents; falls back to local search/fetch if the proxy is unavailable. |
-| 1mcp agent | stdio | `${ONE_MCP_BIN} --transport stdio` | Discovery/promotion sidecar for capability lookups *(not yet implemented in this stack)*. |
+| 1mcp agent | stdio | `${ONE_MCP_BIN} --transport stdio` | Discovers nearby MCP servers and writes `config/discovered_servers.json` for the integrator. |
 | Custom tools MCP | stdio | `${PYTHON} ${STELAE_DIR}/scripts/custom_tools_server.py` | Config-driven wrapper that exposes scripts listed in `config/custom_tools.json`. |
 
 Path placeholders expand from `.env`; see setup below.
@@ -146,6 +147,29 @@ Path placeholders expand from `.env`; see setup below.
 - The dedicated Docy manager MCP server (`scripts/docy_manager_server.py`) exposes the `manage_docy` tool. Operations cover `list_sources`, `add_source`, `remove_source`, and `sync_catalog`, mirroring the CLI mode (`python scripts/docy_manager_server.py --cli --operation add_source --params '{"url": "https://docs.crawl4ai.com/"}'`).
 - Set `STELAE_DOCY_CATALOG` / `STELAE_DOCY_URL_FILE` if you relocate the catalog; otherwise defaults are `config/docy_sources.json` and `.docy.urls` at the repo root.
 
+### Installing servers discovered by 1mcp
+
+- 1mcp writes its discovery payload to `config/discovered_servers.json` (array of `{name, transport, command|url, args, env, description, source, tools, requiresAuth, options}` objects). Keep the file in git so you can review pending server additions.
+- The `stelae-integrator` MCP/CLI (`scripts/stelae_integrator_server.py`, tool name `manage_stelae`) reads that cache, validates binaries/placeholders, edits `config/proxy.template.json` + `config/tool_overrides.json`, and then runs `make render-proxy` followed by `scripts/run_restart_stelae.sh --full` so the new server is immediately reachable.
+  ```bash
+  # Inspect discovery output
+  python scripts/stelae_integrator_server.py --cli --operation list_discovered_servers
+
+  # Preview a server install without writing files or restarting
+  python scripts/stelae_integrator_server.py --cli --operation install_server \
+    --params '{"name": "demo_server", "dry_run": true}'
+  ```
+- Supported operations:
+  - `discover_servers` – Calls the vendored 1mcp catalogue to find candidates (`query`, `limit`, `min_score`, `append` flags). Results are recorded as metadata entries in `config/discovered_servers.json` so you can edit/complete them before installation.
+  - `list_discovered_servers` – Normalized entries + validation issues, helpful when vetting 1mcp output.
+  - `install_server` – Accepts `name` (from discovery) or a full `descriptor` payload, optional `dry_run`, `force`, `target_name`, `options`, and `force_restart`.
+  - `remove_server` – Removes template + override entries and restarts the stack (with `dry_run` previews available).
+  - `refresh_discovery` – Copies `${ONE_MCP_DIR}/discovered_servers.json` (or a supplied `source_path`) into the tracked cache, returning a diff so you can see what changed.
+  - `run_reconciler` – Re-runs `make render-proxy` + the restart script without touching configs; handy after manual template edits.
+- The tool reports file diffs, commands executed, and warnings/errors in a uniform JSON envelope. All validations happen before any file writes so a missing binary or placeholder halts the operation early.
+- Manual override-only workflows remain supported via `python scripts/populate_tool_overrides.py --servers <name> --dry-run`, which refreshes schemas without consulting the discovery cache.
+- For non-MCP workflows you can inspect the catalogue directly via `scripts/one_mcp_discovery.py "vector search" --limit 10`, which uses the same backend as `discover_servers` and, unless `--dry-run` is set, merges the results into `config/discovered_servers.json`.
+
 ---
 
 ## Running the Stack (PM2)
@@ -176,7 +200,7 @@ source ~/.nvm/nvm.sh
   make down
   \```
 
-The helper script `scripts/restart_stelae.sh --full` wraps the full cycle (rebuild proxy, render config, restart PM2 fleet, redeploy Cloudflare worker, republish manifest) and is the fastest way to validate override changes end-to-end.
+The helper script `scripts/run_restart_stelae.sh --full` wraps the full cycle (rebuild proxy, render config, restart PM2 fleet, redeploy Cloudflare worker, republish manifest) and is the fastest way to validate override changes end-to-end.
 
 Logs default to `~/dev/stelae/logs/` (see `ecosystem.config.js`).
 

@@ -22,7 +22,7 @@
    - `collectTools` now emits the facade pair only, falling back to static descriptors if upstream servers are unavailable.
 2. `buildInitializeResult` and the JSON-RPC handler reuse the filtered results and continue aggregating prompts/resources/templates.
 3. Tests (`TestCollectToolsFiltersToFacadeCatalog`, `TestCollectToolsProvidesFacadeFallbacks`) assert schema/required field coverage.
-4. **Next action:** rebuild & restart the deployed proxy (`scripts/restart_stelae.sh`) so production matches local behaviour.
+4. **Next action:** rebuild & restart the deployed proxy (`scripts/run_restart_stelae.sh`) so production matches local behaviour.
 
 *Contingency:* Fallback descriptors ensure initialize does not fail if upstream tool inventory is slow to load.
 
@@ -57,7 +57,7 @@
 
 ## 4. Troubleshooting Notes
 
-- **Go changes not visible:** run `scripts/restart_stelae.sh` to rebuild/restart proxy.
+- **Go changes not visible:** run `scripts/run_restart_stelae.sh` to rebuild/restart proxy.
 - **Search stub errors:** ensure required Python deps (e.g. httpx, pytest, trio) are present in `~/.venvs/stelae-bridge`.
 - **Probe fails due to missing deps:** install with `~/.venvs/stelae-bridge/bin/pip install httpx pytest trio`.
 - **Manifest cached via Cloudflare:** rerun `scripts/push_manifest_to_kv.sh` and purge KV/worker if needed.
@@ -67,7 +67,7 @@
 
 1. Go unit tests enforce the filtered tool catalogue and schema requirements.
 2. `make check-connector` (backed by `dev/debug/check_connector.py`) runs the JSON-RPC probe, validates outputs, and archives logs.
-3. Integrate the make target plus Go/Python tests into CI or `scripts/restart_stelae.sh` before promoting releases.
+3. Integrate the make target plus Go/Python tests into CI or `scripts/run_restart_stelae.sh` before promoting releases.
 4. Documentation updated (`dev/chat_gpt_connector_compliant_reference.md`) with automation instructions and failure triage notes.
 
 ## 5. Reference Backlinks

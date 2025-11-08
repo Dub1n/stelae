@@ -135,7 +135,7 @@ Acceptance Criteria
 
 Verification
 
-- Local: `make render-proxy && scripts/restart_stelae.sh --full`; confirm `s_fetch_*` in tools.list; call `s_fetch_page` returns `{metadata, content}` structured payload.
+- Local: `make render-proxy && scripts/run_restart_stelae.sh --full`; confirm `s_fetch_*` in tools.list; call `s_fetch_page` returns `{metadata, content}` structured payload.
 - Override write-back: call Scrapling tool once; check `config/tool_overrides.json` updated; tools.list/manifest reflect schema after restart.
 - Negative path: corrupt overrides file → logs warning, tools remain listed, calls still adapt.
 

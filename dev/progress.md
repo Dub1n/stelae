@@ -14,7 +14,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started · `[!]` broken · 
 - [x] [scrapling-mcp-output-schema](./tasks/scrapling-mcp-output-schema.md) Resolve Scrapling MPC schema mismatches via the shim + override automation.
 - [x] [tool-override-population](./tasks/tool-override-population.md) Auto-populate default `inputSchema`/`outputSchema` entries when new MCP servers are added, keeping overrides ready for on-demand shims.
 - [x] [shim-schema-retry](./tasks/shim-schema-retry.md) (prereq: tool-override-population) Teach the shim to attempt schema-specific wrapping before falling back to the generic adapter.
-- [ ] [mcp-auto-loading](./tasks/mcp-auto-loading.md) Hook 1mcp discovery into the stack so newly found servers auto-merge into config + overrides (with guardrails).
+- [x] [mcp-auto-loading](./tasks/mcp-auto-loading.md) Hook 1mcp discovery into the stack so newly found servers auto-merge into config + overrides (with guardrails).
 - [x] [docy-source-manager](./tasks/docy-source-manager.md) Manage the Docy URL catalog via a dedicated MCP tool so resources stay editable and visible through MCP alone.
 
 ## Action Items

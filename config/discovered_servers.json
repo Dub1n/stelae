@@ -1,0 +1,27 @@
+[
+  {
+    "name": "public_mcp_catalog",
+    "transport": "http",
+    "url": "https://mcp.1mcpserver.com/mcp/",
+    "headers": {
+      "Accept": "text/event-stream",
+      "Cache-Control": "no-store"
+    },
+    "description": "Remote 1mcp discovery endpoint exposed over HTTP/SSE.",
+    "source": "https://github.com/Dub1n/stelae-1mcpserver",
+    "tools": [
+      {
+        "name": "deep_search",
+        "description": "Plan requirements and auto-select compatible MCP servers."
+      },
+      {
+        "name": "list_servers",
+        "description": "Return server descriptors and setup guidance."
+      }
+    ],
+    "requiresAuth": false,
+    "options": {
+      "enableAsync": false
+    }
+  }
+]

@@ -14,7 +14,7 @@ Tags: `#feature`, `#infra`
 - [x] Update `config/tool_overrides.json` examples and relevant docs (`docs/SPEC-v1.md`, `README.md`) with the richer override schema and warning semantics.
 - [x] Regenerate `config/proxy.json`, restart stack, and republish manifest (local + Cloudflare) to validate public + local outputs.
 - [x] Update spec/progress/task file.
-- [ ] Commit with message `feature: expand proxy tool overrides` after tests.
+- [x] Commit with message `feature: expand proxy tool overrides` after tests.
 
 ## References
 
@@ -29,11 +29,3 @@ Tags: `#feature`, `#infra`
 - Reject master-level renames but log a warning when master sets description/title so operators know it affected global copy.
 - After implementation, publish sample overrides demonstrating customised descriptions.
 - If schema changes require consumer updates, coordinate with any external repos depending on the proxy format.
-
-## Checklist (Copy into PR or issue if needed)
-
-- [ ] Code/tests updated
-- [ ] Docs updated
-- [ ] Progress tracker updated
-- [ ] Task log updated
-- [ ] Checklist completed

@@ -40,7 +40,8 @@ The root expects a local `.env`; rendered artifacts land in `config/proxy.json` 
 
 - Do not hand-edit `config/proxy.json`; rerender from the template to avoid drift. The renderer injects paths for local binaries (filesystem/rg/etc.).
 - Remember the manifest split: remote clients only see the single `stelae` server (streamable HTTP). We intentionally hide individual downstream servers to keep ChatGPT’s connector list clean.
-- Some scripts (`scripts/restart_stelae.sh`, `dev/debug/*`) expect `.env` variables to be set and may fail silently if required keys are missing.
+- Some scripts (`scripts/run_restart_stelae.sh`, `dev/debug/*`) expect `.env` variables to be set and may fail silently if required keys are missing.
+- `scripts/one_mcp_discovery.py` provides a CLI shim around the same 1mcp catalogue that `manage_stelae` uses—stick to this helper instead of editing `config/discovered_servers.json` by hand when seeding metadata entries.
 - The repo may contain pending docs (e.g., `docs/agnet_manifest_*`). Check `git status` before making large edits and avoid stomping user-authored drafts.
 
 ### Build, Test, and Development Commands

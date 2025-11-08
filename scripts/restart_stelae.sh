@@ -1,4 +1,3 @@
-# path: stelae/scripts/restart_stelae.sh
 #!/usr/bin/env bash
 set -euo pipefail
 

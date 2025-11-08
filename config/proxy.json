@@ -22,31 +22,15 @@
     "toolSchemaStatusPath": "/home/gabri/dev/stelae/config/tool_schema_status.json"
   },
   "mcpServers": {
-    "fs": {
+    "custom": {
       "type": "stdio",
-      "command": "/home/gabri/.local/bin/rust-mcp-filesystem",
+      "command": "python3",
       "args": [
-        "/home/gabri/dev/stelae"
-      ]
-    },
-    "rg": {
-      "type": "stdio",
-      "command": "/home/gabri/.local/bin/mcp-grep-server",
-      "args": [
-        "--stdio",
-        "--root",
-        "/home/gabri/dev/stelae"
-      ]
-    },
-    "sh": {
-      "type": "stdio",
-      "command": "/home/gabri/.local/bin/terminal_controller",
-      "args": [
-        "--workdir",
-        "/mnt/c/Users/gabri/Documents/Infotopology/VDL_Vault",
-        "--allow",
-        "npm,pytest,make,python,git"
-      ]
+        "/home/gabri/dev/stelae/scripts/custom_tools_server.py"
+      ],
+      "env": {
+        "STELAE_CUSTOM_TOOLS_CONFIG": "/home/gabri/dev/stelae/config/custom_tools.json"
+      }
     },
     "docs": {
       "type": "stdio",
@@ -54,6 +38,38 @@
       "args": [
         "--stdio"
       ]
+    },
+    "docy_manager": {
+      "type": "stdio",
+      "command": "python3",
+      "args": [
+        "/home/gabri/dev/stelae/scripts/docy_manager_server.py"
+      ],
+      "env": {
+        "STELAE_DOCY_CATALOG": "/home/gabri/dev/stelae/config/docy_sources.json",
+        "STELAE_DOCY_URL_FILE": "/home/gabri/dev/stelae/.docy.urls"
+      }
+    },
+    "fetch": {
+      "type": "http",
+      "command": "/home/gabri/.local/bin/mcp-server-fetch"
+    },
+    "fs": {
+      "type": "stdio",
+      "command": "/home/gabri/.local/bin/rust-mcp-filesystem",
+      "args": [
+        "/home/gabri/dev/stelae"
+      ]
+    },
+    "integrator": {
+      "type": "stdio",
+      "command": "python3",
+      "args": [
+        "/home/gabri/dev/stelae/scripts/stelae_integrator_server.py"
+      ],
+      "env": {
+        "STELAE_DISCOVERY_PATH": "/home/gabri/dev/stelae/config/discovered_servers.json"
+      }
     },
     "mem": {
       "type": "stdio",
@@ -66,26 +82,6 @@
         "stdio"
       ]
     },
-    "fetch": {
-      "type": "http",
-      "command": "/home/gabri/.local/bin/mcp-server-fetch"
-    },
-    "scrapling": {
-      "type": "stdio",
-      "command": "uvx",
-      "args": [
-        "scrapling-fetch-mcp",
-        "--stdio"
-      ],
-      "env": {
-        "PATH": "/home/gabri/.local/bin:/home/gabri/bin:/tmp/.tmpUDVgq5:/home/gabri/.nvm/versions/node/v22.19.0/lib/node_modules/@openai/codex/vendor/x86_64-unknown-linux-musl/path:/home/gabri/.local/bin:/mnt/c/Program Files/VSCodium/bin:/home/gabri/.local/bin:/home/gabri/.nvm/versions/node/v22.19.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/Program Files (x86)/Razer Chroma SDK/bin:/mnt/c/Program Files/Razer Chroma SDK/bin:/mnt/c/Users/gabri/AppData/Local/Programs/cursor/resources/app/bin:/mnt/c/Program Files/Microsoft MPI/Bin/:/mnt/c/Program Files (x86)/Common Files/Intel/Shared Libraries/redist/intel64/compiler:/mnt/c/Program Files/Python311/Scripts/:/mnt/c/Program Files/Python311/:/mnt/c/Windows/system32:/mnt/c/Windows:/mnt/c/Windows/System32/Wbem:/mnt/c/Windows/System32/WindowsPowerShell/v1.0/:/mnt/c/Windows/System32/OpenSSH/:/mnt/c/Program Files (x86)/NVIDIA Corporation/PhysX/Common:/mnt/c/Users/gabri/Applications/Coding/nvm-0.39.3:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/Program Files/dotnet/:/mnt/c/Users/gabri/AppData/Roaming/Python/Python311:/mnt/c/Users/gabri/AppData/Roaming/Python/:/mnt/c/Program Files/GitHub CLI/:/mnt/c/Program Files (x86)/Yarn/bin/:/mnt/c/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/PowerShell/7-preview/pre:/mnt/c/Users/gabri/AppData/Local/Programs/cursor/resources/app/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/Genymobile/Genymotion:/mnt/c/Program Files/Android/Android Studio/jbr:/mnt/c/Program Files/Android/Android Studio/jbr/bin:/mnt/c/Users/gabri/Applications/Gradle/gradle-8.7/bin:/mnt/c/Users/gabri/AppData/Local/Android/Sdk/platform-tools:/mnt/c/Users/gabri/AppData/Local/Android/Sdk/emulator:/mnt/c/Users/gabri/Applications/tools:/mnt/c/Users/gabri/Applications/apktool:/mnt/c/Users/gabri/AppData/Local/Android/Sdk/build-tools/36.0.0:/mnt/c/Users/gabri/Documents/WindowsPowerShell/Modules/ps2exe/1.0.15:/mnt/c/Users/gabri/AppData/Roaming/Python/Python311/Scripts:/mnt/c/ProgramData/nvm:/mnt/c/nvm4w/nodejs:/mnt/c/nvm4w/nodejs/node_modules/@vscode/ripgrep/bin:/mnt/c/nvm4w/nodejs:/mnt/c/WINDOWS/system32/config/systemprofile/AppData/Local/Microsoft/WindowsApps:/mnt/c/Program Files (x86)/Razer/ChromaBroadcast/bin:/mnt/c/Program Files/Razer/ChromaBroadcast/bin:/mnt/c/Users/gabri/.local/bin:/mnt/c/Users/gabri/AppData/Local/pnpm:/mnt/c/Users/gabri/AppData/Local/Programs/Microsoft VS Code/bin:/mnt/c/Users/gabri/AppData/Local/Programs/Ollama:/mnt/c/Program Files/PowerToys/:/mnt/c/Program Files/VSCodium/bin:/mnt/c/Users/gabri/Documents/Infotopology/VDL_Vault/scripts/shimdex:/mnt/c/Users/gabri/.local/bin:/mnt/c/Users/gabri/AppData/Local/pnpm:/mnt/c/Program Files (x86)/Razer Chroma SDK/bin:/mnt/c/Program Files/Razer Chroma SDK/bin:/mnt/c/Program Files/Microsoft MPI/Bin/:/mnt/c/Program Files (x86)/Common Files/Intel/Shared Libraries/redist/intel64/compiler:/mnt/c/Program Files/Python311/Scripts/:/mnt/c/Program Files/Python311/:/mnt/c/Windows/system32:/mnt/c/Windows:/mnt/c/Windows/System32/Wbem:/mnt/c/Windows/System32/WindowsPowerShell/v1.0/:/mnt/c/Windows/System32/OpenSSH/:/mnt/c/Program Files (x86)/NVIDIA Corporation/PhysX/Common:/mnt/c/Users/gabri/Applications/Coding/nvm-0.39.3:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/Program Files/dotnet/:/mnt/c/Users/gabri/AppData/Roaming/Python/Python311:/mnt/c/Users/gabri/AppData/Roaming/Python/:/mnt/c/Program Files/GitHub CLI/:/mnt/c/Program Files (x86)/Yarn/bin/:/mnt/c/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR:/mnt/c/Program Files/PowerShell/7-preview/pre:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/Genymobile/Genymotion:/mnt/c/Program Files/Android/Android Studio/jbr:/mnt/c/Program Files/Android/Android Studio/jbr/bin:/mnt/c/Users/gabri/Applications/Gradle/gradle-8.7/bin:/mnt/c/Users/gabri/AppData/Local/Android/Sdk/platform-tools:/mnt/c/Users/gabri/AppData/Local/Android/Sdk/emulator:/mnt/c/Users/gabri/Applications/tools:/mnt/c/Users/gabri/Applications/apktool:/mnt/c/Users/gabri/AppData/Local/Android/Sdk/build-tools/36.0.0:/mnt/c/Users/gabri/Documents/WindowsPowerShell/Modules/ps2exe/1.0.15:/mnt/c/Users/gabri/AppData/Roaming/Python/Python311/Scripts:/mnt/c/ProgramData/nvm:/mnt/c/nvm4w/nodejs:/mnt/c/nvm4w/nodejs/node_modules/@vscode/ripgrep/bin:/mnt/c/Program Files/VSCodium/bin:/mnt/c/WINDOWS/system32/config/systemprofile/AppData/Local/Microsoft/WindowsApps:/mnt/c/Program Files (x86)/Razer/ChromaBroadcast/bin:/mnt/c/Program Files/Razer/ChromaBroadcast/bin:/mnt/c/Users/gabri/AppData/Local/Programs/Ollama:/mnt/c/Users/gabri/.dotnet/tools:/snap/bin",
-        "PLAYWRIGHT_BROWSERS_PATH": "/home/gabri/.cache/ms-playwright"
-      }
-    },
-    "strata": {
-      "type": "stdio",
-      "command": "/home/gabri/.local/bin/strata"
-    },
     "one_mcp": {
       "type": "stdio",
       "command": "/home/gabri/.local/bin/uv",
@@ -96,6 +92,52 @@
         "server.py",
         "--local"
       ]
+    },
+    "public_mcp_catalog": {
+      "type": "http",
+      "url": "https://mcp.1mcpserver.com/mcp/",
+      "headers": {
+        "Accept": "text/event-stream",
+        "Cache-Control": "no-store"
+      },
+      "options": {
+        "enableAsync": false
+      }
+    },
+    "rg": {
+      "type": "stdio",
+      "command": "/home/gabri/.local/bin/mcp-grep-server",
+      "args": [
+        "--stdio",
+        "--root",
+        "/home/gabri/dev/stelae"
+      ]
+    },
+    "scrapling": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "scrapling-fetch-mcp",
+        "--stdio"
+      ],
+      "env": {
+        "PATH": "/home/gabri/dev/stelae/.venv/bin:/home/gabri/.local/bin:/home/gabri/bin:/tmp/.tmpxs0C0F:/home/gabri/.nvm/versions/node/v22.19.0/lib/node_modules/@openai/codex/vendor/x86_64-unknown-linux-musl/path:/home/gabri/.local/bin:/mnt/c/Program Files/VSCodium/bin:/home/gabri/.local/bin:/home/gabri/.nvm/versions/node/v22.19.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/usr/lib/wsl/lib:/mnt/c/Program Files (x86)/Razer Chroma SDK/bin:/mnt/c/Program Files/Razer Chroma SDK/bin:/mnt/c/Users/gabri/AppData/Local/Programs/cursor/resources/app/bin:/mnt/c/Program Files/Microsoft MPI/Bin/:/mnt/c/Program Files (x86)/Common Files/Intel/Shared Libraries/redist/intel64/compiler:/mnt/c/Program Files/Python311/Scripts/:/mnt/c/Program Files/Python311/:/mnt/c/Windows/system32:/mnt/c/Windows:/mnt/c/Windows/System32/Wbem:/mnt/c/Windows/System32/WindowsPowerShell/v1.0/:/mnt/c/Windows/System32/OpenSSH/:/mnt/c/Program Files (x86)/NVIDIA Corporation/PhysX/Common:/mnt/c/Users/gabri/Applications/Coding/nvm-0.39.3:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/Program Files/dotnet/:/mnt/c/Users/gabri/AppData/Roaming/Python/Python311:/mnt/c/Users/gabri/AppData/Roaming/Python/:/mnt/c/Program Files/GitHub CLI/:/mnt/c/Program Files (x86)/Yarn/bin/:/mnt/c/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR:/mnt/c/WINDOWS/system32:/mnt/c/WINDOWS:/mnt/c/WINDOWS/System32/Wbem:/mnt/c/WINDOWS/System32/WindowsPowerShell/v1.0/:/mnt/c/WINDOWS/System32/OpenSSH/:/mnt/c/Program Files/PowerShell/7-preview/pre:/mnt/c/Users/gabri/AppData/Local/Programs/cursor/resources/app/bin:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/Genymobile/Genymotion:/mnt/c/Program Files/Android/Android Studio/jbr:/mnt/c/Program Files/Android/Android Studio/jbr/bin:/mnt/c/Users/gabri/Applications/Gradle/gradle-8.7/bin:/mnt/c/Users/gabri/AppData/Local/Android/Sdk/platform-tools:/mnt/c/Users/gabri/AppData/Local/Android/Sdk/emulator:/mnt/c/Users/gabri/Applications/tools:/mnt/c/Users/gabri/Applications/apktool:/mnt/c/Users/gabri/AppData/Local/Android/Sdk/build-tools/36.0.0:/mnt/c/Users/gabri/Documents/WindowsPowerShell/Modules/ps2exe/1.0.15:/mnt/c/Users/gabri/AppData/Roaming/Python/Python311/Scripts:/mnt/c/ProgramData/nvm:/mnt/c/nvm4w/nodejs:/mnt/c/nvm4w/nodejs/node_modules/@vscode/ripgrep/bin:/mnt/c/nvm4w/nodejs:/mnt/c/WINDOWS/system32/config/systemprofile/AppData/Local/Microsoft/WindowsApps:/mnt/c/Program Files (x86)/Razer/ChromaBroadcast/bin:/mnt/c/Program Files/Razer/ChromaBroadcast/bin:/mnt/c/Users/gabri/.local/bin:/mnt/c/Users/gabri/AppData/Local/pnpm:/mnt/c/Users/gabri/AppData/Local/Programs/Microsoft VS Code/bin:/mnt/c/Users/gabri/AppData/Local/Programs/Ollama:/mnt/c/Program Files/PowerToys/:/mnt/c/Program Files/VSCodium/bin:/mnt/c/Users/gabri/Documents/Infotopology/VDL_Vault/scripts/shimdex:/mnt/c/Users/gabri/.local/bin:/mnt/c/Users/gabri/AppData/Local/pnpm:/mnt/c/Program Files (x86)/Razer Chroma SDK/bin:/mnt/c/Program Files/Razer Chroma SDK/bin:/mnt/c/Program Files/Microsoft MPI/Bin/:/mnt/c/Program Files (x86)/Common Files/Intel/Shared Libraries/redist/intel64/compiler:/mnt/c/Program Files/Python311/Scripts/:/mnt/c/Program Files/Python311/:/mnt/c/Windows/system32:/mnt/c/Windows:/mnt/c/Windows/System32/Wbem:/mnt/c/Windows/System32/WindowsPowerShell/v1.0/:/mnt/c/Windows/System32/OpenSSH/:/mnt/c/Program Files (x86)/NVIDIA Corporation/PhysX/Common:/mnt/c/Users/gabri/Applications/Coding/nvm-0.39.3:/mnt/c/ProgramData/chocolatey/bin:/mnt/c/Program Files/Docker/Docker/resources/bin:/mnt/c/Program Files/dotnet/:/mnt/c/Users/gabri/AppData/Roaming/Python/Python311:/mnt/c/Users/gabri/AppData/Roaming/Python/:/mnt/c/Program Files/GitHub CLI/:/mnt/c/Program Files (x86)/Yarn/bin/:/mnt/c/Program Files/NVIDIA Corporation/NVIDIA app/NvDLISR:/mnt/c/Program Files/PowerShell/7-preview/pre:/mnt/c/Program Files/Git/cmd:/mnt/c/Program Files/Genymobile/Genymotion:/mnt/c/Program Files/Android/Android Studio/jbr:/mnt/c/Program Files/Android/Android Studio/jbr/bin:/mnt/c/Users/gabri/Applications/Gradle/gradle-8.7/bin:/mnt/c/Users/gabri/AppData/Local/Android/Sdk/platform-tools:/mnt/c/Users/gabri/AppData/Local/Android/Sdk/emulator:/mnt/c/Users/gabri/Applications/tools:/mnt/c/Users/gabri/Applications/apktool:/mnt/c/Users/gabri/AppData/Local/Android/Sdk/build-tools/36.0.0:/mnt/c/Users/gabri/Documents/WindowsPowerShell/Modules/ps2exe/1.0.15:/mnt/c/Users/gabri/AppData/Roaming/Python/Python311/Scripts:/mnt/c/ProgramData/nvm:/mnt/c/nvm4w/nodejs:/mnt/c/nvm4w/nodejs/node_modules/@vscode/ripgrep/bin:/mnt/c/Program Files/VSCodium/bin:/mnt/c/WINDOWS/system32/config/systemprofile/AppData/Local/Microsoft/WindowsApps:/mnt/c/Program Files (x86)/Razer/ChromaBroadcast/bin:/mnt/c/Program Files/Razer/ChromaBroadcast/bin:/mnt/c/Users/gabri/AppData/Local/Programs/Ollama:/mnt/c/Users/gabri/.dotnet/tools:/snap/bin",
+        "PLAYWRIGHT_BROWSERS_PATH": "/home/gabri/.cache/ms-playwright"
+      }
+    },
+    "sh": {
+      "type": "stdio",
+      "command": "/home/gabri/.local/bin/terminal_controller",
+      "args": [
+        "--workdir",
+        "/mnt/c/Users/gabri/Documents/Infotopology/VDL_Vault",
+        "--allow",
+        "npm,pytest,make,python,git"
+      ]
+    },
+    "strata": {
+      "type": "stdio",
+      "command": "/home/gabri/.local/bin/strata"
     }
   }
 }

@@ -5,7 +5,7 @@
         "annotations": {}
       },
       "build_context": {
-        "description": "Build context from a memory:// URI to continue conversations naturally.\n    \n    Use this to follow up on previous discussions or explore related topics.\n    \n    Memory URL Format:\n    - Use paths like \"folder/note\" or \"memory://folder/note\" \n    - Pattern matching: \"folder/*\" matches all notes in folder\n    - Valid characters: letters, numbers, hyphens, underscores, forward slashes\n    - Avoid: double slashes (//), angle brackets (\u003c\u003e), quotes, pipes (|)\n    - Examples: \"specs/search\", \"projects/basic-memory\", \"notes/*\"\n    \n    Timeframes support natural language like:\n    - \"2 days ago\", \"last week\", \"today\", \"3 months ago\"\n    - Or standard formats like \"7d\", \"24h\"\n    ",
+        "description": "Build context from a memory:// URI to continue conversations naturally.\n    \n    Use this to follow up on previous discussions or explore related topics.\n    \n    Memory URL Format:\n    - Use paths like \"folder/note\" or \"memory://folder/note\" \n    - Pattern matching: \"folder/*\" matches all notes in folder\n    - Valid characters: letters, numbers, hyphens, underscores, forward slashes\n    - Avoid: double slashes (//), angle brackets (<>), quotes, pipes (|)\n    - Examples: \"specs/search\", \"projects/basic-memory\", \"notes/*\"\n    \n    Timeframes support natural language like:\n    - \"2 days ago\", \"last week\", \"today\", \"3 months ago\"\n    - Or standard formats like \"7d\", \"24h\"\n    ",
         "name": "build_context"
       },
       "calculate_directory_size": {
@@ -245,6 +245,14 @@
       "zip_files": {
         "description": "Creates a ZIP archive by compressing files. It takes a list of files to compress and a target path for the resulting ZIP file. Both the source files and the target ZIP file should reside within allowed directories.",
         "name": "zip_files"
+      },
+      "deep_search": {
+        "name": "deep_search",
+        "description": "Plan requirements and auto-select compatible MCP servers."
+      },
+      "list_servers": {
+        "name": "list_servers",
+        "description": "Return server descriptors and setup guidance."
       }
     }
   },
@@ -367,6 +375,23 @@
         "s_fetch_pattern": {
           "enabled": true
         }
+      }
+    },
+    "public_mcp_catalog": {
+      "enabled": true,
+      "tools": {
+        "deep_search": {
+          "enabled": true,
+          "description": "Plan requirements and auto-select compatible MCP servers."
+        },
+        "list_servers": {
+          "enabled": true,
+          "description": "Return server descriptors and setup guidance."
+        }
+      },
+      "metadata": {
+        "description": "Remote 1mcp discovery endpoint exposed over HTTP/SSE.",
+        "source": "https://github.com/Dub1n/stelae-1mcpserver"
       }
     }
   }

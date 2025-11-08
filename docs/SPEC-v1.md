@@ -106,7 +106,7 @@ curl -s https://mcp.infotopology.xyz/mcp \
 2. **Redeploy facade** via the helper script:
 
    ```bash
-   ./scripts/restart_stelae.sh
+   ./scripts/run_restart_stelae.sh
    ```
 
    This rebuilds the proxy binary, restarts pm2 processes, validates the tunnel, and prints a diagnostic `tools/list` sample.
@@ -117,13 +117,13 @@ curl -s https://mcp.infotopology.xyz/mcp \
 
 | Symptom | Likely cause | How to fix |
 | --- | --- | --- |
-| `mcp-proxy` not listening on `:9090` | build failed or pm2 stopped | `./scripts/restart_stelae.sh` or `source ~/.nvm/nvm.sh && pm2 restart mcp-proxy` |
-| Override hints missing from manifest | override file not loaded or stale | confirm `config/tool_overrides.json` is valid JSON, rerun `make render-proxy`, then `scripts/restart_stelae.sh --full` |
+| `mcp-proxy` not listening on `:9090` | build failed or pm2 stopped | `./scripts/run_restart_stelae.sh` or `source ~/.nvm/nvm.sh && pm2 restart mcp-proxy` |
+| Override hints missing from manifest | override file not loaded or stale | confirm `config/tool_overrides.json` is valid JSON, rerun `make render-proxy`, then `scripts/run_restart_stelae.sh --full` |
 | `tools/call search` returns `{ "results": [] }` | running an old version; static hits missing | rebuild Go proxy (`facade_search.go`) and restart |
 | Codex CLI reports “MCP client … request timed out” | STDIO bridge launched without proper env | confirm `config.toml` entry includes `PYTHONPATH=/home/gabri/dev/stelae` and `STELAE_STREAMABLE_TRANSPORT=stdio`; run `make check-connector` locally |
-| Cloudflare 530 page | tunnel momentarily unhealthy | rerun `scripts/restart_stelae.sh` (ensures tunnel + pm2 state), or `source ~/.nvm/nvm.sh && pm2 restart cloudflared` |
+| Cloudflare 530 page | tunnel momentarily unhealthy | rerun `scripts/run_restart_stelae.sh` (ensures tunnel + pm2 state), or `source ~/.nvm/nvm.sh && pm2 restart cloudflared` |
 | `make check-connector` flags unexpected catalog | new upstream tools exposed or overrides missing | inspect `logs/mcp-proxy.err.log` and confirm `config/tool_overrides.json` is up to date, then rerun the restart script |
-| Startup logs mention "master override" warnings | master-level description/title overrides or attempted renames detected | Review `config/tool_overrides.json`; per-tool overrides are preferred. Master renames are ignored, while master descriptions still apply but notify during `make render-proxy`/`scripts/restart_stelae.sh`. |
+| Startup logs mention "master override" warnings | master-level description/title overrides or attempted renames detected | Review `config/tool_overrides.json`; per-tool overrides are preferred. Master renames are ignored, while master descriptions still apply but notify during `make render-proxy`/`scripts/run_restart_stelae.sh`. |
 | `tools/call fetch` returns network errors | upstream site blocked or fetch server delay | retry, or inspect `logs/fetch.err.log` for HTTP errors |
 | SSE drops quickly | Cloudflare idle timeout | facade sends keepalives every 15s; if missing, ensure Go proxy heartbeat loop is running |
 
