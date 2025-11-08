@@ -35,10 +35,10 @@ Root cause: the Scrapling MCP server (scrapling-fetch-mcp) returns a single stri
 
 1) With server enabled, call either tool (any URL) and get schema error:
 
-- `s_fetch_page { url: "https://example.com", mode: "basic", format: "markdown", max_length: 5000 }`
-- `s_fetch_pattern { url: "https://roundwood.com/decking/...", search_pattern: "£\\s?\\d+[\\d,.]*.*?(?:per\\s*m²|per\\s*m2|per\\s*m)" }`
+    - `s_fetch_page { url: "https://example.com", mode: "basic", format: "markdown", max_length: 5000 }`
+    - `s_fetch_pattern { url: "https://roundwood.com/decking/...", search_pattern: "£\\s?\\d+[\\d,.]*.*?(?:per\\s*m²|per\\s*m2|per\\s*m)" }`
 
-Observed: “Output validation error: outputSchema defined but no structured output returned”.
+    Observed: “Output validation error: outputSchema defined but no structured output returned”.
 
 2) Before the server was enabled, the proxy returned: “Server 'scrapling-fetch' not found or not connected”. After enabling, the schema error persists.
 

@@ -25,15 +25,7 @@ Prerequisite: `dev/tasks/tool-override-population.md`
 
 - Requires populated overrides (see prerequisite task) so the shim has a baseline schema to compare against.
 - Consider surfacing telemetry (e.g., logs or status file note) so we can audit how often each step is used.
- - Delivered via `scripts/mcp_output_shim.py` (declared-schema wrapper before generic fallback) and documented in README/architecture notes.
-
-## Checklist (Copy into PR or issue if needed)
-
-- [ ] Code/tests updated
-- [ ] Docs updated
-- [ ] Progress tracker updated
-- [ ] Task log updated
-- [ ] Checklist completed
+- Delivered via `scripts/mcp_output_shim.py` (declared-schema wrapper before generic fallback) and documented in README/architecture notes.
 
 ---
 
