@@ -8,14 +8,16 @@ import asyncio
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable
+from typing import Any, Dict, Iterable, Mapping, Sequence
 
+import httpx
+from mcp import types
 from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
-from mcp import types
 
 DEFAULT_PROXY_PATH = Path("config/proxy.json")
 DEFAULT_OVERRIDES_PATH = Path("config/tool_overrides.json")
+DEFAULT_PROXY_TIMEOUT = 15.0
 
 
 class OverridesStore:
@@ -31,17 +33,22 @@ class OverridesStore:
                 raise SystemExit(f"Override file {self.path} is invalid JSON: {exc}")
         return {}
 
-    def ensure_schema(self, server: str, tool: str, key: str, schema: Any) -> bool:
-        if not schema:
+    def ensure_schema(self, server: str | None, tool: str, key: str, schema: Any) -> bool:
+        if not schema or not tool:
             return False
-        servers = self.data.setdefault("servers", {})
-        server_block = servers.setdefault(server, {})
-        server_block.setdefault("enabled", True)
-        tools = server_block.setdefault("tools", {})
-        tool_block = tools.setdefault(tool, {"enabled": True})
+        payload = json.loads(json.dumps(schema))
+        if server:
+            servers = self.data.setdefault("servers", {})
+            server_block = servers.setdefault(server, {})
+            server_block.setdefault("enabled", True)
+            tools = server_block.setdefault("tools", {})
+            tool_block = tools.setdefault(tool, {"enabled": True})
+        else:
+            tools = self.data.setdefault("tools", {})
+            tool_block = tools.setdefault(tool, {"enabled": True})
         if key in tool_block:
             return False
-        tool_block[key] = json.loads(json.dumps(schema))
+        tool_block[key] = payload
         return True
 
     def write(self) -> None:
@@ -58,6 +65,25 @@ async def fetch_tools(command: str, args: Iterable[str], env: Dict[str, str] | N
             await session.initialize()
             result = await session.list_tools()
             return list(result.tools)
+
+
+async def fetch_tools_via_proxy(proxy_url: str, timeout: float) -> list[Mapping[str, Any]]:
+    payload = {"jsonrpc": "2.0", "id": "populate", "method": "tools/list"}
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.post(proxy_url, json=payload)
+        response.raise_for_status()
+    data = response.json()
+    try:
+        tools = data["result"]["tools"]
+    except KeyError as exc:
+        raise SystemExit(f"Proxy at {proxy_url} did not return tools/list payload: missing {exc}")
+    if not isinstance(tools, list):
+        raise SystemExit(f"Proxy at {proxy_url} returned malformed tools list")
+    normalized: list[Mapping[str, Any]] = []
+    for entry in tools:
+        if isinstance(entry, Mapping):
+            normalized.append(entry)
+    return normalized
 
 
 def load_proxy_config(path: Path) -> Dict[str, Any]:
@@ -81,22 +107,22 @@ def iter_stdio_servers(config: Dict[str, Any]) -> Iterable[tuple[str, Dict[str, 
         yield name, entry
 
 
-def copy_schema(schema: Any) -> Any:
-    return json.loads(json.dumps(schema))
+def record_tool(overrides: OverridesStore, server: str | None, tool_payload: Mapping[str, Any], keys: Sequence[str]) -> bool:
+    name = tool_payload.get("name")
+    if not isinstance(name, str) or not name:
+        return False
+    changed = False
+    for key in keys:
+        changed |= overrides.ensure_schema(server, name, key, tool_payload.get(key))
+    return changed
 
 
-async def main() -> None:
-    parser = argparse.ArgumentParser(description="Populate tool override schemas from downstream MCP servers.")
-    parser.add_argument("--proxy", default=str(DEFAULT_PROXY_PATH), help="Path to rendered config/proxy.json")
-    parser.add_argument("--overrides", default=str(DEFAULT_OVERRIDES_PATH), help="Path to config/tool_overrides.json")
-    parser.add_argument("--servers", nargs="*", help="Optional subset of server names to scan")
-    parser.add_argument("--dry-run", action="store_true", help="Show planned changes without writing")
-    args = parser.parse_args()
-
-    config = load_proxy_config(Path(args.proxy))
-    overrides = OverridesStore(Path(args.overrides))
-    target_servers = set(args.servers or [])
-
+async def populate_from_stdio(
+    config: Dict[str, Any],
+    overrides: OverridesStore,
+    target_servers: set[str],
+    keys: Sequence[str],
+) -> int:
     total_updates = 0
     for name, entry in iter_stdio_servers(config):
         if target_servers and name not in target_servers:
@@ -110,12 +136,48 @@ async def main() -> None:
             continue
         for tool in tools:
             payload = tool.model_dump(mode="json")
-            changed = False
-            for key in ("inputSchema", "outputSchema"):
-                changed |= overrides.ensure_schema(name, tool.name, key, payload.get(key))
-            if changed:
+            if record_tool(overrides, name, payload, keys):
                 total_updates += 1
                 print(f"[update] {name}.{tool.name} - recorded schema")
+    return total_updates
+
+
+async def populate_from_proxy_url(
+    proxy_url: str,
+    overrides: OverridesStore,
+    keys: Sequence[str],
+    timeout: float,
+) -> int:
+    tools = await fetch_tools_via_proxy(proxy_url, timeout)
+    total_updates = 0
+    for entry in tools:
+        if record_tool(overrides, None, entry, keys):
+            total_updates += 1
+            print(f"[update] proxy://{entry.get('name')} - recorded schema")
+    return total_updates
+
+
+async def main() -> None:
+    parser = argparse.ArgumentParser(description="Populate tool override schemas from downstream MCP servers.")
+    parser.add_argument("--proxy", default=str(DEFAULT_PROXY_PATH), help="Path to rendered config/proxy.json")
+    parser.add_argument("--proxy-url", help="Optional MCP endpoint (e.g. http://127.0.0.1:9090/mcp) to reuse an existing tools/list result")
+    parser.add_argument("--proxy-timeout", type=float, default=DEFAULT_PROXY_TIMEOUT, help="Timeout (seconds) for proxy HTTP requests")
+    parser.add_argument("--overrides", default=str(DEFAULT_OVERRIDES_PATH), help="Path to config/tool_overrides.json")
+    parser.add_argument("--servers", nargs="*", help="Optional subset of server names to scan")
+    parser.add_argument("--dry-run", action="store_true", help="Show planned changes without writing")
+    args = parser.parse_args()
+
+    overrides = OverridesStore(Path(args.overrides))
+    keys: Sequence[str] = ("inputSchema", "outputSchema")
+
+    if args.proxy_url:
+        if args.servers:
+            parser.error("--servers cannot be combined with --proxy-url")
+        total_updates = await populate_from_proxy_url(args.proxy_url, overrides, keys, args.proxy_timeout)
+    else:
+        config = load_proxy_config(Path(args.proxy))
+        target_servers = set(args.servers or [])
+        total_updates = await populate_from_stdio(config, overrides, target_servers, keys)
 
     if total_updates == 0:
         print("No schema updates required")

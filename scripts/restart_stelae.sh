@@ -12,6 +12,7 @@ PROXY_TEMPLATE="${STELAE_DIR}/config/proxy.template.json"
 PROXY_JSON="${STELAE_DIR}/config/proxy.json"
 RENDERER="${STELAE_DIR}/scripts/render_proxy_config.py"
 ECOSYSTEM="${STELAE_DIR}/ecosystem.config.js"
+PYTHON_BIN="${PYTHON:-$HOME_DIR/.venvs/stelae-bridge/bin/python}"
 
 PROXY_PORT="${PROXY_PORT:-9090}"                   # proxy listens here
 
@@ -112,6 +113,19 @@ wait_tools_ready() {
     fi
     sleep 1
   done
+}
+
+populate_overrides_via_proxy() {
+  local url="$1"
+  if [ -z "$PYTHON_BIN" ] || [ ! -x "$PYTHON_BIN" ]; then
+    warn "Skipping tool override population; PYTHON=$PYTHON_BIN not executable"
+    return
+  fi
+  if "$PYTHON_BIN" "$STELAE_DIR/scripts/populate_tool_overrides.py" --proxy-url "$url" >/dev/null; then
+    log "Tool overrides synced via proxy catalog"
+  else
+    warn "Tool override population failed via proxy"
+  fi
 }
 
 ensure_cloudflared_ingress() {
@@ -252,6 +266,9 @@ curl --max-time "$CURL_MAX_TIME" -s "http://127.0.0.1:${PROXY_PORT}/mcp" -H 'Con
   --data '{"jsonrpc":"2.0","id":"init","method":"initialize","params":{"protocolVersion":"2024-11-05"}}' | jq -C '.' || true
 
 wait_tools_ready
+
+log "Syncing tool overrides via proxy catalog"
+populate_overrides_via_proxy "http://127.0.0.1:${PROXY_PORT}/mcp"
 
 log "Local probe: tools/list → names (first 40)"
 curl --max-time "$CURL_MAX_TIME" -s "http://127.0.0.1:${PROXY_PORT}/mcp" -H 'Content-Type: application/json' \

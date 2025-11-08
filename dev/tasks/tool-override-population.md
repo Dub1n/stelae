@@ -21,7 +21,9 @@ Tags: `#infra`
 
 ## Notes
 
-- Delivered via `scripts/populate_tool_overrides.py`, which launches stdio servers, captures schemas, and only writes missing entries.
+- Delivered via `scripts/populate_tool_overrides.py`, which now supports two modes:
+  - `--proxy-url <endpoint>` reuses an existing MCP proxy `tools/list` response (used automatically by `scripts/restart_stelae.sh` after the readiness probe) so we avoid re-spawning downstream servers during ordinary restarts.
+  - `--servers <name>` continues to launch specific stdio servers for ad-hoc seeding during development.
 - The generator should run during startup (e.g., invoked by `scripts/render_proxy_config.py` or a dedicated `make populate-overrides` step). It must be safe to run repeatedly and only fill missing fields (never erase manual tweaks).
 - Coordinate with the shim automation so newly populated schemas feed directly into the retry ladder (pass-through → declared schema → generic shim).
 - After this lands, revisit `dev/tasks/mcp-auto-loading.md` to confirm the discovery flow uses the same helper.
