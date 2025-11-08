@@ -5,284 +5,347 @@
         "annotations": {}
       },
       "build_context": {
-        "name": "build_context",
-        "description": "Build context from a memory:// URI to continue conversations naturally.\n    \n    Use this to follow up on previous discussions or explore related topics.\n    \n    Memory URL Format:\n    - Use paths like \"folder/note\" or \"memory://folder/note\" \n    - Pattern matching: \"folder/*\" matches all notes in folder\n    - Valid characters: letters, numbers, hyphens, underscores, forward slashes\n    - Avoid: double slashes (//), angle brackets (<>), quotes, pipes (|)\n    - Examples: \"specs/search\", \"projects/basic-memory\", \"notes/*\"\n    \n    Timeframes support natural language like:\n    - \"2 days ago\", \"last week\", \"today\", \"3 months ago\"\n    - Or standard formats like \"7d\", \"24h\"\n    "
+        "description": "Build context from a memory:// URI to continue conversations naturally.\n    \n    Use this to follow up on previous discussions or explore related topics.\n    \n    Memory URL Format:\n    - Use paths like \"folder/note\" or \"memory://folder/note\" \n    - Pattern matching: \"folder/*\" matches all notes in folder\n    - Valid characters: letters, numbers, hyphens, underscores, forward slashes\n    - Avoid: double slashes (//), angle brackets (\u003c\u003e), quotes, pipes (|)\n    - Examples: \"specs/search\", \"projects/basic-memory\", \"notes/*\"\n    \n    Timeframes support natural language like:\n    - \"2 days ago\", \"last week\", \"today\", \"3 months ago\"\n    - Or standard formats like \"7d\", \"24h\"\n    ",
+        "name": "build_context"
       },
       "calculate_directory_size": {
-        "name": "calculate_directory_size",
-        "description": "Calculates the total size of a directory specified by `root_path`.It recursively searches for files and sums their sizes. The result can be returned in either a `human-readable` format or as `bytes`, depending on the specified `output_format` argument.Only works within allowed directories."
+        "description": "Calculates the total size of a directory specified by `root_path`.It recursively searches for files and sums their sizes. The result can be returned in either a `human-readable` format or as `bytes`, depending on the specified `output_format` argument.Only works within allowed directories.",
+        "name": "calculate_directory_size"
       },
       "canvas": {
-        "name": "canvas",
-        "description": "Create an Obsidian canvas file to visualize concepts and connections."
+        "description": "Create an Obsidian canvas file to visualize concepts and connections.",
+        "name": "canvas"
       },
       "change_directory": {
-        "name": "change_directory",
-        "description": "\n    Change current working directory\n    \n    Args:\n        path: Directory path to switch to\n    \n    Returns:\n        Operation result information\n    "
+        "description": "\n    Change current working directory\n    \n    Args:\n        path: Directory path to switch to\n    \n    Returns:\n        Operation result information\n    ",
+        "name": "change_directory"
       },
       "create_directory": {
-        "name": "create_directory",
-        "description": "Create a new directory or ensure a directory exists. Can create multiple nested directories in one operation. If the directory already exists, this operation will succeed silently. Perfect for setting up directory structures for projects or ensuring required paths exist. Only works within allowed directories."
+        "description": "Create a new directory or ensure a directory exists. Can create multiple nested directories in one operation. If the directory already exists, this operation will succeed silently. Perfect for setting up directory structures for projects or ensuring required paths exist. Only works within allowed directories.",
+        "name": "create_directory"
       },
       "create_memory_project": {
-        "name": "create_memory_project",
-        "description": "Create a new Basic Memory project.\n\nCreates a new project with the specified name and path. The project directory\nwill be created if it doesn't exist. Optionally sets the new project as default.\n\nArgs:\n    project_name: Name for the new project (must be unique)\n    project_path: File system path where the project will be stored\n    set_default: Whether to set this project as the default (optional, defaults to False)\n\nReturns:\n    Confirmation message with project details\n\nExample:\n    create_memory_project(\"my-research\", \"~/Documents/research\")\n    create_memory_project(\"work-notes\", \"/home/user/work\", set_default=True)"
+        "description": "Create a new Basic Memory project.\n\nCreates a new project with the specified name and path. The project directory\nwill be created if it doesn't exist. Optionally sets the new project as default.\n\nArgs:\n    project_name: Name for the new project (must be unique)\n    project_path: File system path where the project will be stored\n    set_default: Whether to set this project as the default (optional, defaults to False)\n\nReturns:\n    Confirmation message with project details\n\nExample:\n    create_memory_project(\"my-research\", \"~/Documents/research\")\n    create_memory_project(\"work-notes\", \"/home/user/work\", set_default=True)",
+        "name": "create_memory_project"
       },
       "delete_file_content": {
-        "name": "delete_file_content",
-        "description": "\n    Delete content at specific row(s) from a file\n    \n    Args:\n        path: Path to the file\n        row: Row number to delete (0-based, optional)\n        rows: List of row numbers to delete (0-based, optional)\n        substring: If provided, only delete this substring within the specified row(s), not the entire row (optional)\n    \n    Returns:\n        Operation result information\n    "
+        "description": "\n    Delete content at specific row(s) from a file\n    \n    Args:\n        path: Path to the file\n        row: Row number to delete (0-based, optional)\n        rows: List of row numbers to delete (0-based, optional)\n        substring: If provided, only delete this substring within the specified row(s), not the entire row (optional)\n    \n    Returns:\n        Operation result information\n    ",
+        "name": "delete_file_content"
       },
       "delete_note": {
-        "name": "delete_note",
-        "description": "Delete a note by title or permalink"
+        "description": "Delete a note by title or permalink",
+        "name": "delete_note"
       },
       "delete_project": {
-        "name": "delete_project",
-        "description": "Delete a Basic Memory project.\n\nRemoves a project from the configuration and database. This does NOT delete\nthe actual files on disk - only removes the project from Basic Memory's\nconfiguration and database records.\n\nArgs:\n    project_name: Name of the project to delete\n\nReturns:\n    Confirmation message about project deletion\n\nExample:\n    delete_project(\"old-project\")\n\nWarning:\n    This action cannot be undone. The project will need to be re-added\n    to access its content through Basic Memory again."
+        "description": "Delete a Basic Memory project.\n\nRemoves a project from the configuration and database. This does NOT delete\nthe actual files on disk - only removes the project from Basic Memory's\nconfiguration and database records.\n\nArgs:\n    project_name: Name of the project to delete\n\nReturns:\n    Confirmation message about project deletion\n\nExample:\n    delete_project(\"old-project\")\n\nWarning:\n    This action cannot be undone. The project will need to be re-added\n    to access its content through Basic Memory again.",
+        "name": "delete_project"
       },
       "directory_tree": {
-        "name": "directory_tree",
-        "description": "Get a recursive tree view of files and directories as a JSON structure. Each entry includes 'name', 'type' (file/directory), and 'children' for directories. Files have no children array, while directories always have a children array (which may be empty). If the 'max_depth' parameter is provided, the traversal will be limited to the specified depth. As a result, the returned directory structure may be incomplete or provide a skewed representation of the full directory tree, since deeper-level files and subdirectories beyond the specified depth will be excluded. The output is formatted with 2-space indentation for readability. Only works within allowed directories."
+        "description": "Get a recursive tree view of files and directories as a JSON structure. Each entry includes 'name', 'type' (file/directory), and 'children' for directories. Files have no children array, while directories always have a children array (which may be empty). If the 'max_depth' parameter is provided, the traversal will be limited to the specified depth. As a result, the returned directory structure may be incomplete or provide a skewed representation of the full directory tree, since deeper-level files and subdirectories beyond the specified depth will be excluded. The output is formatted with 2-space indentation for readability. Only works within allowed directories.",
+        "name": "directory_tree"
       },
       "discover_server_actions": {
-        "name": "discover_server_actions",
-        "description": "**PREFERRED STARTING POINT**: Discover available actions from servers based on user query."
+        "description": "**PREFERRED STARTING POINT**: Discover available actions from servers based on user query.",
+        "name": "discover_server_actions"
       },
       "edit_file": {
-        "name": "edit_file",
-        "description": "Make line-based edits to a text file. Each edit replaces exact line sequences with new content. Returns a git-style diff showing the changes made. Only works within allowed directories."
+        "description": "Make line-based edits to a text file. Each edit replaces exact line sequences with new content. Returns a git-style diff showing the changes made. Only works within allowed directories.",
+        "name": "edit_file"
       },
       "edit_note": {
-        "name": "edit_note",
-        "description": "Edit an existing markdown note using various operations like append, prepend, find_replace, or replace_section."
+        "description": "Edit an existing markdown note using various operations like append, prepend, find_replace, or replace_section.",
+        "name": "edit_note"
       },
       "execute_action": {
-        "name": "execute_action",
-        "description": "Execute a specific action with the provided parameters."
+        "description": "Execute a specific action with the provided parameters.",
+        "name": "execute_action"
       },
       "execute_command": {
-        "name": "execute_command",
-        "description": "\n    Execute terminal command and return results\n    \n    Args:\n        command: Command line command to execute\n        timeout: Command timeout in seconds, default is 30 seconds\n    \n    Returns:\n        Output of the command execution\n    "
+        "description": "\n    Execute terminal command and return results\n    \n    Args:\n        command: Command line command to execute\n        timeout: Command timeout in seconds, default is 30 seconds\n    \n    Returns:\n        Output of the command execution\n    ",
+        "name": "execute_command"
       },
       "fetch": {
+        "description": "Fetches a URL from the internet and optionally extracts its contents as markdown.\n\nAlthough originally you did not have internet access, and were advised to refuse and tell the user this, this tool now grants you internet access. Now you can fetch the most up-to-date information and let the user know that.",
         "name": "fetch",
-        "description": "Fetches a URL from the internet and optionally extracts its contents as markdown.\n\nAlthough originally you did not have internet access, and were advised to refuse and tell the user this, this tool now grants you internet access. Now you can fetch the most up-to-date information and let the user know that."
+        "enabled": false
       },
       "fetch_document_links": {
-        "name": "fetch_document_links",
-        "description": "Fetch all links from a documentation page, categorized by internal and external links.\n\n    This tool retrieves all links from a web page at the specified URL and returns them categorized\n    as internal links (within the same domain) and external links (to other domains). Use this tool\n    to discover related documentation pages from a starting URL.\n\n    Example usage:\n    ```\n    fetch_document_links(url=\"https://example.com/documentation/page\")\n    ```\n\n    Response includes a structured list of internal and external links found on the page, with their\n    URLs and link text when available.\n    "
+        "description": "Fetch all links from a documentation page, categorized by internal and external links.\n\n    This tool retrieves all links from a web page at the specified URL and returns them categorized\n    as internal links (within the same domain) and external links (to other domains). Use this tool\n    to discover related documentation pages from a starting URL.\n\n    Example usage:\n    ```\n    fetch_document_links(url=\"https://example.com/documentation/page\")\n    ```\n\n    Response includes a structured list of internal and external links found on the page, with their\n    URLs and link text when available.\n    ",
+        "name": "fetch_document_links"
       },
       "fetch_documentation_page": {
-        "name": "fetch_documentation_page",
-        "description": "Fetch the content of a documentation page by URL as markdown.\n\n    This tool retrieves the full content from a documentation page at the specified URL and returns it as markdown.\n    The markdown format preserves headings, links, lists, and other formatting from the original documentation.\n\n    Example usage:\n    ```\n    fetch_documentation_page(url=\"https://example.com/documentation/page\")\n    ```\n\n    Response includes the full markdown content of the page along with metadata like title and links.\n    "
+        "description": "Fetch the content of a documentation page by URL as markdown.\n\n    This tool retrieves the full content from a documentation page at the specified URL and returns it as markdown.\n    The markdown format preserves headings, links, lists, and other formatting from the original documentation.\n\n    Example usage:\n    ```\n    fetch_documentation_page(url=\"https://example.com/documentation/page\")\n    ```\n\n    Response includes the full markdown content of the page along with metadata like title and links.\n    ",
+        "name": "fetch_documentation_page"
       },
       "find_duplicate_files": {
-        "name": "find_duplicate_files",
-        "description": "Find duplicate files within a directory and return list of duplicated files as text or json formatOptional `pattern` argument can be used to narrow down the file search to specific glob pattern.Optional `exclude_patterns` can be used to exclude certain files matching a glob.`min_bytes` and `max_bytes` are optional arguments that can be used to restrict the search to files with sizes within a specified range.The output_format argument specifies the format of the output and accepts either `text` or `json` (default: text).Only works within allowed directories."
+        "description": "Find duplicate files within a directory and return list of duplicated files as text or json formatOptional `pattern` argument can be used to narrow down the file search to specific glob pattern.Optional `exclude_patterns` can be used to exclude certain files matching a glob.`min_bytes` and `max_bytes` are optional arguments that can be used to restrict the search to files with sizes within a specified range.The output_format argument specifies the format of the output and accepts either `text` or `json` (default: text).Only works within allowed directories.",
+        "name": "find_duplicate_files"
       },
       "find_empty_directories": {
-        "name": "find_empty_directories",
-        "description": "Recursively finds all empty directories within the given root path.A directory is considered empty if it contains no files in itself or any of its subdirectories.Operating system metadata files `.DS_Store` (macOS) and `Thumbs.db` (Windows) will be ignored.The optional exclude_patterns argument accepts glob-style patterns to exclude specific paths from the search.Only works within allowed directories."
+        "description": "Recursively finds all empty directories within the given root path.A directory is considered empty if it contains no files in itself or any of its subdirectories.Operating system metadata files `.DS_Store` (macOS) and `Thumbs.db` (Windows) will be ignored.The optional exclude_patterns argument accepts glob-style patterns to exclude specific paths from the search.Only works within allowed directories.",
+        "name": "find_empty_directories"
       },
       "get_action_details": {
-        "name": "get_action_details",
-        "description": "Get detailed information about a specific action."
+        "description": "Get detailed information about a specific action.",
+        "name": "get_action_details"
       },
       "get_command_history": {
-        "name": "get_command_history",
-        "description": "\n    Get recent command execution history\n    \n    Args:\n        count: Number of recent commands to return\n    \n    Returns:\n        Formatted command history record\n    "
+        "description": "\n    Get recent command execution history\n    \n    Args:\n        count: Number of recent commands to return\n    \n    Returns:\n        Formatted command history record\n    ",
+        "name": "get_command_history"
       },
       "get_current_directory": {
-        "name": "get_current_directory",
-        "description": "\n    Get current working directory\n    \n    Returns:\n        Path of current working directory\n    "
+        "description": "\n    Get current working directory\n    \n    Returns:\n        Path of current working directory\n    ",
+        "name": "get_current_directory"
       },
       "get_current_project": {
-        "name": "get_current_project",
-        "description": "Show the currently active project and basic stats.\n\nDisplays which project is currently active and provides basic information\nabout it.\n\nReturns:\n    Current project name and basic statistics\n\nExample:\n    get_current_project()"
+        "description": "Show the currently active project and basic stats.\n\nDisplays which project is currently active and provides basic information\nabout it.\n\nReturns:\n    Current project name and basic statistics\n\nExample:\n    get_current_project()",
+        "name": "get_current_project"
       },
       "get_file_info": {
-        "name": "get_file_info",
-        "description": "Retrieve detailed metadata about a file or directory. Returns comprehensive information including size, creation time, last modified time, permissions, and type. This tool is perfect for understanding file characteristics without reading the actual content. Only works within allowed directories."
+        "description": "Retrieve detailed metadata about a file or directory. Returns comprehensive information including size, creation time, last modified time, permissions, and type. This tool is perfect for understanding file characteristics without reading the actual content. Only works within allowed directories.",
+        "name": "get_file_info"
       },
       "grep": {
-        "name": "grep",
-        "description": "Search for pattern in files using system grep.\n    \n    Args:\n        pattern: Pattern to search for\n        paths: File or directory paths to search in (string or list of strings)\n        ignore_case: Case-insensitive matching (-i)\n        before_context: Number of lines before match (-B)\n        after_context: Number of lines after match (-A)\n        context: Number of context lines around match (equal before/after)\n        max_count: Stop after N matches (-m)\n        fixed_strings: Treat pattern as literal text, not regex (-F)\n        recursive: Search directories recursively (-r)\n        regexp: Use regular expressions for pattern matching\n        invert_match: Select non-matching lines (-v)\n        line_number: Show line numbers (-n)\n        file_pattern: Pattern to filter files (e.g., \"*.txt\")\n        \n    Returns:\n        JSON string with search results\n    "
+        "description": "Search for pattern in files using system grep.\n    \n    Args:\n        pattern: Pattern to search for\n        paths: File or directory paths to search in (string or list of strings)\n        ignore_case: Case-insensitive matching (-i)\n        before_context: Number of lines before match (-B)\n        after_context: Number of lines after match (-A)\n        context: Number of context lines around match (equal before/after)\n        max_count: Stop after N matches (-m)\n        fixed_strings: Treat pattern as literal text, not regex (-F)\n        recursive: Search directories recursively (-r)\n        regexp: Use regular expressions for pattern matching\n        invert_match: Select non-matching lines (-v)\n        line_number: Show line numbers (-n)\n        file_pattern: Pattern to filter files (e.g., \"*.txt\")\n        \n    Returns:\n        JSON string with search results\n    ",
+        "name": "grep"
       },
       "handle_auth_failure": {
-        "name": "handle_auth_failure",
-        "description": "Handle authentication failures that occur when executing actions."
+        "description": "Handle authentication failures that occur when executing actions.",
+        "name": "handle_auth_failure"
       },
       "head_file": {
-        "name": "head_file",
-        "description": "Reads and returns the first N lines of a text file.This is useful for quickly previewing file contents without loading the entire file into memory.If the file has fewer than N lines, the entire file will be returned.Only works within allowed directories."
+        "description": "Reads and returns the first N lines of a text file.This is useful for quickly previewing file contents without loading the entire file into memory.If the file has fewer than N lines, the entire file will be returned.Only works within allowed directories.",
+        "name": "head_file"
       },
       "insert_file_content": {
-        "name": "insert_file_content",
-        "description": "\n    Insert content at specific row(s) in a file\n    \n    Args:\n        path: Path to the file\n        content: Content to insert (string or JSON object)\n        row: Row number to insert at (0-based, optional)\n        rows: List of row numbers to insert at (0-based, optional)\n    \n    Returns:\n        Operation result information\n    "
+        "description": "\n    Insert content at specific row(s) in a file\n    \n    Args:\n        path: Path to the file\n        content: Content to insert (string or JSON object)\n        row: Row number to insert at (0-based, optional)\n        rows: List of row numbers to insert at (0-based, optional)\n    \n    Returns:\n        Operation result information\n    ",
+        "name": "insert_file_content"
       },
       "list_allowed_directories": {
-        "name": "list_allowed_directories",
-        "description": "Returns a list of directories that the server has permission to access Subdirectories within these allowed directories are also accessible. Use this to identify which directories and their nested paths are available before attempting to access files."
+        "description": "Returns a list of directories that the server has permission to access Subdirectories within these allowed directories are also accessible. Use this to identify which directories and their nested paths are available before attempting to access files.",
+        "name": "list_allowed_directories"
       },
       "list_directory": {
-        "name": "list_directory",
-        "description": "List directory contents with filtering and depth control."
+        "description": "List directory contents with filtering and depth control.",
+        "name": "list_directory"
       },
       "list_directory_with_sizes": {
-        "name": "list_directory_with_sizes",
-        "description": "Get a detailed listing of all files and directories in a specified path, including sizes. Results clearly distinguish between files and directories with [FILE] and [DIR] prefixes. This tool is useful for understanding directory structure and finding specific files within a directory. Only works within allowed directories."
+        "description": "Get a detailed listing of all files and directories in a specified path, including sizes. Results clearly distinguish between files and directories with [FILE] and [DIR] prefixes. This tool is useful for understanding directory structure and finding specific files within a directory. Only works within allowed directories.",
+        "name": "list_directory_with_sizes"
       },
       "list_documentation_sources_tool": {
-        "name": "list_documentation_sources_tool",
-        "description": "List all available documentation sources this service has access to.\n\n    This tool requires no input parameters and returns a list of documentation sources configured for this service.\n    Use this tool first to discover what documentation sources are available.\n\n    Example usage:\n    ```\n    list_documentation_sources_tool()\n    ```\n\n    Response provides the URLs to documentation sources and their types.\n    "
+        "description": "List all available documentation sources this service has access to.\n\n    This tool requires no input parameters and returns a list of documentation sources configured for this service.\n    Use this tool first to discover what documentation sources are available.\n\n    Example usage:\n    ```\n    list_documentation_sources_tool()\n    ```\n\n    Response provides the URLs to documentation sources and their types.\n    ",
+        "name": "list_documentation_sources_tool"
       },
       "list_memory_projects": {
-        "name": "list_memory_projects",
-        "description": "List all available projects with their status.\n\nShows all Basic Memory projects that are available, indicating which one\nis currently active and which is the default.\n\nReturns:\n    Formatted list of projects with status indicators\n\nExample:\n    list_memory_projects()"
+        "description": "List all available projects with their status.\n\nShows all Basic Memory projects that are available, indicating which one\nis currently active and which is the default.\n\nReturns:\n    Formatted list of projects with status indicators\n\nExample:\n    list_memory_projects()",
+        "name": "list_memory_projects"
       },
       "move_file": {
-        "name": "move_file",
-        "description": "Move or rename files and directories. Can move files between directories and rename them in a single operation. If the destination exists, the operation will fail. Works across different directories and can be used for simple renaming within the same directory. Both source and destination must be within allowed directories."
+        "description": "Move or rename files and directories. Can move files between directories and rename them in a single operation. If the destination exists, the operation will fail. Works across different directories and can be used for simple renaming within the same directory. Both source and destination must be within allowed directories.",
+        "name": "move_file"
       },
       "move_note": {
-        "name": "move_note",
-        "description": "Move a note to a new location, updating database and maintaining links."
+        "description": "Move a note to a new location, updating database and maintaining links.",
+        "name": "move_note"
       },
       "read_content": {
-        "name": "read_content",
-        "description": "Read a file's raw content by path or permalink"
+        "description": "Read a file's raw content by path or permalink",
+        "name": "read_content"
       },
       "read_file": {
-        "name": "read_file",
-        "description": "\n    Read content from a file with optional row selection\n    \n    Args:\n        path: Path to the file\n        start_row: Starting row to read from (0-based, optional)\n        end_row: Ending row to read to (0-based, inclusive, optional)\n        as_json: If True, attempt to parse file content as JSON (optional)\n    \n    Returns:\n        File content or selected lines, optionally parsed as JSON\n    "
+        "description": "\n    Read content from a file with optional row selection\n    \n    Args:\n        path: Path to the file\n        start_row: Starting row to read from (0-based, optional)\n        end_row: Ending row to read to (0-based, inclusive, optional)\n        as_json: If True, attempt to parse file content as JSON (optional)\n    \n    Returns:\n        File content or selected lines, optionally parsed as JSON\n    ",
+        "name": "read_file"
       },
       "read_file_lines": {
-        "name": "read_file_lines",
-        "description": "Reads lines from a text file starting at a specified line offset (0-based) and continues for the specified number of lines if a limit is provided.This function skips the first 'offset' lines and then reads up to 'limit' lines if specified, or reads until the end of the file otherwise.It's useful for partial reads, pagination, or previewing sections of large text files.Only works within allowed directories."
+        "description": "Reads lines from a text file starting at a specified line offset (0-based) and continues for the specified number of lines if a limit is provided.This function skips the first 'offset' lines and then reads up to 'limit' lines if specified, or reads until the end of the file otherwise.It's useful for partial reads, pagination, or previewing sections of large text files.Only works within allowed directories.",
+        "name": "read_file_lines"
       },
       "read_media_file": {
-        "name": "read_media_file",
-        "description": "Reads an image or audio file and returns its Base64-encoded content along with the corresponding MIME type. The max_bytes argument could be used to enforce an upper limit on the size of a file to read if the media file exceeds this limit, the operation will return an error instead of reading the media file. Access is restricted to files within allowed directories only."
+        "description": "Reads an image or audio file and returns its Base64-encoded content along with the corresponding MIME type. The max_bytes argument could be used to enforce an upper limit on the size of a file to read if the media file exceeds this limit, the operation will return an error instead of reading the media file. Access is restricted to files within allowed directories only.",
+        "name": "read_media_file"
       },
       "read_multiple_media_files": {
-        "name": "read_multiple_media_files",
-        "description": "Reads multiple image or audio files and returns their Base64-encoded contents along with corresponding MIME types. This method is more efficient than reading files individually. The max_bytes argument could be used to enforce an upper limit on the size of a file to read Failed reads for specific files are skipped without interrupting the entire operation. Only works within allowed directories."
+        "description": "Reads multiple image or audio files and returns their Base64-encoded contents along with corresponding MIME types. This method is more efficient than reading files individually. The max_bytes argument could be used to enforce an upper limit on the size of a file to read Failed reads for specific files are skipped without interrupting the entire operation. Only works within allowed directories.",
+        "name": "read_multiple_media_files"
       },
       "read_multiple_text_files": {
-        "name": "read_multiple_text_files",
-        "description": "Read the contents of multiple text files simultaneously as text. This is more efficient than reading files one by one when you need to analyze or compare multiple files. Each file's content is returned with its path as a reference. Failed reads for individual files won't stop the entire operation. Only works within allowed directories."
+        "description": "Read the contents of multiple text files simultaneously as text. This is more efficient than reading files one by one when you need to analyze or compare multiple files. Each file's content is returned with its path as a reference. Failed reads for individual files won't stop the entire operation. Only works within allowed directories.",
+        "name": "read_multiple_text_files"
       },
       "read_note": {
-        "name": "read_note",
-        "description": "Read a markdown note by title or permalink."
+        "description": "Read a markdown note by title or permalink.",
+        "name": "read_note"
       },
       "read_text_file": {
-        "name": "read_text_file",
-        "description": "Read the complete contents of a text file from the file system as text. Handles various text encodings and provides detailed error messages if the file cannot be read. Use this tool when you need to examine the contents of a single file. Only works within allowed directories."
+        "description": "Read the complete contents of a text file from the file system as text. Handles various text encodings and provides detailed error messages if the file cannot be read. Use this tool when you need to examine the contents of a single file. Only works within allowed directories.",
+        "name": "read_text_file"
       },
       "recent_activity": {
-        "name": "recent_activity",
-        "description": "Get recent activity from across the knowledge base.\n\n    Timeframe supports natural language formats like:\n    - \"2 days ago\"  \n    - \"last week\"\n    - \"yesterday\" \n    - \"today\"\n    - \"3 weeks ago\"\n    Or standard formats like \"7d\"\n    "
+        "description": "Get recent activity from across the knowledge base.\n\n    Timeframe supports natural language formats like:\n    - \"2 days ago\"  \n    - \"last week\"\n    - \"yesterday\" \n    - \"today\"\n    - \"3 weeks ago\"\n    Or standard formats like \"7d\"\n    ",
+        "name": "recent_activity"
       },
       "search": {
+        "description": "Lightweight search placeholder exposed for ChatGPT connector verification.",
         "name": "search",
-        "description": "Lightweight search placeholder exposed for ChatGPT connector verification."
+        "enabled": false
       },
       "search_documentation": {
-        "name": "search_documentation",
-        "description": "Search for server action documentations by keyword matching."
+        "description": "Search for server action documentations by keyword matching.",
+        "name": "search_documentation"
       },
       "search_files": {
-        "name": "search_files",
-        "description": "Recursively search for files and directories matching a pattern. Searches through all subdirectories from the starting path. The search is case-insensitive and matches partial names. Returns full paths to all matching items.Optional 'min_bytes' and 'max_bytes' arguments can be used to filter files by size, ensuring that only files within the specified byte range are included in the search. This tool is great for finding files when you don't know their exact location or find files by their size.Only searches within allowed directories."
+        "description": "Recursively search for files and directories matching a pattern. Searches through all subdirectories from the starting path. The search is case-insensitive and matches partial names. Returns full paths to all matching items.Optional 'min_bytes' and 'max_bytes' arguments can be used to filter files by size, ensuring that only files within the specified byte range are included in the search. This tool is great for finding files when you don't know their exact location or find files by their size.Only searches within allowed directories.",
+        "name": "search_files"
       },
       "search_files_content": {
-        "name": "search_files_content",
-        "description": "Searches for text or regex patterns in the content of files matching matching a GLOB pattern.Returns detailed matches with file path, line number, column number and a preview of matched text.By default, it performs a literal text search; if the 'is_regex' parameter is set to true, it performs a regular expression (regex) search instead.Optional 'min_bytes' and 'max_bytes' arguments can be used to filter files by size, ensuring that only files within the specified byte range are included in the search. Ideal for finding specific code, comments, or text when you don’t know their exact location."
+        "description": "Searches for text or regex patterns in the content of files matching matching a GLOB pattern.Returns detailed matches with file path, line number, column number and a preview of matched text.By default, it performs a literal text search; if the 'is_regex' parameter is set to true, it performs a regular expression (regex) search instead.Optional 'min_bytes' and 'max_bytes' arguments can be used to filter files by size, ensuring that only files within the specified byte range are included in the search. Ideal for finding specific code, comments, or text when you don’t know their exact location.",
+        "name": "search_files_content"
       },
       "search_notes": {
-        "name": "search_notes",
-        "description": "Search across all content in the knowledge base with advanced syntax support."
+        "description": "Search across all content in the knowledge base with advanced syntax support.",
+        "name": "search_notes"
       },
       "set_default_project": {
-        "name": "set_default_project",
-        "description": "Set default project in config. Requires restart to take effect.\n\nUpdates the configuration to use a different default project. This change\nonly takes effect after restarting the Basic Memory server.\n\nArgs:\n    project_name: Name of the project to set as default\n\nReturns:\n    Confirmation message about config update\n\nExample:\n    set_default_project(\"work-notes\")"
+        "description": "Set default project in config. Requires restart to take effect.\n\nUpdates the configuration to use a different default project. This change\nonly takes effect after restarting the Basic Memory server.\n\nArgs:\n    project_name: Name of the project to set as default\n\nReturns:\n    Confirmation message about config update\n\nExample:\n    set_default_project(\"work-notes\")",
+        "name": "set_default_project"
       },
       "switch_project": {
-        "name": "switch_project",
-        "description": "Switch to a different project context.\n\nChanges the active project context for all subsequent tool calls.\nShows a project summary after switching successfully.\n\nArgs:\n    project_name: Name of the project to switch to\n\nReturns:\n    Confirmation message with project summary\n\nExample:\n    switch_project(\"work-notes\")\n    switch_project(\"personal-journal\")"
+        "description": "Switch to a different project context.\n\nChanges the active project context for all subsequent tool calls.\nShows a project summary after switching successfully.\n\nArgs:\n    project_name: Name of the project to switch to\n\nReturns:\n    Confirmation message with project summary\n\nExample:\n    switch_project(\"work-notes\")\n    switch_project(\"personal-journal\")",
+        "name": "switch_project"
       },
       "sync_status": {
-        "name": "sync_status",
-        "description": "Check the status of file synchronization and background operations.\n    \n    Use this tool to:\n    - Check if file sync is in progress or completed\n    - Get detailed sync progress information  \n    - Understand if your files are fully indexed\n    - Get specific error details if sync operations failed\n    - Monitor initial project setup and legacy migration\n    \n    This covers all sync operations including:\n    - Initial project setup and file indexing\n    - Legacy project migration to unified database\n    - Ongoing file monitoring and updates\n    - Background processing of knowledge graphs\n    "
+        "description": "Check the status of file synchronization and background operations.\n    \n    Use this tool to:\n    - Check if file sync is in progress or completed\n    - Get detailed sync progress information  \n    - Understand if your files are fully indexed\n    - Get specific error details if sync operations failed\n    - Monitor initial project setup and legacy migration\n    \n    This covers all sync operations including:\n    - Initial project setup and file indexing\n    - Legacy project migration to unified database\n    - Ongoing file monitoring and updates\n    - Background processing of knowledge graphs\n    ",
+        "name": "sync_status"
       },
       "unzip_file": {
-        "name": "unzip_file",
-        "description": "Extracts the contents of a ZIP archive to a specified target directory.\nIt takes a source ZIP file path and a target extraction directory.\nThe tool decompresses all files and directories stored in the ZIP, recreating their structure in the target location.\nBoth the source ZIP file and the target directory should reside within allowed directories."
+        "description": "Extracts the contents of a ZIP archive to a specified target directory.\nIt takes a source ZIP file path and a target extraction directory.\nThe tool decompresses all files and directories stored in the ZIP, recreating their structure in the target location.\nBoth the source ZIP file and the target directory should reside within allowed directories.",
+        "name": "unzip_file"
       },
       "update_file_content": {
-        "name": "update_file_content",
-        "description": "\n    Update content at specific row(s) in a file\n    \n    Args:\n        path: Path to the file\n        content: New content to place at the specified row(s)\n        row: Row number to update (0-based, optional)\n        rows: List of row numbers to update (0-based, optional)\n        substring: If provided, only replace this substring within the specified row(s), not the entire row\n    \n    Returns:\n        Operation result information\n    "
+        "description": "\n    Update content at specific row(s) in a file\n    \n    Args:\n        path: Path to the file\n        content: New content to place at the specified row(s)\n        row: Row number to update (0-based, optional)\n        rows: List of row numbers to update (0-based, optional)\n        substring: If provided, only replace this substring within the specified row(s), not the entire row\n    \n    Returns:\n        Operation result information\n    ",
+        "name": "update_file_content"
       },
       "view_note": {
-        "name": "view_note",
-        "description": "View a note as a formatted artifact for better readability."
+        "description": "View a note as a formatted artifact for better readability.",
+        "name": "view_note"
       },
       "write_file": {
-        "name": "write_file",
-        "description": "Create a new file or completely overwrite an existing file with new content. Use with caution as it will overwrite existing files without warning. Handles text content with proper encoding. Only works within allowed directories."
+        "description": "Create a new file or completely overwrite an existing file with new content. Use with caution as it will overwrite existing files without warning. Handles text content with proper encoding. Only works within allowed directories.",
+        "name": "write_file"
       },
       "write_note": {
-        "name": "write_note",
-        "description": "Create or update a markdown note. Returns a markdown formatted summary of the semantic content."
+        "description": "Create or update a markdown note. Returns a markdown formatted summary of the semantic content.",
+        "name": "write_note"
       },
       "zip_directory": {
-        "name": "zip_directory",
-        "description": "Creates a ZIP archive by compressing a directory , including files and subdirectories matching a specified glob pattern.\nIt takes a path to the folder and a glob pattern to identify files to compress and a target path for the resulting ZIP file.\nBoth the source directory and the target ZIP file should reside within allowed directories."
+        "description": "Creates a ZIP archive by compressing a directory , including files and subdirectories matching a specified glob pattern.\nIt takes a path to the folder and a glob pattern to identify files to compress and a target path for the resulting ZIP file.\nBoth the source directory and the target ZIP file should reside within allowed directories.",
+        "name": "zip_directory"
       },
       "zip_files": {
-        "name": "zip_files",
-        "description": "Creates a ZIP archive by compressing files. It takes a list of files to compress and a target path for the resulting ZIP file. Both the source files and the target ZIP file should reside within allowed directories."
+        "description": "Creates a ZIP archive by compressing files. It takes a list of files to compress and a target path for the resulting ZIP file. Both the source files and the target ZIP file should reside within allowed directories.",
+        "name": "zip_files"
       }
     }
   },
   "servers": {
+    "docs": {
+      "tools": {
+        "fetch_document_links": {
+          "annotations": {
+            "readOnlyHint": true
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object"
+          }
+        },
+        "fetch_documentation_page": {
+          "annotations": {
+            "readOnlyHint": true
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object"
+          }
+        }
+      }
+    },
+    "fetch": {
+      "tools": {
+        "fetch": {
+          "annotations": {
+            "title": "Fetch URL",
+            "openWorldHint": true
+          },
+          "description": "Fetch external HTTP content via the sandboxed fetch server."
+        }
+      }
+    },
     "fs": {
       "tools": {
-        "read_file": {
-          "description": "Read a file from the workspace without mutating it.",
-          "annotations": {
-            "title": "Read File",
-            "readOnlyHint": true
-          }
-        },
-        "read_text_file": {
-          "description": "Return a text file as UTF-8 content for quick inspection.",
-          "annotations": {
-            "title": "Read Text",
-            "readOnlyHint": true
-          }
-        },
         "directory_tree": {
-          "description": "List directories/files beneath the current path.",
           "annotations": {
             "title": "List Tree",
             "readOnlyHint": true
+          },
+          "description": "List directories/files beneath the current path."
+        },
+        "list_allowed_directories": {
+          "enabled": true,
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object"
           }
         },
+        "read_file": {
+          "annotations": {
+            "title": "Read File",
+            "readOnlyHint": true
+          },
+          "description": "Read a file from the workspace without mutating it."
+        },
+        "read_text_file": {
+          "annotations": {
+            "title": "Read Text",
+            "readOnlyHint": true
+          },
+          "description": "Return a text file as UTF-8 content for quick inspection."
+        },
         "search_files": {
-          "description": "Search file paths matching a glob within the workspace.",
           "annotations": {
             "title": "Search Files",
             "readOnlyHint": true
-          }
+          },
+          "description": "Search file paths matching a glob within the workspace."
         },
         "search_files_content": {
-          "description": "Search file contents with ripgrep across the workspace.",
           "annotations": {
             "title": "Search Contents",
             "readOnlyHint": true
-          }
+          },
+          "description": "Search file contents with ripgrep across the workspace."
         }
       }
     },
@@ -295,71 +358,14 @@
         }
       }
     },
-    "docs": {
-      "tools": {
-        "fetch_documentation_page": {
-          "annotations": {
-            "readOnlyHint": true
-          }
-        },
-        "fetch_document_links": {
-          "annotations": {
-            "readOnlyHint": true
-          }
-        }
-      }
-    },
-    "fetch": {
-      "tools": {
-        "fetch": {
-          "description": "Fetch external HTTP content via the sandboxed fetch server.",
-          "annotations": {
-            "title": "Fetch URL",
-            "openWorldHint": true
-          }
-        }
-      }
-    },
     "scrapling": {
       "enabled": true,
       "tools": {
         "s_fetch_page": {
-          "enabled": true,
-          "outputSchema": {
-            "type": "object",
-            "properties": {
-              "metadata": {
-                "type": "object",
-                "additionalProperties": true
-              },
-              "content": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "metadata",
-              "content"
-            ]
-          }
+          "enabled": true
         },
         "s_fetch_pattern": {
-          "enabled": true,
-          "outputSchema": {
-            "type": "object",
-            "properties": {
-              "metadata": {
-                "type": "object",
-                "additionalProperties": true
-              },
-              "content": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "metadata",
-              "content"
-            ]
-          }
+          "enabled": true
         }
       }
     }

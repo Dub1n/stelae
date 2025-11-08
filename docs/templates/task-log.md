@@ -26,6 +26,6 @@ Tags: `#feature` / `#bugfix` / `#infra` / `#docs` (choose as appropriate so the 
 
 - [ ] Code/tests updated
 - [ ] Docs updated
-- [ ] Progress tracker updated
+- [ ] progress.md updated
 - [ ] Task log updated
 - [ ] Checklist completed

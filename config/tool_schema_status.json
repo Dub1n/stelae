@@ -1,16 +1,40 @@
 {
+  "docs": {
+    "fetch_document_links": {
+      "last_adapter": "generic",
+      "consecutive_generic_count": 2,
+      "updated_at": 1762549836
+    },
+    "fetch_documentation_page": {
+      "last_adapter": "generic",
+      "consecutive_generic_count": 1,
+      "updated_at": 1762549843
+    }
+  },
+  "fs": {
+    "list_allowed_directories": {
+      "last_adapter": "generic",
+      "consecutive_generic_count": 1,
+      "updated_at": 1762594983
+    }
+  },
+  "rg": {
+    "grep": {
+      "last_adapter": "pass_through",
+      "consecutive_generic_count": 0,
+      "updated_at": 1762549583
+    }
+  },
   "scrapling": {
     "s_fetch_page": {
-      "state": "wrapped",
-      "wrapper": "scrapling_metadata",
-      "note": null,
-      "updated_at": 0
+      "last_adapter": "pass_through",
+      "consecutive_generic_count": 0,
+      "updated_at": 1762550707
     },
     "s_fetch_pattern": {
-      "state": "wrapped",
-      "wrapper": "scrapling_metadata",
-      "note": null,
-      "updated_at": 0
+      "last_adapter": "pass_through",
+      "consecutive_generic_count": 0,
+      "updated_at": 1762550668
     }
   }
 }
