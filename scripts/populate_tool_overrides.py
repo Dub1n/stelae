@@ -122,6 +122,7 @@ async def populate_from_stdio(
     overrides: OverridesStore,
     target_servers: set[str],
     keys: Sequence[str],
+    quiet: bool,
 ) -> int:
     total_updates = 0
     for name, entry in iter_stdio_servers(config):
@@ -138,7 +139,8 @@ async def populate_from_stdio(
             payload = tool.model_dump(mode="json")
             if record_tool(overrides, name, payload, keys):
                 total_updates += 1
-                print(f"[update] {name}.{tool.name} - recorded schema")
+                if not quiet:
+                    print(f"[update] {name}.{tool.name} - recorded schema")
     return total_updates
 
 
@@ -147,13 +149,15 @@ async def populate_from_proxy_url(
     overrides: OverridesStore,
     keys: Sequence[str],
     timeout: float,
+    quiet: bool,
 ) -> int:
     tools = await fetch_tools_via_proxy(proxy_url, timeout)
     total_updates = 0
     for entry in tools:
         if record_tool(overrides, None, entry, keys):
             total_updates += 1
-            print(f"[update] proxy://{entry.get('name')} - recorded schema")
+            if not quiet:
+                print(f"[update] proxy://{entry.get('name')} - recorded schema")
     return total_updates
 
 
@@ -165,6 +169,7 @@ async def main() -> None:
     parser.add_argument("--overrides", default=str(DEFAULT_OVERRIDES_PATH), help="Path to config/tool_overrides.json")
     parser.add_argument("--servers", nargs="*", help="Optional subset of server names to scan")
     parser.add_argument("--dry-run", action="store_true", help="Show planned changes without writing")
+    parser.add_argument("--quiet", action="store_true", help="Suppress per-tool update logs; still prints the final summary")
     args = parser.parse_args()
 
     overrides = OverridesStore(Path(args.overrides))
@@ -173,11 +178,11 @@ async def main() -> None:
     if args.proxy_url:
         if args.servers:
             parser.error("--servers cannot be combined with --proxy-url")
-        total_updates = await populate_from_proxy_url(args.proxy_url, overrides, keys, args.proxy_timeout)
+        total_updates = await populate_from_proxy_url(args.proxy_url, overrides, keys, args.proxy_timeout, args.quiet)
     else:
         config = load_proxy_config(Path(args.proxy))
         target_servers = set(args.servers or [])
-        total_updates = await populate_from_stdio(config, overrides, target_servers, keys)
+        total_updates = await populate_from_stdio(config, overrides, target_servers, keys, args.quiet)
 
     if total_updates == 0:
         print("No schema updates required")

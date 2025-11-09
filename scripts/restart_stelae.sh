@@ -37,6 +37,7 @@ START_BRIDGE=1
 START_WATCHDOG=1
 KEEP_PM2=0
 FULL_REDEPLOY=0
+RUN_POPULATE=1
 for arg in "$@"; do
   case "$arg" in
     --no-cloudflared) START_CLOUDFLARED=0;;
@@ -44,14 +45,16 @@ for arg in "$@"; do
     --no-watchdog) START_WATCHDOG=0;;
     --keep-pm2) KEEP_PM2=1;;
     --full) FULL_REDEPLOY=1;;
+    --skip-populate-overrides) RUN_POPULATE=0;;
     -h|--help)
       cat <<EOF
 Usage: $(basename "$0") [options]
-  --no-cloudflared   Skip starting cloudflared via pm2
-  --no-bridge        Skip starting the streamable bridge
-  --no-watchdog      Skip starting the public tunnel watchdog
-  --keep-pm2         Do not 'pm2 kill'; just (re)start managed apps
-  --full             Also push manifest to Cloudflare KV and deploy worker
+  --no-cloudflared          Skip starting cloudflared via pm2
+  --no-bridge               Skip starting the streamable bridge
+  --no-watchdog             Skip starting the public tunnel watchdog
+  --keep-pm2                Do not 'pm2 kill'; just (re)start managed apps
+  --full                    Also push manifest to Cloudflare KV and deploy worker
+  --skip-populate-overrides Do not auto-refresh config/tool_overrides.json
 
 Env overrides:
   PROXY_PORT        (default 9090)
@@ -116,15 +119,22 @@ wait_tools_ready() {
 }
 
 populate_overrides_via_proxy() {
+  if [ "$RUN_POPULATE" -ne 1 ]; then
+    warn "Skipping tool override population (--skip-populate-overrides)."
+    return
+  fi
   local url="$1"
   if [ -z "$PYTHON_BIN" ] || [ ! -x "$PYTHON_BIN" ]; then
     warn "Skipping tool override population; PYTHON=$PYTHON_BIN not executable"
     return
   fi
-  if "$PYTHON_BIN" "$STELAE_DIR/scripts/populate_tool_overrides.py" --proxy-url "$url" >/dev/null; then
+  local output
+  if output=$("$PYTHON_BIN" "$STELAE_DIR/scripts/populate_tool_overrides.py" --proxy-url "$url" --quiet 2>&1); then
     log "Tool overrides synced via proxy catalog"
+    [ -n "$output" ] && printf '%s\n' "$output"
   else
     warn "Tool override population failed via proxy"
+    printf '%s\n' "$output"
   fi
 }
 
