@@ -14,7 +14,7 @@ A WSL-native deployment of [mcp-proxy](https://github.com/TBXark/mcp-proxy) that
 | Terminal Controller MCP | stdio | `${SHELL_BIN}` | Allowlisted command execution in Phoenix workspace. |
 | Docy MCP | stdio | `${DOCY_BIN} --stdio` | Documentation / URL ingestion (feeds canonical `fetch`). |
 | Docy manager MCP | stdio | `${PYTHON} ${STELAE_DIR}/scripts/docy_manager_server.py` | Adds/removes Docy documentation sources via MCP/CLI, rendering `.docy.urls`. |
-| Tool aggregator MCP | stdio | `${PYTHON} ${STELAE_DIR}/scripts/tool_aggregator_server.py` | Publishes declarative composite tools from `config/tool_aggregations.json` (e.g., `manage_docy_aggregate`). |
+| Tool aggregator MCP | stdio | `${PYTHON} ${STELAE_DIR}/scripts/tool_aggregator_server.py` | Publishes declarative composite tools from `config/tool_aggregations.json` (e.g., `manage_docy_sources`). |
 | Stelae integrator MCP | stdio | `${PYTHON} ${STELAE_DIR}/scripts/stelae_integrator_server.py` | Consumes 1mcp discovery output, updates templates/overrides, and restarts the stack via `manage_stelae`. |
 | Basic Memory MCP | stdio | `${MEMORY_BIN}` | Persistent project memory. |
 | Strata MCP | stdio | `${STRATA_BIN}` | Progressive discovery / intent routing. |
@@ -115,7 +115,7 @@ Path placeholders expand from `.env`; see setup below.
    - `doc_fetch_suite` – Docy fetch helpers (`fetch_document_links`, `fetch_documentation_page`, `list_documentation_sources_tool`).
    - `scrapling_fetch_suite` – Scrapling HTTP fetch modes (`s_fetch_page`, `s_fetch_pattern`).
    - `strata_ops_suite` – Strata orchestration (`discover_server_actions`, `execute_action`, `get_action_details`, `handle_auth_failure`, `search_documentation`).
-   - `manage_docy_aggregate` – Docy catalog management (list/add/remove/sync/import).
+   - `manage_docy_sources` – Docy catalog management (list/add/remove/sync/import).
 
    If `tools/list` ever collapses to the fallback `fetch`/`search` entries, restart the proxy (`make restart-proxy` or `scripts/run_restart_stelae.sh --full`) to respawn the aggregator server.
 4. Proxy call-path adapter keeps flaky MCP servers usable without touching upstream code:
@@ -173,7 +173,7 @@ Path placeholders expand from `.env`; see setup below.
 ### Declarative Tool Aggregations
 
 - `config/tool_aggregations.json` (validated by `config/tool_aggregations.schema.json`) describes composite MCP tools that we expose under the dedicated `tool_aggregator` server. Each entry defines manifest metadata plus a list of operations, and specifies which downstream tools should be hidden once the wrapper exists. `scripts/tool_aggregator_server.py` loads this file at runtime, while `scripts/process_tool_aggregations.py` syncs the config into `config/tool_overrides.json` and marks the `hideTools` entries as `enabled: false` so manifests stay tidy.
-- `manage_docy_aggregate` wraps every Docy manager operation behind a single schema. Example payload:
+- `manage_docy_sources` wraps every Docy manager operation behind a single schema. Example payload:
   ```json
   {
     "operation": "import_from_manifest",
@@ -184,10 +184,10 @@ Path placeholders expand from `.env`; see setup below.
   ```
   The helper checks for required fields per operation (e.g., `url` for adds, `url` or `id` for removes, `manifest_path` or `manifest_url` for imports) before proxying the call to the original `manage_docy` tool.
 - To add another aggregate tool:
-  1. Copy the `manage_docy_aggregate` block inside `config/tool_aggregations.json` and adjust the manifest metadata, `operations`, `argumentMappings`, `responseMappings`, and `hideTools` list for the downstream tool(s) you want to wrap.
+ 1. Copy the `manage_docy_sources` block inside `config/tool_aggregations.json` and adjust the manifest metadata, `operations`, `argumentMappings`, `responseMappings`, and `hideTools` list for the downstream tool(s) you want to wrap.
   2. (Optional) Run `python scripts/process_tool_aggregations.py --check-only` to validate the JSON/schema without mutating overrides.
   3. Run `make render-proxy` (or `scripts/run_restart_stelae.sh`) so the helper refreshes `config/tool_overrides.json`, disables the wrapped tools, and restarts the `tool_aggregator` stdio server.
-  4. Call the new MCP tool as normal (e.g., `tools/call name="manage_docy_aggregate" arguments={...}`); arguments are validated per the rules you encoded, then forwarded through the proxy to the downstream tool, and the downstream result is returned unchanged.
+ 4. Call the new MCP tool as normal (e.g., `tools/call name="manage_docy_sources" arguments={...}`); arguments are validated per the rules you encoded, then forwarded through the proxy to the downstream tool, and the downstream result is returned unchanged.
 
 ### Bootstrapping the 1mcp catalogue
 

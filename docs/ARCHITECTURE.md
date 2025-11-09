@@ -74,7 +74,7 @@ flowchart LR
 * Scrapling’s `s_fetch_page` and `s_fetch_pattern` entries in `config/tool_overrides.json` are the canonical definition for their `{metadata, content}` outputs. The call-path adapter in the Go proxy writes back to the same file whenever it has to downgrade/upgrade a schema; rerun `make render-proxy` + the restart script after editing those overrides so manifests and streamable clients see the update immediately.
 * The proxy filters out any tool/server marked `enabled: false` before producing `initialize`, `tools/list`, and manifest payloads.
 * Every `tools/list` descriptor carries `"x-stelae": {"servers": [...], "primaryServer": "..."}` metadata. The restart script + populate helper rely on this to map schemas back to the correct server even after the proxy deduplicates tool names.
-* Declarative aggregations are described in `config/tool_aggregations.json`. `scripts/process_tool_aggregations.py` validates the file, injects those descriptors into `config/tool_overrides.json`, and sets any `hideTools` entries to `enabled: false`. `scripts/tool_aggregator_server.py` loads the same config at runtime so wrappers such as `manage_docy_aggregate` show up once in manifests even though they fan out to underlying servers.
+* Declarative aggregations are described in `config/tool_aggregations.json`. `scripts/process_tool_aggregations.py` validates the file, injects those descriptors into `config/tool_overrides.json`, and sets any `hideTools` entries to `enabled: false`. `scripts/tool_aggregator_server.py` loads the same config at runtime so wrappers such as `manage_docy_sources` show up once in manifests even though they fan out to underlying servers.
 
 ## Operations & Troubleshooting
 
@@ -154,7 +154,7 @@ Current suites declared in `config/tool_aggregations.json`:
 - `doc_fetch_suite` – unifies Docy fetch helpers (`fetch_document_links`, `fetch_documentation_page`, `list_documentation_sources_tool`).
 - `scrapling_fetch_suite` – selects the Scrapling fetch mode (`s_fetch_page`, `s_fetch_pattern`).
 - `strata_ops_suite` – aggregates Strata’s discovery/execution/auth workflows (`discover_server_actions`, `execute_action`, `get_action_details`, `handle_auth_failure`, `search_documentation`).
-- `manage_docy_aggregate` – Docy catalog administration (list/add/remove/sync/import).
+- `manage_docy_sources` – Docy catalog administration (list/add/remove/sync/import).
 
 If `tools/list` ever shrinks to the fallback `fetch`/`search` entries, the aggregator likely failed to register; rerun `make restart-proxy` (or `scripts/run_restart_stelae.sh --full`) to relaunch the stdio server and restore the curated catalog.
 * The proxy records per-tool adapter state in `config/tool_schema_status.json` (path via `manifest.toolSchemaStatusPath`) and patches `config/tool_overrides.json` whenever call-path adaptation selects a different schema (e.g., persisting generic for text-only servers). After rerunning `make render-proxy` + restarting PM2, external clients see the updated schemas. `scripts/populate_tool_overrides.py --proxy-url <endpoint> --quiet` now runs during `scripts/restart_stelae.sh` so every restart reuses the freshly collected `tools/list` payload to ensure all downstream schemas are persisted; the script still supports per-server scans for development via `--servers`, and operators can opt out entirely for a given restart with `--skip-populate-overrides`. When invoking manually, export `PYTHONPATH=$STELAE_DIR` so the helper can import `stelae_lib`.

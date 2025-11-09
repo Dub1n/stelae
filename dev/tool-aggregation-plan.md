@@ -13,7 +13,7 @@ This note captures the current `tools/list` snapshot from the running proxy (que
 | `strata` | 5 | Strata discovery + action execution flow |
 | `docs` | 3 | Docy fetch (`fetch_document_links`, `fetch_documentation_page`, `list_documentation_sources_tool`) |
 | `scrapling` | 2 | `s_fetch_page`, `s_fetch_pattern` (web fetch modes) |
-| `docy_manager` | 1 | `manage_docy` (already wrapped by `manage_docy_aggregate`) |
+| `docy_manager` | 1 | `manage_docy` (already wrapped by `manage_docy_sources`) |
 | `integrator` | 1 | `manage_stelae` (integrates 1mcp discovery) |
 | `fetch` | 1 | Canonical HTTP fetch |
 | `rg` | 1 | `grep` via ripgrep |
@@ -29,16 +29,16 @@ The goal is "one conceptual tool per domain" without hiding useful functionality
 2. **`workspace_fs_write`** – Mutating filesystem actions (`create_directory`, `move_file`, `edit_file`, `write_file`, `delete_file_content`, `insert_file_content`, `update_file_content`, `zip_*`, `unzip_file`). Tagged `destructiveHint` so connectors treat it carefully.
 3. **`workspace_shell_control`** – Terminal controller primitives (`execute_command`, `change_directory`, `get_current_directory`, `get_command_history`). Keeps process-control chatter out of the main catalog while preserving guardrails.
 4. **`memory_suite`** – All 18 Basic Memory tools (context build, CRUD for notes/projects, search, project switching). Gives agents a single entry point for long-term memory work.
-5. **`doc_fetch_suite`** – Docy fetch helpers (links, full pages, catalog listing). Complements `manage_docy_aggregate` without surfacing three near-identical fetchers.
+5. **`doc_fetch_suite`** – Docy fetch helpers (links, full pages, catalog listing). Complements `manage_docy_sources` without surfacing three near-identical fetchers.
 6. **`scrapling_fetch_suite`** – Wraps `s_fetch_page` and `s_fetch_pattern` so the manifest only advertises “Scrapling Fetch” once while retaining the mode switch.
 7. **`strata_ops_suite`** – Consolidates Strata’s discovery/execution/auth failure workflows so routing logic feels atomic.
-8. **Existing** **`manage_docy_aggregate`** – Left untouched; still governs Docy catalog administration.
+8. **Existing** **`manage_docy_sources`** – Left untouched; still governs Docy catalog administration.
 
 Single-tool servers (`fetch`, `rg`, `manage_stelae`) stay as-is because an extra layer would not shrink the manifest further.
 
 ## Hidden/Retired Tools
 
-- `manage_docy` (docy_manager) remains hidden behind `manage_docy_aggregate`.
+- `manage_docy` (docy_manager) remains hidden behind `manage_docy_sources`.
 - All direct filesystem, shell, memory, doc, scrapling, and strata tools are now hidden via the aggregate entries above. This keeps the manifest small but still lets the aggregator proxy fan-out the calls.
 - `one_mcp` helpers (`configure_mcp_plan`, `deep_search_planning`, `fetch_readme`, `file_system_config_setup`, `find_mcp_config_path_path`, `quick_search`, `validate_mcp_config_content`) are hidden at the config level because `integrator.manage_stelae` already orchestrates 1mcp flows end-to-end per README guidance.
 - `facade.search` is hidden; we no longer need the placeholder verification hook now that Docy/Scrapling provide canonical fetch/search.

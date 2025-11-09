@@ -51,7 +51,7 @@
   ],
   "aggregations": [
     {
-      "name": "manage_docy_aggregate",
+      "name": "manage_docy_sources",
       "description": "Manage Docy documentation sources (list, add, remove, sync, import) through a single aggregated tool.",
       "annotations": {
         "title": "Docy Catalog Aggregate",
@@ -364,7 +364,7 @@
         {
           "server": "docy_manager",
           "tool": "manage_docy",
-          "reason": "Wrapped by manage_docy_aggregate"
+          "reason": "Wrapped by manage_docy_sources"
         }
       ]
     },
