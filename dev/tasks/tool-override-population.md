@@ -16,7 +16,7 @@ Tags: `#infra`
 ## References
 
 - Code: `scripts/stelae_streamable_mcp.py`, `config/tool_overrides.json`, `scripts/render_proxy_config.py`
-- Tests: `tests/test_per_m2_price_tool.py` (extends schema enforcement coverage)
+- Tests: `tests/test_streamable_bridge_manage_tool.py` (bridge smoke coverage) and Go proxy adapter tests in the companion repo.
 - Docs: `README.md`, `docs/ARCHITECTURE.md`, `dev/tasks/mcp-auto-loading.md`
 
 ## Notes

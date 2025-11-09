@@ -18,7 +18,7 @@ Prerequisite: `dev/tasks/tool-override-population.md`
 ## References
 
 - Code: `scripts/stelae_streamable_mcp.py`, `config/tool_overrides.json`, `config/tool_schema_status.json`
-- Tests: `tests/test_per_m2_price_tool.py`
+- Tests: `tests/test_streamable_bridge_manage_tool.py` (local bridge fallbacks) plus Go proxy adapter unit tests in `~/apps/mcp-proxy`.
 - Docs: `README.md`, `docs/ARCHITECTURE.md`, `dev/tasks/tool-override-population.md`
 
 ## Notes

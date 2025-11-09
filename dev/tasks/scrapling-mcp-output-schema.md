@@ -19,7 +19,7 @@ Root cause: the Scrapling MCP server (scrapling-fetch-mcp) returns a single stri
 - ✅ The Go proxy now handles schema adaptation inline, so the production config points Scrapling straight at `uvx scrapling-fetch-mcp --stdio` again (`config/proxy.template.json:110-138`, README.md:21). No auxiliary shim process runs under pm2.
 - ✅ Scrapling’s latest release returns structured `{metadata, content}` payloads, and the proxy records them as pass-through calls (`config/tool_schema_status.json:35-44` shows `last_adapter: "pass_through"` for both tools).
 - ✅ `config/tool_overrides.json` now records the canonical `{metadata, content}` schema for `s_fetch_page` and `s_fetch_pattern`, and both README.md + `docs/ARCHITECTURE.md` call out that file as the single source of truth.
-- ✅ The FastMCP bridge exposes a dedicated `per_m2_price` helper tool that calls Scrapling, parses matches, and surfaces currency/value/snippet metadata so downstream docs can quote per‑m² figures without ad-hoc scripts. Tests live in `tests/test_per_m2_price_tool.py`.
+- ✅ (2025-11-10) Removed the temporary `per_m2_price` helper so the streamable bridge only exposes Stelae-core tools. Price scraping can live in downstream repos if needed.
 - ✅ Call-path failures now include Scrapling bootstrap guidance (run `uv tool install …` then `uvx --from scrapling-fetch-mcp scrapling install`) and have regression coverage for the missing-browser path.
 - ✅ The legacy Python shim (`scripts/mcp_output_shim.py`) and its tests were removed entirely; the Go adapter + overrides cover every server, so the shim is no longer referenced anywhere in docs or templates.
   Remaining work (tracked elsewhere): keep monitoring runtime telemetry in `config/tool_schema_status.json` for unexpected regressions.
@@ -235,8 +235,8 @@ Additionally, generalize the newly landed `scripts/mcp_output_shim.py` so the Go
 ## Follow‑ups (status)
 
 - [x] Add small JSON schema doc to `README.md` (metadata fields, content semantics). *Documented the override location + helper flow in README.md and `docs/ARCHITECTURE.md`.*
-- [x] Optional: expose a dedicated `per_m2_price` helper tool later (stretch). *Shipped via the FastMCP bridge with regression coverage.*
-- [x] Add tests for install-not-ready conditions (browser bootstrap), ensuring friendly errors. *`tests/test_per_m2_price_tool.py` asserts we emit human-readable instructions when Scrapling fails to start.*
+- [-] ~~Optional: expose a dedicated `per_m2_price` helper tool later (stretch).~~ *Dropped for now to keep the manifest minimal.*
+- [x] Add tests for install-not-ready conditions (browser bootstrap), ensuring friendly errors. *Handled in the Go proxy adapter test suite; this repo now relies on that shared coverage.*
 
 ## Owners & Timeline
 
