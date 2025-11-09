@@ -52,7 +52,7 @@ async def test_manage_tool_detected_when_proxy_catalog_contains_entry(monkeypatc
 
 
 @pytest.mark.anyio("asyncio")
-async def test_manage_tool_calls_short_circuit_only_when_unavailable(monkeypatch):
+async def test_manage_tool_calls_always_short_circuit(monkeypatch):
     async def fake_manage(arguments):
         return ([bridge.types.TextContent(type="text", text="local")], {"result": arguments})
 
@@ -60,29 +60,17 @@ async def test_manage_tool_calls_short_circuit_only_when_unavailable(monkeypatch
         assert method == "tools/call"
         return {"content": [{"type": "text", "text": "proxied"}]}
 
-    # Short-circuit path (not advertised by proxy)
-    bridge._MANAGE_TOOL_AVAILABLE = False
     monkeypatch.setattr(bridge, "_call_manage_tool", fake_manage)
     monkeypatch.setattr(bridge, "_proxy_jsonrpc", fake_rpc)
+
+    # Short-circuit path (not advertised by proxy)
+    bridge._MANAGE_TOOL_AVAILABLE = False
     content, metadata = await bridge._proxy_call_tool(bridge.app, "manage_stelae", {"operation": "list_discovered_servers"})
     assert metadata["result"]["operation"] == "list_discovered_servers"
     assert content[0].text == "local"
 
-    # Pass-through path (proxy advertises the tool)
-    async def fail_manage(_):
-        raise AssertionError("_call_manage_tool should not run when proxy has the tool")
-
+    # Even when the proxy advertises the tool we keep the call local to avoid restart drops
     bridge._MANAGE_TOOL_AVAILABLE = True
-    monkeypatch.setattr(bridge, "_call_manage_tool", fail_manage)
-    called = {}
-
-    async def rpc_proxy(method, params=None, **kwargs):
-        assert method == "tools/call"
-        called["params"] = params
-        return {"content": [{"type": "text", "text": "proxied"}]}
-
-    monkeypatch.setattr(bridge, "_proxy_jsonrpc", rpc_proxy)
-    response = await bridge._proxy_call_tool(bridge.app, "manage_stelae", {"operation": "discover_servers"})
-    assert called["params"]["name"] == "manage_stelae"
-    assert isinstance(response, list)
-    assert response[0].text == "proxied"
+    content, metadata = await bridge._proxy_call_tool(bridge.app, "manage_stelae", {"operation": "discover_servers"})
+    assert metadata["result"]["operation"] == "discover_servers"
+    assert content[0].text == "local"

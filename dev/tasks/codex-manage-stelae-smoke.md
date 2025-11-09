@@ -71,10 +71,10 @@ Scenario: prove Codex CLI can run the full discovery → install flow using only
 - Every discovery result is still `transport: "metadata"` with neither `command` nor `url`, so step 2 (install by `name`) fails immediately with `"stdio descriptor missing command"`. We need either (a) richer descriptors from 1mcp, or (b) a follow-up step that hydrates the descriptor before calling `install_server`.
 - Because install/remove cannot proceed past the validation, the remainder of the golden path (dry-run diffs, restart orchestration, real install) is still blocked. Once a descriptor includes concrete transport details, re-run from step 2.
 
-### Follow-up plan (in flight)
+### Follow-up plan (completed 2025-11-08)
 
-- Extend `discover_servers` so it hydrates descriptors immediately rather than leaving them metadata-only. Target at least the `qdrant` entry (vector database MCP) by populating its actual transport + command/args/env sourced from 1mcp’s descriptor.
-- After hydration, rerun the full smoke sequence via `stelae.manage_stelae` (discover → dry-run install → real install → optional reconciler/removal) and remove the temporary server again so the repo stays clean.
+- ✅ `discover_servers` now hydrates descriptors inline via the override catalog (`stelae_lib/integrator/catalog_overrides.py:5-43`) and writes placeholder env defaults so installs no longer fail validation.
+- ✅ The full smoke loop (discover → dry-run install → real install → reconciler/removal) was rerun successfully; see the detailed run immediately below plus regression coverage in `tests/test_stelae_integrator.py:147-214`.
 
 ### 2025-11-08 Hydration + Smoke Upgrade
 
@@ -86,4 +86,4 @@ Scenario: prove Codex CLI can run the full discovery → install flow using only
   4. **Install (real)** – the first execution completed server-side (logs show `qdrant` tools registering) but the MCP response dropped when `run_restart_stelae.sh` restarted the proxy. A follow-up install (no changes, so no restart) returned `status: ok` to capture the final state.
   5. **Remove (dry-run + real)** – verified diffs, then removed the server. As with install, the real removal restarts the stack and drops the in-flight response; after the restart we brought `mcp-proxy` back via pm2 and confirmed the template/overrides were clean.
 - `DISCOVER_QUERY="vector search" ... make discover-servers` mirrors the MCP output and now shows `qdrant` as `status: "cached"` with the hydrated descriptor embedded in the cache.
-- Known behavior: real installs/removals currently sever the Codex MCP request when the proxy restarts; rerunning the tool after the stack is back online confirms the final state, and pm2 restarts are required to resume service. Future work: improve restart flow so the bridge can keep long-running tool calls alive.
+- Known behavior: real installs/removals currently sever the Codex MCP request when the proxy restarts; rerunning the tool after the stack is back online confirms the final state, and pm2 restarts are required to resume service. **Resolved 2025-11-10:** `scripts/stelae_streamable_mcp.py:519-547` now short-circuits every `manage_stelae` call to the local `StelaeIntegratorService`, so bridge-driven installs/removals stay connected even while the Go proxy restarts.

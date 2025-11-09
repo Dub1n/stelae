@@ -524,7 +524,7 @@ async def _proxy_call_tool(
     name: str,
     arguments: Dict[str, Any],
 ) -> Iterable[types.Content] | tuple[Iterable[types.Content], Dict[str, Any]]:
-    if _is_manage_tool(name) and not _MANAGE_TOOL_AVAILABLE:
+    if _is_manage_tool(name):
         return await _call_manage_tool(arguments or {})
     params = {"name": name, "arguments": arguments or {}}
     result = await _proxy_jsonrpc("tools/call", params, read_timeout=PROXY_CALL_TIMEOUT)
