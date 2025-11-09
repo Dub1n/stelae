@@ -10,7 +10,7 @@ Tags: `#infra`, `#docs`
 - [x] Define + land schema v2 (JSON Schema + migration helpers) and add validator hooks to writers.
 - [x] Update overrides producers (ToolOverridesStore, populate script, proxy list output) to emit per-server entries only; add migration from legacy layout.
 - [x] Extend Go proxy + pytest to enforce new structure and server metadata in tools/list.
-- [x] Update README/SPEC/ARCHITECTURE to document the schema and validation flow.
+- [x] Update README/ARCHITECTURE to document the schema and validation flow.
 - [x] Update spec/progress/task file.
 - [ ] Commit with message `infra: normalize tool override schema` after tests.
 
@@ -18,7 +18,7 @@ Tags: `#infra`, `#docs`
 
 - Code: `stelae_lib/integrator/tool_overrides.py`, `scripts/populate_tool_overrides.py`, `~/apps/mcp-proxy/tool_overrides.go`
 - Tests: `tests/test_populate_tool_overrides.py`, `tests/test_tool_overrides_runtime.py`, Go proxy unit tests
-- Docs: `README.md`, `docs/SPEC-v1.md`, `docs/ARCHITECTURE.md`
+- Docs: `README.md`, `docs/ARCHITECTURE.md`
 
 ## Notes
 

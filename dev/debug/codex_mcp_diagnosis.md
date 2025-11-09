@@ -2,7 +2,7 @@
 
 ## 2025-11-06 – Initial Context Review
 
-- Confirmed from `README.md` and `docs/SPEC-v1.md` that Codex connects through the FastMCP bridge (`scripts/stelae_streamable_mcp.py`) in STDIO mode, which forwards everything to the Go facade on `http://127.0.0.1:9090`. Any Codex failure likely stems from the facade manifest/catalog rather than the bridge exposing a reduced tool list.
+- Confirmed from `README.md` and `docs/ARCHITECTURE.md` that Codex connects through the FastMCP bridge (`scripts/stelae_streamable_mcp.py`) in STDIO mode, which forwards everything to the Go facade on `http://127.0.0.1:9090`. Any Codex failure likely stems from the facade manifest/catalog rather than the bridge exposing a reduced tool list.
 - Cloudflare worker only normalises manifest metadata; local Codex should see the raw facade manifest. This implies discrepancies between ChatGPT (public) and Codex (local) more likely originate from local facade config (`config/proxy.json` + overrides) than edge rewrites.
 - Diagnostic workflow will require comparing current `config/proxy.json` / `config/tool_overrides.json` with earlier commits where Codex succeeded, then validating via `make check-connector` and Codex’s STDIO launch path (`~/.codex/config.toml`).
 

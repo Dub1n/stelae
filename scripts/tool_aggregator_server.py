@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+"""StdIO helper that exposes declarative tool aggregations via the proxy."""
+
+from __future__ import annotations
+
+import itertools
+import json
+import logging
+import os
+import sys
+from pathlib import Path
+from typing import Any, Dict
+
+import httpx
+from mcp.server import FastMCP
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from stelae_lib.integrator.tool_aggregations import (
+    AggregatedToolRunner,
+    ToolAggregationError,
+    ToolAggregationConfig,
+    load_tool_aggregation_config,
+)
+
+LOGGER = logging.getLogger("stelae.tool_aggregator")
+if not LOGGER.handlers:
+    handler = logging.StreamHandler(sys.stderr)
+    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    handler.setFormatter(formatter)
+    LOGGER.addHandler(handler)
+    LOGGER.setLevel(logging.INFO)
+    LOGGER.propagate = False
+
+app = FastMCP(
+    name="tool-aggregator",
+    instructions="Expose composite MCP tools backed by downstream proxy calls.",
+)
+
+_CONFIG_PATH = Path(os.getenv("STELAE_TOOL_AGGREGATIONS", ROOT / "config" / "tool_aggregations.json"))
+_SCHEMA_PATH = Path(
+    os.getenv("STELAE_TOOL_AGGREGATIONS_SCHEMA", _CONFIG_PATH.with_name("tool_aggregations.schema.json"))
+)
+_PROXY_BASE_ENV = os.getenv("STELAE_PROXY_BASE")
+_DEFAULT_PROXY = "http://127.0.0.1:9090"
+
+
+class ProxyCaller:
+    def __init__(self, base_url: str) -> None:
+        endpoint = base_url.strip()
+        if not endpoint:
+            endpoint = _DEFAULT_PROXY
+        if endpoint.endswith("/mcp"):
+            self.endpoint = endpoint
+        else:
+            self.endpoint = endpoint.rstrip("/") + "/mcp"
+        self._counter = itertools.count(1)
+
+    async def __call__(self, tool_name: str, arguments: Dict[str, Any], timeout: float | None) -> Dict[str, Any]:
+        request_id = f"agg-{next(self._counter)}"
+        payload = {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "method": "tools/call",
+            "params": {
+                "name": tool_name,
+                "arguments": arguments,
+            },
+        }
+        timeout_value = timeout or 60.0
+        http_timeout = httpx.Timeout(
+            timeout=timeout_value,
+            connect=min(timeout_value, 10.0),
+            read=timeout_value,
+            write=timeout_value,
+        )
+        try:
+            async with httpx.AsyncClient(timeout=http_timeout) as client:
+                response = await client.post(self.endpoint, json=payload)
+                response.raise_for_status()
+                body = response.json()
+        except httpx.HTTPError as exc:  # pragma: no cover - network edge cases
+            raise ToolAggregationError(f"Proxy call failed for {tool_name}: {exc}") from exc
+        if "error" in body:
+            raise ToolAggregationError(
+                f"Proxy reported error for {tool_name}: {json.dumps(body['error'])}"
+            )
+        return body.get("result", {})
+
+
+def _load_config() -> ToolAggregationConfig:
+    if not _CONFIG_PATH.exists():
+        raise SystemExit(f"Aggregation config not found: {_CONFIG_PATH}")
+    return load_tool_aggregation_config(_CONFIG_PATH, schema_path=_SCHEMA_PATH)
+
+
+def _proxy_base_for(aggregation_base: str | None, config: ToolAggregationConfig) -> str:
+    return aggregation_base or config.proxy_url or _PROXY_BASE_ENV or _DEFAULT_PROXY
+
+
+def _register_aggregations(config: ToolAggregationConfig) -> None:
+    LOGGER.info(
+        "Registering %s aggregated tool(s) from %s", len(config.aggregations), _CONFIG_PATH
+    )
+    for aggregation in config.aggregations:
+        proxy_base = _proxy_base_for(aggregation.proxy_url, config)
+        runner = AggregatedToolRunner(
+            aggregation,
+            ProxyCaller(proxy_base),
+            fallback_timeout=config.defaults.timeout_seconds,
+        )
+
+        @app.tool(name=aggregation.name, description=aggregation.description)
+        async def handler(arguments: Dict[str, Any] | None = None, runner=runner):  # type: ignore[misc]
+            return await runner.dispatch(arguments or {})
+
+        LOGGER.info(
+            "Aggregated tool '%s' → %s (operations=%s)",
+            aggregation.name,
+            proxy_base,
+            ", ".join(op.value for op in aggregation.operations),
+        )
+
+
+def main() -> None:
+    try:
+        config = _load_config()
+        _register_aggregations(config)
+    except ToolAggregationError as exc:
+        raise SystemExit(f"Failed to load tool aggregations: {exc}") from exc
+    app.run()
+
+
+if __name__ == "__main__":  # pragma: no cover - script entry
+    main()

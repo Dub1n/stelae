@@ -6,19 +6,19 @@ Tags: `#infra`, `#feature`, `#docs`
 
 ## Checklist
 
-- [ ] Define `config/tool_aggregations.json` + JSON Schema capturing aggregations, hidden tools, and operation mappings.
-- [ ] Implement a dedicated stdio helper (`scripts/tool_aggregator_server.py`) that loads the config, registers aggregated tools, and dispatches operations to downstream servers via the proxy.
-- [ ] Extend restart/render workflow to validate the aggregation config and ensure the helper is launched by default; use a small orchestration script rather than bloating `render_proxy_config`.
-- [ ] Wire aggregation "hides" into overrides so original tools stay disabled in manifests when wrapped.
-- [ ] Add pytest coverage for config validation + dispatch behavior, plus docs (README, SPEC, ARCHITECTURE) explaining the workflow.
-- [ ] Update spec/progress/task file.
-- [ ] Commit with message `feature: add tool aggregation helper` after tests.
+- [x] Define `config/tool_aggregations.json` + JSON Schema capturing aggregations, hidden tools, and operation mappings.
+- [x] Implement a dedicated stdio helper (`scripts/tool_aggregator_server.py`) that loads the config, registers aggregated tools, and dispatches operations to downstream servers via the proxy.
+- [x] Extend restart/render workflow to validate the aggregation config and ensure the helper is launched by default; use a small orchestration script rather than bloating `render_proxy_config`.
+- [x] Wire aggregation "hides" into overrides so original tools stay disabled in manifests when wrapped.
+- [x] Add pytest coverage for config validation + dispatch behavior, plus docs (README, ARCHITECTURE) explaining the workflow.
+- [x] Update spec/progress/task file.
+- [x] Commit with message `feature: add tool aggregation helper` after tests.
 
 ## References
 
 - Code: `scripts/tool_aggregator_server.py` (new), `scripts/restart_stelae.sh`, `config/tool_overrides.json`
 - Tests: new `tests/test_tool_aggregations.py`, existing override/manifest runtime tests
-- Docs: `README.md`, `docs/SPEC-v1.md`, `docs/ARCHITECTURE.md`
+- Docs: `README.md`, `docs/ARCHITECTURE.md`
 
 ## Notes
 
@@ -30,8 +30,8 @@ Tags: `#infra`, `#feature`, `#docs`
 
 ## Checklist (Copy into PR or issue if needed)
 
-- [ ] Code/tests updated
-- [ ] Docs updated
-- [ ] progress.md updated
-- [ ] Task log updated
-- [ ] Checklist completed
+- [x] Code/tests updated
+- [x] Docs updated
+- [x] progress.md updated
+- [x] Task log updated
+- [x] Checklist completed

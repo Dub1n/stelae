@@ -11,7 +11,7 @@ Tags: `#feature`, `#infra`
 - [x] Ensure `tool_overrides.go`/`response_helpers.go` propagate string overrides with correct precedence (per-tool > server > master) and surface warnings during startup/scripts.
 - [x] Add/extend Go unit tests (`tool_overrides_test.go`, `http_test.go`) covering string merge behaviour, rename guardrails, and warning emission.
 - [x] Add integration coverage in Stelae repo (pytest) that exercises overrides end-to-end against rendered manifest/initialize responses.
-- [x] Update `config/tool_overrides.json` examples and relevant docs (`docs/SPEC-v1.md`, `README.md`) with the richer override schema and warning semantics.
+- [x] Update `config/tool_overrides.json` examples and relevant docs (`docs/ARCHITECTURE.md`, `README.md`) with the richer override schema and warning semantics.
 - [x] Regenerate `config/proxy.json`, restart stack, and republish manifest (local + Cloudflare) to validate public + local outputs.
 - [x] Update spec/progress/task file.
 - [x] Commit with message `feature: expand proxy tool overrides` after tests.
@@ -20,7 +20,7 @@ Tags: `#feature`, `#infra`
 
 - Code: `~/apps/mcp-proxy/tool_overrides.go`, `response_helpers.go`, `config.go`
 - Tests: `~/apps/mcp-proxy/tool_overrides_test.go`, add coverage for new fields
-- Docs: `docs/SPEC-v1.md`, `README.md` override section
+- Docs: `docs/ARCHITECTURE.md`, `README.md` override section
 
 ## Notes
 

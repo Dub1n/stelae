@@ -158,11 +158,11 @@ class StaticSearchHit:
 
 STATIC_SEARCH_HITS: Sequence[StaticSearchHit] = (
     StaticSearchHit(
-        id="repo:docs/SPEC-v1.md",
-        title="SPEC-v1.md",
-        text="Summary of the Stelae MCP compliance requirements and verification flow.",
-        url="stelae://repo/docs/SPEC-v1.md",
-        snippet="SPEC outlines the MCP handshake contract, tool catalog expectations, and SSE timing guarantees.",
+        id="repo:docs/ARCHITECTURE.md",
+        title="ARCHITECTURE.md",
+        text="End-to-end description of the Stelae MCP stack, config files, and aggregation helpers.",
+        url="stelae://repo/docs/ARCHITECTURE.md",
+        snippet="Architecture doc outlines the MCP handshake, override flow, aggregation helper, and operations runbook.",
     ),
     StaticSearchHit(
         id="repo:dev/chat_gpt_connector_compliant_reference.md",

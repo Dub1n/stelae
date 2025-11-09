@@ -74,6 +74,89 @@ flowchart LR
 * Scrapling’s `s_fetch_page` and `s_fetch_pattern` entries in `config/tool_overrides.json` are the canonical definition for their `{metadata, content}` outputs. The call-path adapter in the Go proxy writes back to the same file whenever it has to downgrade/upgrade a schema; rerun `make render-proxy` + the restart script after editing those overrides so manifests and streamable clients see the update immediately.
 * The proxy filters out any tool/server marked `enabled: false` before producing `initialize`, `tools/list`, and manifest payloads.
 * Every `tools/list` descriptor carries `"x-stelae": {"servers": [...], "primaryServer": "..."}` metadata. The restart script + populate helper rely on this to map schemas back to the correct server even after the proxy deduplicates tool names.
+* Declarative aggregations are described in `config/tool_aggregations.json`. `scripts/process_tool_aggregations.py` validates the file, injects those descriptors into `config/tool_overrides.json`, and sets any `hideTools` entries to `enabled: false`. `scripts/tool_aggregator_server.py` loads the same config at runtime so wrappers such as `manage_docy_aggregate` show up once in manifests even though they fan out to underlying servers.
+
+## Operations & Troubleshooting
+
+### Troubleshooting quick reference
+
+| Symptom | Likely cause | How to fix |
+| --- | --- | --- |
+| `mcp-proxy` not listening on `:9090` | Go build failed or pm2 stopped | `./scripts/run_restart_stelae.sh` or `source ~/.nvm/nvm.sh && pm2 restart mcp-proxy` |
+| Override hints missing from manifest | override file not loaded or stale | confirm `config/tool_overrides.json` is valid JSON, rerun `make render-proxy`, then `scripts/run_restart_stelae.sh --full` |
+| `tools/call search` returns `{ "results": [] }` | running an old version; static hits missing | rebuild Go proxy (`facade_search.go`) and restart |
+| Codex CLI reports “MCP client … request timed out” | STDIO bridge launched without proper env | ensure the Codex config exports `PYTHONPATH=/home/gabri/dev/stelae` and `STELAE_STREAMABLE_TRANSPORT=stdio`; run `make check-connector` locally |
+| Cloudflare 530 splash | tunnel momentarily unhealthy | rerun `scripts/run_restart_stelae.sh` (validates tunnel + pm2), or `source ~/.nvm/nvm.sh && pm2 restart cloudflared` |
+| `make check-connector` flags unexpected catalog | new upstream tools exposed or overrides missing | inspect `logs/mcp-proxy.err.log`, confirm `config/tool_overrides.json` is current, rerun restart |
+| Startup logs mention "master override" warnings | master-level description/title overrides present | keep only the wildcard `"*"` entry under `master.tools`; move other overrides under their server |
+| `tools/call fetch` returns network errors | upstream site blocked / fetch server delay | retry or inspect `logs/fetch.err.log` |
+| SSE drops quickly | Cloudflare idle timeout | ensure Go proxy heartbeat loop is running (keepalives every 15s) |
+
+### Reference commands
+
+```bash
+# PM2 management
+source ~/.nvm/nvm.sh
+pm2 status
+pm2 logs mcp-proxy --lines 150
+pm2 restart cloudflared
+
+# Re-run public probe & archive log
+CONNECTOR_BASE=https://mcp.infotopology.xyz/mcp make check-connector
+
+# Manual STDIO smoke test (inside WSL)
+python - <<'PY'
+import os, anyio
+from mcp.client.stdio import stdio_client, StdioServerParameters
+from mcp.client.session import ClientSession
+
+params = StdioServerParameters(
+    command='/home/gabri/.venvs/stelae-bridge/bin/python',
+    args=['-m', 'scripts.stelae_streamable_mcp'],
+    env={
+        'PYTHONPATH': '/home/gabri/dev/stelae',
+        'STELAE_PROXY_BASE': 'http://127.0.0.1:9090',
+        'STELAE_STREAMABLE_TRANSPORT': 'stdio',
+        'PATH': os.environ['PATH'],
+    },
+    cwd='/home/gabri/dev/stelae',
+)
+
+async def main():
+    async with stdio_client(params) as (read, write):
+        async with ClientSession(read, write) as session:
+            init = await session.initialize()
+            print(init.serverInfo)
+            tools = await session.list_tools()
+            print([t.name for t in tools.tools])
+
+anyio.run(main)
+PY
+```
+
+### Tool aggregation helper
+
+**Why:** Operators wanted a way to expose curated, high-level tools without duplicating logic across MCP servers or manually editing `tool_overrides.json`. The aggregation helper keeps the catalog clean by letting us describe composites in JSON, hide the noisy downstream entries, and reuse the existing proxy infrastructure for dispatch.
+
+**How it works:**
+
+1. `config/tool_aggregations.json` declares each aggregate tool (manifest metadata, per-operation mappings, validation hints, and a `hideTools` list). The schema is enforced via `config/tool_aggregations.schema.json` so CI / restart scripts can lint config changes early.
+2. `scripts/process_tool_aggregations.py` runs during `make render-proxy` and the restart workflow. It loads the config, writes/upgrades the matching entries in `config/tool_overrides.json`, and flips every `hideTools` entry (`server/tool`) to `enabled: false` so manifests/initialize/tools.list only expose the aggregate.
+3. `scripts/tool_aggregator_server.py` is a FastMCP stdio server launched by the proxy. On startup it registers one MCP tool per aggregation; at call time it validates the input per the declarative mapping rules, translates arguments into the downstream schema, and uses the proxy JSON-RPC endpoint to call the real tool. Response mappings (optional) can reshape the downstream payload before returning to the client.
+4. Because both the overrides and the stdio helper derive from the same config, adding a new aggregate requires zero Python changes—edit the JSON, run `make render-proxy`, and the proxy automatically restarts the helper with the new catalog.
+
+Current suites declared in `config/tool_aggregations.json`:
+
+- `workspace_fs_read` – consolidates all read-only filesystem helpers (`list_*`, `read_*`, `find_*`, `search_*`, `get_file_info`, `calculate_directory_size`).
+- `workspace_fs_write` – wraps the mutating filesystem helpers (`create_directory`, `edit_file`, `write_file`, `move_file`, `delete/insert/zip/unzip`).
+- `workspace_shell_control` – exposes guarded terminal-controller actions (`execute_command`, `change_directory`, `get_current_directory`, `get_command_history`).
+- `memory_suite` – surfaces every Basic Memory operation (context build, CRUD, project switching, searches) behind a single manifest entry.
+- `doc_fetch_suite` – unifies Docy fetch helpers (`fetch_document_links`, `fetch_documentation_page`, `list_documentation_sources_tool`).
+- `scrapling_fetch_suite` – selects the Scrapling fetch mode (`s_fetch_page`, `s_fetch_pattern`).
+- `strata_ops_suite` – aggregates Strata’s discovery/execution/auth workflows (`discover_server_actions`, `execute_action`, `get_action_details`, `handle_auth_failure`, `search_documentation`).
+- `manage_docy_aggregate` – Docy catalog administration (list/add/remove/sync/import).
+
+If `tools/list` ever shrinks to the fallback `fetch`/`search` entries, the aggregator likely failed to register; rerun `make restart-proxy` (or `scripts/run_restart_stelae.sh --full`) to relaunch the stdio server and restore the curated catalog.
 * The proxy records per-tool adapter state in `config/tool_schema_status.json` (path via `manifest.toolSchemaStatusPath`) and patches `config/tool_overrides.json` whenever call-path adaptation selects a different schema (e.g., persisting generic for text-only servers). After rerunning `make render-proxy` + restarting PM2, external clients see the updated schemas. `scripts/populate_tool_overrides.py --proxy-url <endpoint> --quiet` now runs during `scripts/restart_stelae.sh` so every restart reuses the freshly collected `tools/list` payload to ensure all downstream schemas are persisted; the script still supports per-server scans for development via `--servers`, and operators can opt out entirely for a given restart with `--skip-populate-overrides`. When invoking manually, export `PYTHONPATH=$STELAE_DIR` so the helper can import `stelae_lib`.
 * Facade fallback descriptors (`search`, `fetch`) remain available even if no downstream server supplies them, and they can also be overridden via the master block.
 

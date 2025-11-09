@@ -152,6 +152,30 @@ populate_overrides_via_proxy() {
   fi
 }
 
+prepare_tool_aggregations() {
+  local script="$STELAE_DIR/scripts/process_tool_aggregations.py"
+  if [ ! -f "$script" ]; then
+    return
+  fi
+  local python_exec="$PYTHON_BIN"
+  if [ -z "$python_exec" ] || [ ! -x "$python_exec" ]; then
+    python_exec="$(command -v python3 || true)"
+    if [ -z "$python_exec" ]; then
+      warn "Skipping tool aggregation prep; python3 not available"
+      return
+    fi
+  fi
+  local output
+  if output=$(PYTHONPATH="$STELAE_DIR" "$python_exec" "$script" 2>&1); then
+    local summary
+    summary=$(echo "$output" | tail -1)
+    log "Tool aggregations prepared (${summary:-ok})"
+  else
+    warn "Tool aggregation prep failed"
+    printf '%s\n' "$output"
+  fi
+}
+
 ensure_cloudflared_ingress() {
   mkdir -p "$CF_DIR"
   local tuuid
@@ -230,6 +254,9 @@ if [ "$FULL_REDEPLOY" -eq 1 ]; then
   require npx
 fi
 mkdir -p "$STELAE_DIR/logs"
+
+log "Validating tool aggregation config"
+prepare_tool_aggregations
 
 # build fresh proxy binary before restarting services
 log "Building mcp-proxy binary → $PROXY_BIN"

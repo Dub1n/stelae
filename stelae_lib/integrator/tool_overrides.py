@@ -115,6 +115,57 @@ class ToolOverridesStore:
                 changed = True
         return changed
 
+    def disable_tool(self, server_name: str, tool_name: str) -> bool:
+        tool_block = self._ensure_tool_block(server_name, tool_name)
+        if tool_block.get("enabled") is False:
+            return False
+        tool_block["enabled"] = False
+        return True
+
+    def update_tool_descriptor(
+        self,
+        server_name: str,
+        tool_name: str,
+        *,
+        description: str | None = None,
+        annotations: Dict[str, Any] | None = None,
+        input_schema: Any | None = None,
+        output_schema: Any | None = None,
+        enabled: bool | None = None,
+        name: str | None = None,
+    ) -> bool:
+        tool_block = self._ensure_tool_block(server_name, tool_name)
+        changed = False
+        if enabled is not None and tool_block.get("enabled") != enabled:
+            tool_block["enabled"] = enabled
+            changed = True
+        if name and tool_block.get("name") != name:
+            tool_block["name"] = name
+            changed = True
+        if description and tool_block.get("description") != description:
+            tool_block["description"] = description
+            changed = True
+        if annotations:
+            existing = tool_block.setdefault("annotations", {})
+            if not isinstance(existing, dict):
+                existing = {}
+                tool_block["annotations"] = existing
+            for key, value in annotations.items():
+                if key not in existing or existing[key] != value:
+                    existing[key] = value
+                    changed = True
+        if input_schema is not None:
+            serialized = json.loads(json.dumps(input_schema))
+            if tool_block.get("inputSchema") != serialized:
+                tool_block["inputSchema"] = serialized
+                changed = True
+        if output_schema is not None:
+            serialized = json.loads(json.dumps(output_schema))
+            if tool_block.get("outputSchema") != serialized:
+                tool_block["outputSchema"] = serialized
+                changed = True
+        return changed
+
     def apply(self, server_name: str, tools: Iterable[ToolInfo], *, server_description: str | None, source: str | None) -> bool:
         changed = False
         server_block = self._data.setdefault("servers", {}).setdefault(server_name, {"enabled": True, "tools": {}})

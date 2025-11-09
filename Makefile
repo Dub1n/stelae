@@ -77,6 +77,7 @@ restart-proxy: render-proxy
 
 render-proxy:
 	@if [ ! -f "$(PROXY_TEMPLATE)" ]; then echo "ERROR: Missing $(PROXY_TEMPLATE)"; exit 1; fi
+	$(PYTHON) "$(STELAE_DIR)/scripts/process_tool_aggregations.py"
 	$(PYTHON) "$(PROXY_RENDERER)" --template "$(PROXY_TEMPLATE)" --output "$(PROXY_CONFIG)" --env-file "$(ENV_FILE)" --fallback-env "$(STELAE_DIR)/.env.example"
 
 logs:

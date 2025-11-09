@@ -50,6 +50,16 @@
         "STELAE_DOCY_URL_FILE": "{{STELAE_DIR}}/.docy.urls"
       }
     },
+    "tool_aggregator": {
+      "type": "stdio",
+      "command": "{{PYTHON}}",
+      "args": [
+        "{{STELAE_DIR}}/scripts/tool_aggregator_server.py"
+      ],
+      "env": {
+        "STELAE_TOOL_AGGREGATIONS": "{{STELAE_DIR}}/config/tool_aggregations.json"
+      }
+    },
     "fetch": {
       "type": "http",
       "command": "{{LOCAL_BIN}}/mcp-server-fetch"

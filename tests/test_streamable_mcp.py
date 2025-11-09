@@ -29,7 +29,7 @@ async def test_search_returns_static_hits(monkeypatch):
 
     ids = {item["id"] for item in results}
     assert ids == {
-        "repo:docs/SPEC-v1.md",
+        "repo:docs/ARCHITECTURE.md",
         "repo:dev/chat_gpt_connector_compliant_reference.md",
         "repo:dev/compliance_handoff.md",
     }
