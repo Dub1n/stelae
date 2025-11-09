@@ -54,22 +54,27 @@ def test_manifest_and_tools_list_respect_overrides(tmp_path: Path) -> None:
     base_url = f"http://127.0.0.1:{port}"
 
     overrides = {
-        "tools": {
-            "search": {
-                "name": "stelae_search",
-                "description": "Search across configured MCP servers.",
-            },
-            "fetch": {
-                "description": "Fetch a cached document by id.",
-            },
-        },
+        "schemaVersion": 2,
         "master": {
             "tools": {
                 "*": {
                     "annotations": {"openWorldHint": True}
                 }
             }
-        }
+        },
+        "servers": {
+            "facade": {
+                "tools": {
+                    "search": {
+                        "name": "stelae_search",
+                        "description": "Search across configured MCP servers.",
+                    },
+                    "fetch": {
+                        "description": "Fetch a cached document by id.",
+                    },
+                }
+            }
+        },
     }
     overrides_path = tmp_path / "overrides.json"
     overrides_path.write_text(json.dumps(overrides), encoding="utf-8")

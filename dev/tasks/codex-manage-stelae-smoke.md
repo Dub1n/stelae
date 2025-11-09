@@ -98,15 +98,16 @@ Scenario: prove Codex CLI can run the full discovery → install flow using only
   - `curl -sk https://mcp.infotopology.xyz/.well-known/mcp/manifest.json | jq '{toolCount: (.tools|length), sample: (.tools|map(.name)[0:10])}'` → 60 tools, sample `[build_context, calculate_directory_size, canvas, change_directory, create_directory, create_memory_project, delete_file_content, delete_note, delete_project, directory_tree]`.
 - pm2 after the run:
 
-  ```
+  ```bash
   $ source ~/.nvm/nvm.sh && pm2 status
-  ┌────┬──────────────┬─────────────┬─────────┬─────────┬──────────┬────────┬──────┬───────────┐
+  ┌────┬──────────────┬────────────┬─────────┬─────────┬──────────┐
   │ id │ name         │ pid        │ status  │ cpu     │ mem      │
-  ├────┼──────────────┼─────────────┼─────────┼─────────┼──────────┤
+  ├────┼──────────────┼────────────┼─────────┼─────────┼──────────┤
   │ 0  │ mcp-proxy    │ 809110     │ online  │ 0%      │ 15.9mb   │
   │ 1  │ watchdog     │ 809181     │ online  │ 0%      │ 21.9mb   │
   │ 2  │ cloudflared  │ 809378     │ online  │ 0%      │ 53.6mb   │
   │ 3  │ stelae-bridge│ 809893     │ online  │ 0%      │ 6.8mb    │
-  └────┴──────────────┴─────────────┴─────────┴─────────┴──────────┘
+  └────┴──────────────┴────────────┴─────────┴─────────┴──────────┘
   ```
+
 - Next action: bake these commands into the smoke checklist (and keep the `--no-bridge` flag noted so Codex operators know why the bridge may briefly disconnect during maintenance).

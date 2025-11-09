@@ -139,7 +139,7 @@ populate_overrides_via_proxy() {
     return
   fi
   local output
-  if output=$("$PYTHON_BIN" "$STELAE_DIR/scripts/populate_tool_overrides.py" --proxy-url "$url" --quiet 2>&1); then
+  if output=$(PYTHONPATH="$STELAE_DIR" "$PYTHON_BIN" "$STELAE_DIR/scripts/populate_tool_overrides.py" --proxy-url "$url" --quiet 2>&1); then
     local summary
     summary=$(echo "$output" | grep -E "^(No schema updates required|Wrote updated overrides)" | tail -1)
     if [ -z "$summary" ]; then

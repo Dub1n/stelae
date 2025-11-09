@@ -14,48 +14,11 @@ import httpx
 from mcp import types
 from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
+from stelae_lib.integrator.tool_overrides import ToolOverridesStore
 
 DEFAULT_PROXY_PATH = Path("config/proxy.json")
 DEFAULT_OVERRIDES_PATH = Path("config/tool_overrides.json")
 DEFAULT_PROXY_TIMEOUT = 15.0
-
-
-class OverridesStore:
-    def __init__(self, path: Path) -> None:
-        self.path = path
-        self.data = self._load()
-
-    def _load(self) -> Dict[str, Any]:
-        if self.path.exists():
-            try:
-                return json.loads(self.path.read_text(encoding="utf-8"))
-            except json.JSONDecodeError as exc:
-                raise SystemExit(f"Override file {self.path} is invalid JSON: {exc}")
-        return {}
-
-    def ensure_schema(self, server: str | None, tool: str, key: str, schema: Any) -> bool:
-        if not schema or not tool:
-            return False
-        payload = json.loads(json.dumps(schema))
-        if server:
-            servers = self.data.setdefault("servers", {})
-            server_block = servers.setdefault(server, {})
-            server_block.setdefault("enabled", True)
-            tools = server_block.setdefault("tools", {})
-            tool_block = tools.setdefault(tool, {"enabled": True})
-        else:
-            tools = self.data.setdefault("tools", {})
-            tool_block = tools.setdefault(tool, {"enabled": True})
-        if key in tool_block:
-            return False
-        tool_block[key] = payload
-        return True
-
-    def write(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self.data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        tmp.replace(self.path)
 
 
 async def fetch_tools(command: str, args: Iterable[str], env: Dict[str, str] | None) -> list[types.Tool]:
@@ -107,13 +70,35 @@ def iter_stdio_servers(config: Dict[str, Any]) -> Iterable[tuple[str, Dict[str, 
         yield name, entry
 
 
-def record_tool(overrides: OverridesStore, server: str | None, tool_payload: Mapping[str, Any], keys: Sequence[str]) -> bool:
+def _extract_servers(tool_payload: Mapping[str, Any]) -> list[str]:
+    meta = tool_payload.get("x-stelae")
+    servers: list[str] = []
+    if isinstance(meta, Mapping):
+        raw = meta.get("servers")
+        if isinstance(raw, list):
+            for entry in raw:
+                if isinstance(entry, str) and entry:
+                    servers.append(entry)
+    server_field = tool_payload.get("server") or tool_payload.get("serverName")
+    if isinstance(server_field, str) and server_field:
+        if server_field not in servers:
+            servers.append(server_field)
+    return servers
+
+
+def record_tool(
+    overrides: ToolOverridesStore,
+    servers: Sequence[str],
+    tool_payload: Mapping[str, Any],
+    keys: Sequence[str],
+) -> bool:
     name = tool_payload.get("name")
-    if not isinstance(name, str) or not name:
+    if not isinstance(name, str) or not name or not servers:
         return False
     changed = False
-    for key in keys:
-        changed |= overrides.ensure_schema(server, name, key, tool_payload.get(key))
+    for server in servers:
+        for key in keys:
+            changed |= overrides.ensure_schema(server, name, key, tool_payload.get(key))
     return changed
 
 
@@ -137,7 +122,7 @@ async def populate_from_stdio(
             continue
         for tool in tools:
             payload = tool.model_dump(mode="json")
-            if record_tool(overrides, name, payload, keys):
+            if record_tool(overrides, (name,), payload, keys):
                 total_updates += 1
                 if not quiet:
                     print(f"[update] {name}.{tool.name} - recorded schema")
@@ -154,10 +139,15 @@ async def populate_from_proxy_url(
     tools = await fetch_tools_via_proxy(proxy_url, timeout)
     total_updates = 0
     for entry in tools:
-        if record_tool(overrides, None, entry, keys):
+        servers = _extract_servers(entry)
+        if not servers:
+            print(f"[warn] tools/list entry {entry.get('name')} missing x-stelae server metadata", file=sys.stderr)
+            continue
+        if record_tool(overrides, servers, entry, keys):
             total_updates += 1
             if not quiet:
-                print(f"[update] proxy://{entry.get('name')} - recorded schema")
+                joined = ",".join(servers)
+                print(f"[update] proxy://{entry.get('name')} ({joined}) - recorded schema")
     return total_updates
 
 
@@ -172,7 +162,7 @@ async def main() -> None:
     parser.add_argument("--quiet", action="store_true", help="Suppress per-tool update logs; still prints the final summary")
     args = parser.parse_args()
 
-    overrides = OverridesStore(Path(args.overrides))
+    overrides = ToolOverridesStore(Path(args.overrides))
     keys: Sequence[str] = ("inputSchema", "outputSchema")
 
     if args.proxy_url:

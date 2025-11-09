@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stelae.dev/schemas/tool_overrides.schema.json",
+  "title": "Stelae Tool Overrides",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "master", "servers"],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 2,
+      "description": "Schema revision for config/tool_overrides.json."
+    },
+    "master": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tools"],
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Optional global enable/disable switch applied before per-server entries."
+        },
+        "tools": {
+          "type": "object",
+          "default": {
+            "*": {
+              "annotations": {}
+            }
+          },
+          "additionalProperties": false,
+          "properties": {
+            "*": {
+              "$ref": "#/$defs/toolOverride"
+            }
+          },
+          "description": "Only the wildcard entry is allowed; server-specific overrides live under servers.<name>.tools"
+        }
+      }
+    },
+    "servers": {
+      "type": "object",
+      "default": {},
+      "additionalProperties": {
+        "$ref": "#/$defs/serverFragment"
+      },
+      "description": "Per-server override fragments keyed by proxy server name."
+    }
+  },
+  "$defs": {
+    "annotationOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": {"type": "string"},
+        "readOnlyHint": {"type": "boolean"},
+        "destructiveHint": {"type": "boolean"},
+        "idempotentHint": {"type": "boolean"},
+        "openWorldHint": {"type": "boolean"}
+      }
+    },
+    "schemaObject": {
+      "type": "object",
+      "description": "Arbitrary JSON schema payload emitted by downstream servers.",
+      "additionalProperties": true
+    },
+    "toolOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional alias exposed to clients."
+        },
+        "description": {"type": "string"},
+        "annotations": {"$ref": "#/$defs/annotationOverride"},
+        "inputSchema": {"$ref": "#/$defs/schemaObject"},
+        "outputSchema": {"$ref": "#/$defs/schemaObject"}
+      }
+    },
+    "serverFragment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tools"],
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "metadata": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "description": {"type": "string"},
+            "source": {"type": "string", "format": "uri-reference"}
+          }
+        },
+        "tools": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {"$ref": "#/$defs/toolOverride"}
+        }
+      }
+    }
+  }
+}

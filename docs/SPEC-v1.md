@@ -25,7 +25,8 @@ Local dev (Codex CLI) ──> FastMCP bridge (`scripts/stelae_streamable_mcp.py`
 
 * Both `initialize` and `tools/list` now mirror the full downstream tool inventory so Connectors and local agents see identical capabilities.
 * The Cloudflare worker still normalises manifest metadata (endpoint URL, server slug) but leaves the tool list intact.
-* Tool behaviour hints (`readOnlyHint`, `openWorldHint`, etc.) default to `false` unless supplied by an upstream server or via `config/tool_overrides.json` (per-server entries and a `master` section that supports specific names or `"*"`). Overrides now accept richer descriptors (`name`, `description`, annotation `title`) and apply consistently to the manifest, `initialize`, `tools/list`, and `tools/call` responses. Aliases are resolved back to the originating downstream tool; master-level renames are rejected with a warning to avoid breaking routing.
+* Tool behaviour hints (`readOnlyHint`, `openWorldHint`, etc.) default to `false` unless supplied by an upstream server or via `config/tool_overrides.json` (validated by `config/tool_overrides.schema.json`). Overrides now accept richer descriptors (`name`, `description`, annotation `title`) and apply consistently to the manifest, `initialize`, `tools/list`, and `tools/call` responses. Every override lives under the owning server; the `master` section is limited to the wildcard `"*"` entry for global defaults. Aliases are resolved back to the originating downstream tool; master-level renames are rejected with a warning to avoid breaking routing.
+* Each tool descriptor includes `"x-stelae": {"servers": [...], "primaryServer": "..."}` so automation (populate scripts, validation tooling) can trace schemas back to the correct downstream server even after the proxy merges duplicate tool names.
 
 ## 2. Components
 
@@ -57,7 +58,7 @@ $ source ~/.nvm/nvm.sh && pm2 status
 ## 4. Key configs
 
 * `config/proxy.json` – rendered facade config (servers, manifest metadata, override file path).
-* `config/tool_overrides.json` – optional per-server and `master` annotation overrides merged on proxy startup.
+* `config/tool_overrides.json` – optional per-server overrides (plus the wildcard `master.tools["*"]` entry) merged on proxy startup. The document declares `schemaVersion: 2` and fails validation if the JSON schema in `config/tool_overrides.schema.json` is not satisfied.
 * Setting `enabled: false` on a server, on a specific tool, or via the `master` section removes the tool from manifest/initialize/tools.list responses (upstream servers still load, but clients no longer see those entries).
 * `Makefile` target `check-connector` – runs `dev/debug/check_connector.py`, hits the public endpoint, and records the published tool catalog (verify overrides appear as expected).
 * `C:\Users\gabri\.codex\config.toml` – Codex CLI entry; launches the STDIO bridge via WSL with `PYTHONPATH=/home/gabri/dev/stelae` so `scripts.*` resolves correctly.
@@ -123,7 +124,7 @@ curl -s https://mcp.infotopology.xyz/mcp \
 | Codex CLI reports “MCP client … request timed out” | STDIO bridge launched without proper env | confirm `config.toml` entry includes `PYTHONPATH=/home/gabri/dev/stelae` and `STELAE_STREAMABLE_TRANSPORT=stdio`; run `make check-connector` locally |
 | Cloudflare 530 page | tunnel momentarily unhealthy | rerun `scripts/run_restart_stelae.sh` (ensures tunnel + pm2 state), or `source ~/.nvm/nvm.sh && pm2 restart cloudflared` |
 | `make check-connector` flags unexpected catalog | new upstream tools exposed or overrides missing | inspect `logs/mcp-proxy.err.log` and confirm `config/tool_overrides.json` is up to date, then rerun the restart script |
-| Startup logs mention "master override" warnings | master-level description/title overrides or attempted renames detected | Review `config/tool_overrides.json`; per-tool overrides are preferred. Master renames are ignored, while master descriptions still apply but notify during `make render-proxy`/`scripts/run_restart_stelae.sh`. |
+| Startup logs mention "master override" warnings | master-level description/title overrides or attempted renames detected | Review `config/tool_overrides.json`; per-tool overrides are required. The only legal master entry is `"*"`, so anything else is stripped with a warning during render/restart. |
 | `tools/call fetch` returns network errors | upstream site blocked or fetch server delay | retry, or inspect `logs/fetch.err.log` for HTTP errors |
 | SSE drops quickly | Cloudflare idle timeout | facade sends keepalives every 15s; if missing, ensure Go proxy heartbeat loop is running |
 

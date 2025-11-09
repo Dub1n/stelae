@@ -46,7 +46,14 @@ def integrator_workspace(tmp_path: Path):
     overrides_path = config_dir / "tool_overrides.json"
     discovery_path = config_dir / "discovered_servers.json"
     _write_json(template_path, {"mcpServers": {}})
-    _write_json(overrides_path, {"master": {"tools": {}}, "servers": {}})
+    _write_json(
+        overrides_path,
+        {
+            "schemaVersion": 2,
+            "master": {"tools": {"*": {"annotations": {}}}},
+            "servers": {},
+        },
+    )
     _write_json(discovery_path, [SAMPLE_DISCOVERY])
     env_file = tmp_path / ".env"
     (tmp_path / "one_mcp").mkdir()
@@ -108,7 +115,7 @@ def test_install_server_applies_changes(integrator_workspace):
     data = json.loads(integrator_workspace["template"].read_text(encoding="utf-8"))
     assert "demo_server" in data["mcpServers"]
     overrides = json.loads(integrator_workspace["overrides"].read_text(encoding="utf-8"))
-    assert "demo_tool" in overrides["master"]["tools"]
+    assert "demo_tool" in overrides["servers"]["demo_server"]["tools"]
     assert runner.invocations, "commands should run"
 
 

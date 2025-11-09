@@ -48,12 +48,16 @@ Path placeholders expand from `.env`; see setup below.
    make render-proxy
    \```
    This renders `config/proxy.json` from `config/proxy.template.json` using `.env` (with `.env.example` as fallback).
-3. (Optional) Tailor tool metadata with `config/tool_overrides.json`. The file now supports per-tool `description`, aliasing via `name`, richer annotation fields (including `title`), plus full `inputSchema`/`outputSchema` overrides so manifests always describe the wrapped payloads we return. Extend it per downstream server, or globally via the `master` section:
+3. (Optional) Tailor tool metadata with `config/tool_overrides.json`. The file is validated against `config/tool_overrides.schema.json`, carries an explicit `schemaVersion`, and supports per-tool `description`, aliasing via `name`, richer annotation fields (including `title`), plus full `inputSchema`/`outputSchema` overrides so manifests always describe the wrapped payloads we return. Extend it per downstream server and reserve the `master` section for wildcard defaults:
    ```json
    {
+     "schemaVersion": 2,
      "servers": {
        "fs": {
          "enabled": true,
+         "metadata": {
+           "description": "Filesystem helpers"
+         },
          "tools": {
           "read_file": {
             "enabled": true,
@@ -88,24 +92,22 @@ Path placeholders expand from `.env`; see setup below.
        }
      },
      "master": {
-       "enabled": true,
        "tools": {
-         "*": {
-         "enabled": true,
-         "annotations": {}
-         }
+        "*": {
+          "annotations": {}
+        }
        }
    }
   }
   ```
-   The optional `master` block lets you override tools regardless of which server registered them; use `"*"` to target every tool, or list specific names. Setting `"enabled": false` at the server or tool level hides those entries from the manifest, `initialize`, and `tools/list` responses (and therefore from remote clients). Only the hints you specify are changed; unspecified hints keep the proxy defaults. Master-level renames are rejected on startup, and master-level description/title overrides emit a warning so you know global copy was applied.
+   Each override lives under its originating server; the only legal `master.tools` entry is the wildcard `"*"` for global defaults. Setting `"enabled": false` at the server or tool level hides those entries from the manifest, `initialize`, and `tools/list` responses (and therefore from remote clients). Only the hints you specify are changed; unspecified hints keep the proxy defaults. Master-level renames are rejected on startup, and master-level description/title overrides emit a warning so you know global copy was applied.
 
-   Aliases defined via `name` automatically flow through manifests, `initialize`, `tools/list`, and `tools/call`. Client requests using the alias are resolved back to the original downstream tool, while the original name remains available as a fallback for compatibility.
+   Aliases defined via `name` automatically flow through manifests, `initialize`, `tools/list`, and `tools/call`. Client requests using the alias are resolved back to the original downstream tool, while the original name remains available as a fallback for compatibility. The proxy annotates every `tools/list` entry with `"x-stelae": {"servers": [...], "primaryServer": "..."}` so automation (and the override population script) can map schemas back to the correct server without guessing.
 4. Proxy call-path adapter keeps flaky MCP servers usable without touching upstream code:
    - The Go proxy adapts tool call results at response time. Chain: pass-through → declared (uses `config/tool_overrides.json` outputSchema and inline heuristics when the declared schema implies it) → generic `{ "result": "..." }`.
    - On success, the proxy updates `config/tool_overrides.json` atomically when the used schema differs (e.g., persists generic when no declared exists). It tracks runtime state in `config/tool_schema_status.json` (path set via `manifest.toolSchemaStatusPath`).
    - This works for both stdio and HTTP servers and avoids inserting per-server shims.
-4. Prime new servers’ schemas automatically: `scripts/restart_stelae.sh` now calls `scripts/populate_tool_overrides.py --proxy-url http://127.0.0.1:9090/mcp --quiet` after the local `tools/list` probe so freshly launched stacks immediately persist every tool’s `inputSchema`/`outputSchema`. For ad-hoc use (e.g., focusing on a single stdio server), you can still run `~/.venvs/stelae-bridge/bin/python scripts/populate_tool_overrides.py --servers fs` to launch that server directly, or hit any MCP endpoint with `--proxy-url` to reuse its catalog without re-spawning processes; append `--quiet` to either mode to suppress per-tool logs. When debugging and you truly need to skip the automatic write-back, pass `--skip-populate-overrides` to `scripts/run_restart_stelae.sh`.
+4. Prime new servers’ schemas automatically: `scripts/restart_stelae.sh` now calls `scripts/populate_tool_overrides.py --proxy-url http://127.0.0.1:9090/mcp --quiet` after the local `tools/list` probe so freshly launched stacks immediately persist every tool’s `inputSchema`/`outputSchema`. For ad-hoc use (e.g., focusing on a single stdio server), you can still run `PYTHONPATH=$STELAE_DIR ~/.venvs/stelae-bridge/bin/python scripts/populate_tool_overrides.py --servers fs` to launch that server directly, or hit any MCP endpoint with `--proxy-url` to reuse its catalog without re-spawning processes; append `--quiet` to either mode to suppress per-tool logs. When debugging and you truly need to skip the automatic write-back, pass `--skip-populate-overrides` to `scripts/run_restart_stelae.sh`.
 
 5. Ensure the FastMCP bridge virtualenv (`.venv/` by default) includes `mcp`, `fastmcp`, `anyio`, and `httpx`:
    \```bash
