@@ -74,11 +74,18 @@ require() { command -v "$1" >/dev/null 2>&1 || { err "missing command: $1"; exit
 
 ensure_pm2_app() {
   local app="$1"
-  if ! pm2 describe "$app" >/dev/null 2>&1; then
+  local status
+  status=$(pm2 jlist | jq -r --arg name "$app" '.[] | select(.name==$name) | .pm2_env.status' 2>/dev/null || true)
+  if [ -z "$status" ] || [ "$status" = "null" ]; then
     pm2 start "$ECOSYSTEM" --only "$app"
-  else
-    pm2 restart "$app" --update-env
+    return
   fi
+  if [ "$status" != "online" ]; then
+    pm2 delete "$app" >/dev/null 2>&1 || true
+    pm2 start "$ECOSYSTEM" --only "$app"
+    return
+  fi
+  pm2 restart "$app" --update-env
 }
 
 wait_port() {
