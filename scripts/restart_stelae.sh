@@ -130,8 +130,12 @@ populate_overrides_via_proxy() {
   fi
   local output
   if output=$("$PYTHON_BIN" "$STELAE_DIR/scripts/populate_tool_overrides.py" --proxy-url "$url" --quiet 2>&1); then
-    log "Tool overrides synced via proxy catalog"
-    [ -n "$output" ] && printf '%s\n' "$output"
+    local summary
+    summary=$(echo "$output" | grep -E "^(No schema updates required|Wrote updated overrides)" | tail -1)
+    if [ -z "$summary" ]; then
+      summary="No schema updates required"
+    fi
+    log "Tool overrides synced via proxy catalog (${summary})"
   else
     warn "Tool override population failed via proxy"
     printf '%s\n' "$output"
