@@ -22,7 +22,7 @@ Tags: `#automation` `#infra` `#mcp`
 
 - Docy watches `.docy.urls` live, so we avoid restarts; just rewrite the catalog and (optionally) trigger a background cache sync.
 - Keep the tool list minimal by exposing a single Docy-specific MCP tool with discriminated `operation` payloads—aligns with the stelae-integrator approach while keeping per-server responsibilities isolated.
-- Future extension: add `import_from_manifest` to seed Docy from 1mcp discovery entries once stabilized.
+- Future extension: add `import_from_manifest` to seed Docy from 1mcp discovery entries once stabilized. *Completed 2025-11-09 — `manage_docy` now accepts `{"operation": "import_from_manifest"}` with `manifest_path`/`manifest_url`, optional tags, and `dry_run` so the Docy catalog can be hydrated directly from discovery cache or remote manifests.*
 
 ## Checklist (Copy into PR or issue if needed)
 

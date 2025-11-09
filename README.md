@@ -159,7 +159,12 @@ Path placeholders expand from `.env`; see setup below.
 
 - `config/docy_sources.json` is the canonical list of documentation URLs. Each entry can carry `id`, `url`, `title`, `tags`, `notes`, `enabled`, and `refresh_hours` metadata so we can track provenance in git.
 - `scripts/render_docy_sources.py` converts the catalog into `.docy.urls`, which Docy reads live on every request (no restart needed). The renderer writes comments next to each URL so operators know not to edit the generated file manually.
-- The dedicated Docy manager MCP server (`scripts/docy_manager_server.py`) exposes the `manage_docy` tool. Operations cover `list_sources`, `add_source`, `remove_source`, and `sync_catalog`, mirroring the CLI mode (`python scripts/docy_manager_server.py --cli --operation add_source --params '{"url": "https://docs.crawl4ai.com/"}'`).
+- The dedicated Docy manager MCP server (`scripts/docy_manager_server.py`) exposes the `manage_docy` tool. Operations cover `list_sources`, `add_source`, `remove_source`, `sync_catalog`, and `import_from_manifest`, mirroring the CLI mode (`python scripts/docy_manager_server.py --cli --operation add_source --params '{"url": "https://docs.crawl4ai.com/"}'`). The new importer can hydrate Docy in bulk from a JSON manifest (defaults to `config/discovered_servers.json`) or a remote MCP `.well-known` URL:
+  ```bash
+  python scripts/docy_manager_server.py --cli --operation import_from_manifest \
+    --params '{"manifest_path": "config/discovered_servers.json", "tags": ["1mcp"], "dry_run": true}'
+  ```
+  When `dry_run` is `false` the catalog is saved and `.docy.urls` is re-rendered automatically; pass `manifest_url` instead of `manifest_path` to stream directly from a remote endpoint.
 - Set `STELAE_DOCY_CATALOG` / `STELAE_DOCY_URL_FILE` if you relocate the catalog; otherwise defaults are `config/docy_sources.json` and `.docy.urls` at the repo root.
 
 ### Bootstrapping the 1mcp catalogue
