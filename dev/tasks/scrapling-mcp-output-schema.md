@@ -14,7 +14,17 @@ Root cause: the Scrapling MCP server (scrapling-fetch-mcp) returns a single stri
 
 **Implementation note (2025-02-15):** we are proceeding with a shim-style fix inside the Stelae repo, leaving the upstream Scrapling MCP server untouched for now. If this approach fails to resolve the issue, we will revisit the upstream adjustment option.
 
-### Current Status (Shim V1)
+### Status update (2025-11-10)
+
+- ✅ The Go proxy now handles schema adaptation inline, so the production config points Scrapling straight at `uvx scrapling-fetch-mcp --stdio` again (`config/proxy.template.json:110-138`, README.md:21). No auxiliary shim process runs under pm2.
+- ✅ Scrapling’s latest release returns structured `{metadata, content}` payloads, and the proxy records them as pass-through calls (`config/tool_schema_status.json:35-44` shows `last_adapter: "pass_through"` for both tools).
+- ✅ `config/tool_overrides.json` now records the canonical `{metadata, content}` schema for `s_fetch_page` and `s_fetch_pattern`, and both README.md + `docs/ARCHITECTURE.md` call out that file as the single source of truth.
+- ✅ The FastMCP bridge exposes a dedicated `per_m2_price` helper tool that calls Scrapling, parses matches, and surfaces currency/value/snippet metadata so downstream docs can quote per‑m² figures without ad-hoc scripts. Tests live in `tests/test_per_m2_price_tool.py`.
+- ✅ Call-path failures now include Scrapling bootstrap guidance (run `uv tool install …` then `uvx --from scrapling-fetch-mcp scrapling install`) and have regression coverage for the missing-browser path.
+- ✅ The legacy Python shim (`scripts/mcp_output_shim.py`) and its tests were removed entirely; the Go adapter + overrides cover every server, so the shim is no longer referenced anywhere in docs or templates.
+  Remaining work (tracked elsewhere): keep monitoring runtime telemetry in `config/tool_schema_status.json` for unexpected regressions.
+
+### Current Status (Shim V1) *(historical record; superseded by the adapter above)*
 
 - [x] Added `scripts/mcp_output_shim.py`, a FastMCP adapter that launches `scrapling-fetch-mcp`, rewrites `s_fetch_page` / `s_fetch_pattern` descriptors to advertise a `{metadata, content}` schema, and normalizes raw `METADATA: {...}\n\n<body>` strings into structured payloads.
 - [x] Updated `config/proxy.template.json` (rendered into `config/proxy.json`) so the `scrapling` entry now invokes the shim via `python3 scripts/mcp_output_shim.py`.
@@ -222,11 +232,11 @@ Additionally, generalize the newly landed `scripts/mcp_output_shim.py` so the Go
 3) Validate in this environment (Codex CLI + Go proxy) against 3 target merchant pages.
 4) Document new output in internal usage notes (Stelae tools catalog).
 
-## Follow‑ups
+## Follow‑ups (status)
 
-- Add small JSON schema doc to `README.md` (metadata fields, content semantics).
-- Optional: expose a dedicated `per_m2_price` helper tool later (stretch).
-- Add tests for install-not-ready conditions (browser bootstrap), ensuring friendly errors.
+- [x] Add small JSON schema doc to `README.md` (metadata fields, content semantics). *Documented the override location + helper flow in README.md and `docs/ARCHITECTURE.md`.*
+- [x] Optional: expose a dedicated `per_m2_price` helper tool later (stretch). *Shipped via the FastMCP bridge with regression coverage.*
+- [x] Add tests for install-not-ready conditions (browser bootstrap), ensuring friendly errors. *`tests/test_per_m2_price_tool.py` asserts we emit human-readable instructions when Scrapling fails to start.*
 
 ## Owners & Timeline
 

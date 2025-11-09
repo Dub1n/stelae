@@ -8,6 +8,7 @@ import itertools
 import json
 import logging
 import os
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -86,6 +87,75 @@ MANAGE_TOOL_DESCRIPTOR: Dict[str, Any] = {
 }
 _MANAGE_SERVICE: StelaeIntegratorService | None = None
 _MANAGE_TOOL_AVAILABLE = False
+PER_M2_TOOL_NAME = "per_m2_price"
+PER_M2_TOOL_DESCRIPTOR: Dict[str, Any] = {
+    "name": PER_M2_TOOL_NAME,
+    "description": (
+        "Fetches a merchant page through Scrapling and extracts price-per-square-metre matches. "
+        "Each result includes the detected currency, numeric value, and a short snippet."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "url": {
+                "type": "string",
+                "format": "uri",
+                "description": "Public product page to inspect.",
+            },
+            "currency_hint": {
+                "type": "string",
+                "description": "Optional currency symbol or code to prioritise (e.g., '£' or 'GBP').",
+            },
+            "limit": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 20,
+                "default": 5,
+                "description": "Maximum number of matches to return.",
+            },
+            "context_chars": {
+                "type": "integer",
+                "minimum": 20,
+                "maximum": 200,
+                "default": 80,
+                "description": "Characters of context to keep around each match.",
+            },
+            "mode": {
+                "type": "string",
+                "enum": ["basic", "stealth", "max-stealth"],
+                "default": "basic",
+            },
+            "format": {
+                "type": "string",
+                "enum": ["markdown", "html"],
+                "default": "markdown",
+            },
+            "max_length": {
+                "type": "integer",
+                "minimum": 500,
+                "maximum": 20000,
+                "default": DEFAULT_FETCH_MAX_LENGTH,
+                "description": "Content limit forwarded to Scrapling.",
+            },
+            "search_pattern": {
+                "type": "string",
+                "description": "Optional custom regex that replaces the default per-m² matcher.",
+            },
+        },
+        "required": ["url"],
+    },
+    "annotations": {
+        "title": "Price per m²",
+        "readOnlyHint": True,
+    },
+}
+DEFAULT_CURRENCY_TOKENS: tuple[str, ...] = ("£", "€", r"\$", "gbp", "eur", "usd")
+PER_M2_DEFAULT_CONTEXT = 80
+SCRAPLING_INSTALL_HINT = (
+    "Scrapling fetcher is not ready; install/update it via "
+    "'uv tool install scrapling-fetch-mcp' and "
+    "'uvx --from scrapling-fetch-mcp scrapling install' before retrying."
+)
 
 
 def _configure_logger() -> logging.Logger:
@@ -516,6 +586,8 @@ async def _proxy_list_tools(self: FastMCP) -> list[types.Tool]:
     else:
         _MANAGE_TOOL_AVAILABLE = False
         tools_by_name[MANAGE_TOOL_NAME] = _local_manage_tool_descriptor()
+    if PER_M2_TOOL_NAME not in tools_by_name:
+        tools_by_name[PER_M2_TOOL_NAME] = _local_per_m2_tool_descriptor()
     return sorted(tools_by_name.values(), key=lambda tool: tool.name)
 
 
@@ -526,6 +598,8 @@ async def _proxy_call_tool(
 ) -> Iterable[types.Content] | tuple[Iterable[types.Content], Dict[str, Any]]:
     if _is_manage_tool(name):
         return await _call_manage_tool(arguments or {})
+    if _is_per_m2_tool(name):
+        return await _call_per_m2_tool(arguments or {})
     params = {"name": name, "arguments": arguments or {}}
     result = await _proxy_jsonrpc("tools/call", params, read_timeout=PROXY_CALL_TIMEOUT)
     raw_content = result.get("content")
@@ -687,6 +761,12 @@ def _is_manage_tool(name: str) -> bool:
     return name.split(".", 1)[-1] == MANAGE_TOOL_NAME
 
 
+def _is_per_m2_tool(name: str) -> bool:
+    if not name:
+        return False
+    return name.split(".", 1)[-1] == PER_M2_TOOL_NAME
+
+
 def _get_manage_service() -> StelaeIntegratorService:
     global _MANAGE_SERVICE
     if _MANAGE_SERVICE is None:
@@ -714,6 +794,140 @@ def _run_manage_operation(operation: str, params: Dict[str, Any]) -> Dict[str, A
 
 def _local_manage_tool_descriptor() -> types.Tool:
     return _convert_tool_descriptor(json.loads(json.dumps(MANAGE_TOOL_DESCRIPTOR)))
+
+
+def _scrapling_payload_from_result(
+    result: CallResult,
+) -> tuple[str, dict[str, Any]]:
+    structured = result.structured_content or {}
+    body = structured.get("content")
+    if not isinstance(body, str):
+        texts: list[str] = []
+        for block in result.content:
+            if isinstance(block, types.TextContent):
+                texts.append(block.text or "")
+        body = "\n".join(texts)
+    metadata = structured.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+    return body or "", metadata
+
+
+def _currency_tokens(hint: str | None) -> tuple[str, ...]:
+    tokens = list(DEFAULT_CURRENCY_TOKENS)
+    if hint:
+        trimmed = hint.strip()
+        if trimmed:
+            tokens.insert(0, re.escape(trimmed))
+    # deduplicate while preserving order
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for token in tokens:
+        if token not in seen:
+            ordered.append(token)
+            seen.add(token)
+    return tuple(ordered)
+
+
+def _build_per_m2_regex(currency_hint: str | None, override_pattern: str | None) -> re.Pattern[str]:
+    if override_pattern:
+        return re.compile(override_pattern, re.IGNORECASE | re.MULTILINE)
+    currency_fragment = "|".join(_currency_tokens(currency_hint))
+    expression = rf"(?ix)(?P<currency>{currency_fragment})[\s\u00a0]*(?P<amount>\d[\d.,]*)\s*(?:per|/)\s*(?:m2|m²|m\^2|square\s*(?:met(?:er|re))|sq\.?\s*m)"
+    return re.compile(expression)
+
+
+def _normalize_price_value(raw_value: str) -> float | None:
+    cleaned = raw_value.strip()
+    if not cleaned:
+        return None
+    normalized = cleaned
+    if "," in cleaned and "." not in cleaned:
+        normalized = cleaned.replace(".", "").replace(",", ".")
+    else:
+        normalized = cleaned.replace(",", "")
+    try:
+        return float(normalized)
+    except ValueError:
+        return None
+
+
+def _extract_per_m2_matches(
+    body: str,
+    regex: re.Pattern[str],
+    limit: int,
+    context_chars: int,
+) -> list[dict[str, Any]]:
+    matches: list[dict[str, Any]] = []
+    if not body:
+        return matches
+    limit = max(1, limit)
+    context_chars = max(20, context_chars)
+    for match in regex.finditer(body):
+        value = _normalize_price_value(match.group("amount"))
+        if value is None:
+            continue
+        start, end = match.span()
+        snippet_start = max(0, start - context_chars)
+        snippet_end = min(len(body), end + context_chars)
+        snippet = body[snippet_start:snippet_end].strip()
+        matches.append(
+            {
+                "raw": match.group(0).strip(),
+                "currency": match.group("currency"),
+                "value": value,
+                "unit": "per m²",
+                "snippet": snippet,
+            }
+        )
+        if len(matches) >= limit:
+            break
+    return matches
+
+
+def _local_per_m2_tool_descriptor() -> types.Tool:
+    return _convert_tool_descriptor(json.loads(json.dumps(PER_M2_TOOL_DESCRIPTOR)))
+
+
+async def _call_per_m2_tool(arguments: Dict[str, Any]) -> tuple[Iterable[types.Content], Dict[str, Any]]:
+    url = str(arguments.get("url") or "").strip()
+    if not url:
+        raise RuntimeError("per_m2_price requires a non-empty 'url'")
+    currency_hint = str(arguments.get("currency_hint") or "").strip()
+    limit = int(arguments.get("limit") or 5)
+    limit = max(1, min(limit, 20))
+    context_chars = int(arguments.get("context_chars") or PER_M2_DEFAULT_CONTEXT)
+    context_chars = max(20, min(context_chars, 200))
+    pattern_override = str(arguments.get("search_pattern") or "").strip() or None
+    mode = str(arguments.get("mode") or "basic").strip() or "basic"
+    fetch_format = str(arguments.get("format") or "markdown").strip() or "markdown"
+    max_length = int(arguments.get("max_length") or DEFAULT_FETCH_MAX_LENGTH)
+    max_length = max(500, min(max_length, 20000))
+    try:
+        upstream = await _call_upstream_tool(
+            "scrapling",
+            "s_fetch_page",
+            {
+                "url": url,
+                "mode": mode,
+                "format": fetch_format,
+                "max_length": max_length,
+            },
+        )
+    except RuntimeError as exc:
+        raise RuntimeError(f"{SCRAPLING_INSTALL_HINT} (original error: {exc})") from exc
+    body, metadata = _scrapling_payload_from_result(upstream)
+    regex = _build_per_m2_regex(currency_hint, pattern_override)
+    matches = _extract_per_m2_matches(body, regex, limit, context_chars)
+    payload = {
+        "url": url,
+        "matches": matches,
+        "metadata": metadata,
+        "pattern": regex.pattern,
+    }
+    text = json.dumps(payload, indent=2, ensure_ascii=False)
+    content = [types.TextContent(type="text", text=text)]
+    return content, {"result": payload}
 
 
 def _initialize_bridge() -> None:

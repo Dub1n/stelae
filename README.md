@@ -22,8 +22,23 @@ A WSL-native deployment of [mcp-proxy](https://github.com/TBXark/mcp-proxy) that
 | FastMCP bridge | streamable HTTP (`/mcp`) / stdio | `python -m scripts.stelae_streamable_mcp` | Exposes the full proxy catalog to desktop agents; falls back to local search/fetch if the proxy is unavailable. |
 | 1mcp agent | stdio | `${ONE_MCP_BIN} --transport stdio` | Discovers nearby MCP servers and writes `config/discovered_servers.json` for the integrator. |
 | Custom tools MCP | stdio | `${PYTHON} ${STELAE_DIR}/scripts/custom_tools_server.py` | Config-driven wrapper that exposes scripts listed in `config/custom_tools.json`. |
+| per_m2 helper (bridge) | local | `python -m scripts.stelae_streamable_mcp` | Helper tool `per_m2_price` that calls Scrapling, parses `{metadata, content}` responses, and returns price-per-m² matches with snippets. |
 
 Path placeholders expand from `.env`; see setup below.
+
+- Scrapling’s canonical schema lives in `config/tool_overrides.json` under the `scrapling` server. Both `s_fetch_page` and `s_fetch_pattern` advertise `{metadata, content}` payloads there, and the Go proxy’s call-path adapter keeps those overrides in sync whenever a server emits a new structure. If Scrapling’s upstream contract changes, update the override entries and `make render-proxy` so manifests and tools/list remain truthful.
+- The `per_m2_price` helper is exposed through the FastMCP bridge and shows up in `tools/list` as a first-class tool. Invoke it via MCP with arguments like:
+  ```json
+  {
+    "name": "per_m2_price",
+    "arguments": {
+      "url": "https://example.com/ipe-decking",
+      "limit": 3,
+      "currency_hint": "£"
+    }
+  }
+  ```
+  The tool streams `scrapling.s_fetch_page`, enforces the `{metadata, content}` override, and returns structured `matches` (currency, numeric value, snippet, unit) so documents such as `docs/timber-options.md` can be updated without bespoke scraping scripts. If Scrapling’s Playwright bundle is missing you’ll get a friendly error instructing you to run `uv tool install scrapling-fetch-mcp` followed by `uvx --from scrapling-fetch-mcp scrapling install`.
 
 ---
 

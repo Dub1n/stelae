@@ -10,13 +10,13 @@ Tags: `#infra`
 - [x] Ensure generated overrides are deterministic and idempotent (skip rewrites when values already match).
 - [x] Update `dev/tasks/mcp-auto-loading.md` + `README.md` to explain when/where the auto-population runs.
 - [x] Update spec/progress/task file.
-- [ ] Commit with message `infra: seed tool overrides` after tests.
-- [ ] After completing all steps, rerun `date --iso-8601=seconds`, record the end timestamp, compare against the start time noted below (15-minute threshold decides whether to proceed with `dev/tasks/shim-schema-retry.md`).
+- [x] Commit with message `infra: seed tool overrides` after tests. *(Landed via `56b2a30 infra: seed overrides and enhance shim`.)*
+- [x] After completing all steps, rerun `date --iso-8601=seconds`, record the end timestamp, compare against the start time noted below (15-minute threshold decides whether to proceed with `dev/tasks/shim-schema-retry.md`). *(See timestamp log below.)*
 
 ## References
 
-- Code: `scripts/mcp_output_shim.py`, `config/tool_overrides.json`, `scripts/render_proxy_config.py`
-- Tests: `tests/test_scrapling_shim.py` (extend/clone once new helper lands)
+- Code: `scripts/stelae_streamable_mcp.py`, `config/tool_overrides.json`, `scripts/render_proxy_config.py`
+- Tests: `tests/test_per_m2_price_tool.py` (extends schema enforcement coverage)
 - Docs: `README.md`, `docs/ARCHITECTURE.md`, `dev/tasks/mcp-auto-loading.md`
 
 ## Notes
@@ -31,11 +31,11 @@ Tags: `#infra`
 
 ## Checklist (Copy into PR or issue if needed)
 
-- [ ] Code/tests updated
-- [ ] Docs updated
-- [ ] Progress tracker updated
-- [ ] Task log updated
-- [ ] Checklist completed
+- [x] Code/tests updated (`scripts/populate_tool_overrides.py`, `tests/test_scrapling_shim.py`).
+- [x] Docs updated (README.md auto-population notes, this task log, and cross-links inside `dev/tasks/mcp-auto-loading.md`).
+- [x] Progress tracker updated (`dev/progress.md` now lists this task as completed).
+- [x] Task log updated (this file plus references in related tasks).
+- [x] Checklist completed.
 
 ## Timestamp Log
 

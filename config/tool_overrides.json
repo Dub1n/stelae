@@ -387,10 +387,46 @@
       "enabled": true,
       "tools": {
         "s_fetch_page": {
-          "enabled": true
+          "enabled": true,
+          "outputSchema": {
+            "type": "object",
+            "properties": {
+              "metadata": {
+                "type": "object",
+                "description": "Scrapling fetch metadata (lengths, truncation, pagination).",
+                "additionalProperties": true
+              },
+              "content": {
+                "type": "string",
+                "description": "Fetched document content in the requested format."
+              }
+            },
+            "required": [
+              "metadata",
+              "content"
+            ]
+          }
         },
         "s_fetch_pattern": {
-          "enabled": true
+          "enabled": true,
+          "outputSchema": {
+            "type": "object",
+            "properties": {
+              "metadata": {
+                "type": "object",
+                "description": "Scrapling fetch metadata (lengths, truncation, pagination).",
+                "additionalProperties": true
+              },
+              "content": {
+                "type": "string",
+                "description": "Matched segments rendered in the requested format."
+              }
+            },
+            "required": [
+              "metadata",
+              "content"
+            ]
+          }
         }
       }
     },

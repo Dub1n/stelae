@@ -17,8 +17,8 @@ Prerequisite: `dev/tasks/tool-override-population.md`
 
 ## References
 
-- Code: `scripts/mcp_output_shim.py`, `config/tool_overrides.json`, `config/tool_schema_status.json`
-- Tests: `tests/test_scrapling_shim.py`
+- Code: `scripts/stelae_streamable_mcp.py`, `config/tool_overrides.json`, `config/tool_schema_status.json`
+- Tests: `tests/test_per_m2_price_tool.py`
 - Docs: `README.md`, `docs/ARCHITECTURE.md`, `dev/tasks/tool-override-population.md`
 
 ## Notes
@@ -67,6 +67,13 @@ Prerequisite: `dev/tasks/tool-override-population.md`
 ## Direction Change: Centralize Adapter in Go Proxy (2025-11-07)
 
 Decision: migrate the schema-aware retry logic from the Python shim to the Go proxy so adaptation applies to any server/transport without introducing per-server launch shims. The proxy remains the single aggregation point; we stop running Scrapling through a Python wrapper once the proxy adapter is in place.
+
+### Implementation status (2025-11-10)
+
+- ✅ `config/proxy.template.json:22` now passes `toolSchemaStatusPath` to the Go proxy so call-path adapters can persist telemetry. `config/tool_schema_status.json` is actively updated at runtime (see the `integrator`, `scrapling`, and `strata` entries committed to git).
+- ✅ The shim retry ladder lives inside the proxy; Scrapling is wired directly to `uvx scrapling-fetch-mcp --stdio` while still benefitting from automatic schema enforcement (documented in README.md:21 and reflected in the Scrapling pass-through entries inside `config/tool_schema_status.json:33-46`).
+- ✅ `scripts/mcp_output_shim.py` has been removed entirely (along with its unit tests); the Go adapter plus overrides cover every server, so there is no longer a second shim entry point to maintain.
+- 🔴 No additional cleanup required beyond monitoring adapter telemetry.
 
 Key points
 
@@ -124,7 +131,7 @@ Migration in this repo (Stelae)
 - After proxy adapter merges:
   - Point `mcpServers.scrapling` directly to `uvx scrapling-fetch-mcp` (remove Python shim runner).
   - Retain `scripts/populate_tool_overrides.py` for priming; no change to manifest renderer.
-  - Remove/deprecate `scripts/mcp_output_shim.py` and related status files after confidence period.
+  - Remove/deprecate `scripts/mcp_output_shim.py` and related status files after confidence period. *(Done – shim + tests deleted, docs updated to reference the Go adapter instead.)*
 
 Acceptance Criteria
 
