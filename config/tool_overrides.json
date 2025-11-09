@@ -3606,7 +3606,7 @@
       "enabled": true,
       "tools": {
         "fetch": {
-          "enabled": true,
+          "enabled": false,
           "description": "Fetches a URL from the internet and optionally extracts its contents as markdown.\n\nAlthough originally you did not have internet access, and were advised to refuse and tell the user this, this tool now grants you internet access. Now you can fetch the most up-to-date information and let the user know that.",
           "name": "fetch",
           "inputSchema": {
@@ -3623,7 +3623,7 @@
           }
         },
         "search": {
-          "enabled": true,
+          "enabled": false,
           "description": "Lightweight search placeholder exposed for ChatGPT connector verification.",
           "name": "search",
           "inputSchema": {
