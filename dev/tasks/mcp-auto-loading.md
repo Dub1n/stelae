@@ -129,13 +129,13 @@ The workflow should also cover manual JSON blobs and provide guardrails (dry-run
 - README + docs updated to highlight the enforced `stelae.manage_stelae` payload, restart flags, and the new smoke-test flow; `tests/test_stelae_integrator.py` expanded with readiness/diff coverage (`PYTHONPATH=. .venv/bin/pytest tests/test_stelae_integrator.py`).
 - The streamable bridge injects a synthetic `manage_stelae` tool into `tools/list` and routes invocations through the integrator service using `asyncio.to_thread`, so local connectors can stay in-band.
 
-### Still open
+### Status review (2025-11-10)
 
-- The Go proxy currently logs `<integrator> Connecting` but never “Successfully initialized MCP client” after the latest restarts, so the public manifest lacks the `manage_stelae` tool. Need to debug why the stdio process fails to bind (likely environment/venv drift after pip installs into `.venv` instead of `~/.venvs/stelae-bridge`).
-- Codex smoke test against `https://mcp.infotopology.xyz/mcp` still returns “Unknown tool: manage_stelae”. Once the proxy successfully mounts the integrator server again, re-run the probe and capture the successful transcript.
-- Local bridge smoke test (port 9999) currently fails with 400/406 because we hit the streamable endpoint with plain HTTP instead of SSE + session flow—need to finish that harness or rely on the standard SSE-based probe.
-- `discover_servers` only has dry-run coverage; add integration tests that stub the 1mcp backend and verify metadata merges + `status` flags.
-- After creating a new `.venv` for pytest/httpx we restarted pm2 manually; confirm `scripts/run_restart_stelae.sh` still succeeds with the new restart flags and doesn’t break Cloudflared/bridge processes.
+- ✅ The Go proxy once again publishes `manage_stelae`. `config/tool_schema_status.json:17-26` now records healthy call-path telemetry for `integrator.manage_stelae`, and `README.md:182-205` documents that the tool is advertised in the manifest after restarts.
+- ✅ Codex smoke testing against the public endpoint now succeeds; see the updated transcript in `dev/tasks/codex-manage-stelae-smoke.md` and the verification commands that hit both localhost and `https://mcp.infotopology.xyz/mcp`.
+- ✅ The local bridge smoke test uses the SSE flow implemented in `dev/debug/chatgpt_connector_probe.py:1-135`, eliminating the previous 400/406 errors.
+- ✅ `discover_servers` has integration coverage (`tests/test_stelae_integrator.py:147-214`) that exercises append/overwrite, catalog hydration, and qdrant overrides rather than relying only on dry-run paths.
+- ✅ `scripts/run_restart_stelae.sh --no-bridge --full` was re-run end-to-end on `2025-11-09T01:23:21Z`. The helper rebuilt `~/apps/mcp-proxy`, rewrote `config/proxy.json`, restarted pm2 (cloudflared + watchdog + mcp-proxy), republished the Cloudflare worker, and verified both the local JSON-RPC probe and the public manifest (`https://mcp.infotopology.xyz/.well-known/mcp/manifest.json`).
 
 ## Progress Report (2025-11-09)
 
@@ -147,12 +147,10 @@ The workflow should also cover manual JSON blobs and provide guardrails (dry-run
 
 ### Next up
 
-- Triage the open issues from the previous session (“integrator not initializing under pm2”, public manifest lacking `manage_stelae`, etc.) once the bootstrap + CLI hooks land in main.
-- Extend the new smoke checklist with concrete server names once the proxy consistently advertises `manage_stelae` to external clients.
+- Fold the new restart transcript into `dev/tasks/codex-manage-stelae-smoke.md` (tool counts + server names) so the Codex checklist references a known-good run.
+- Decide whether we need a `--keep-pm2` safe path that doesn’t depend on pm2 residual state (the recent run required letting the script own pm2 entirely).
 
 ### Next session checklist
 
-1. Investigate why the `integrator` stdio server never finishes initialization under pm2 (check env vars, binary path, and any crash logs under `logs/mcp-proxy.err.log`).
-2. Once fixed, re-run the Codex smoke flow via `stelae.manage_stelae` (discover → install dry-run → install real) and capture the transcript in this doc.
-3. Add the pending tests (discovery summary + restart readiness) and ensure the bridge-only tool injection doesn’t regress the manifest.
-4. Evaluate whether the streamable bridge should continue injecting the synthetic tool or whether the Go proxy should advertise it directly to keep the public manifest accurate.
+1. Update the Codex smoke log with the restart verification notes and final server names.
+2. Evaluate if `scripts/run_restart_stelae.sh` needs a friendlier fallback for hosts where pm2 refuses to restart stopped apps when `--keep-pm2` is set.

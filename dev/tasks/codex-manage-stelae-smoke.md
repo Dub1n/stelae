@@ -87,3 +87,26 @@ Scenario: prove Codex CLI can run the full discovery → install flow using only
   5. **Remove (dry-run + real)** – verified diffs, then removed the server. As with install, the real removal restarts the stack and drops the in-flight response; after the restart we brought `mcp-proxy` back via pm2 and confirmed the template/overrides were clean.
 - `DISCOVER_QUERY="vector search" ... make discover-servers` mirrors the MCP output and now shows `qdrant` as `status: "cached"` with the hydrated descriptor embedded in the cache.
 - Known behavior: real installs/removals currently sever the Codex MCP request when the proxy restarts; rerunning the tool after the stack is back online confirms the final state, and pm2 restarts are required to resume service. **Resolved 2025-11-10:** `scripts/stelae_streamable_mcp.py:519-547` now short-circuits every `manage_stelae` call to the local `StelaeIntegratorService`, so bridge-driven installs/removals stay connected even while the Go proxy restarts.
+
+### 2025-11-09 Restart Validation
+
+- Command: `source ~/.nvm/nvm.sh && scripts/run_restart_stelae.sh --no-bridge --full`. Letting the helper own pm2 (no `--keep-pm2`) avoided the “Process not found” errors seen when restarting partially-stopped apps.
+- Local verification:
+  - `curl -s http://127.0.0.1:9090/.well-known/mcp/manifest.json | jq '{toolCount: (.tools|length)}'` → `toolCount: 71`.
+  - Sample tools: `manage_stelae`, `per_m2_price`, `s_fetch_page`, `rg`, `docy`, `filesystem`, etc.
+- Public verification:
+  - `curl -sk https://mcp.infotopology.xyz/.well-known/mcp/manifest.json | jq '{toolCount: (.tools|length), sample: (.tools|map(.name)[0:10])}'` → 60 tools, sample `[build_context, calculate_directory_size, canvas, change_directory, create_directory, create_memory_project, delete_file_content, delete_note, delete_project, directory_tree]`.
+- pm2 after the run:
+
+  ```
+  $ source ~/.nvm/nvm.sh && pm2 status
+  ┌────┬──────────────┬─────────────┬─────────┬─────────┬──────────┬────────┬──────┬───────────┐
+  │ id │ name         │ pid        │ status  │ cpu     │ mem      │
+  ├────┼──────────────┼─────────────┼─────────┼─────────┼──────────┤
+  │ 0  │ mcp-proxy    │ 809110     │ online  │ 0%      │ 15.9mb   │
+  │ 1  │ watchdog     │ 809181     │ online  │ 0%      │ 21.9mb   │
+  │ 2  │ cloudflared  │ 809378     │ online  │ 0%      │ 53.6mb   │
+  │ 3  │ stelae-bridge│ 809893     │ online  │ 0%      │ 6.8mb    │
+  └────┴──────────────┴─────────────┴─────────┴─────────┴──────────┘
+  ```
+- Next action: bake these commands into the smoke checklist (and keep the `--no-bridge` flag noted so Codex operators know why the bridge may briefly disconnect during maintenance).
