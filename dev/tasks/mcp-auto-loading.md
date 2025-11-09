@@ -154,3 +154,8 @@ The workflow should also cover manual JSON blobs and provide guardrails (dry-run
 
 1. Update the Codex smoke log with the restart verification notes and final server names.
 2. Evaluate if `scripts/run_restart_stelae.sh` needs a friendlier fallback for hosts where pm2 refuses to restart stopped apps when `--keep-pm2` is set.
+
+### Follow-ups logged 2025-11-11
+
+- [x] **Restart helper observability polish** – `ensure_pm2_app` now prints single-line summaries such as `status=absent -> start` or `status=errored -> delete+start`, so Codex transcripts record how each pm2 app was recovered.
+- [x] **Watchdog self-healing parity** – `scripts/watch_public_mcp.py` reuses the same pm2 inspection logic (with the matching log format) to delete+start missing Cloudflared processes instead of looping on `pm2 restart`.

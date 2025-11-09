@@ -1,16 +1,21 @@
 # stelae/scripts/watch_public_mcp.py
 #!/usr/bin/env python3
-import os
-import time
-import subprocess
+from __future__ import annotations
+
 import json
+import os
+import subprocess
 import sys
+import time
 import urllib.request
+from pathlib import Path
 
 PUBLIC = os.environ.get("PUBLIC_BASE_URL", "https://mcp.infotopology.xyz").rstrip("/")
 INTERVAL = int(os.environ.get("WATCH_INTERVAL", "60"))
 THRESH = int(os.environ.get("FAIL_THRESHOLD", "3"))
 CLOUD_FLARE_PM2 = os.environ.get("CF_PM2_NAME", "cloudflared")
+ROOT = Path(__file__).resolve().parents[1]
+PM2_ECOSYSTEM = Path(os.environ.get("PM2_ECOSYSTEM", str(ROOT / "ecosystem.config.js")))
 
 
 def post_json(url, payload, timeout=12):
@@ -39,14 +44,76 @@ def ok():
     return "result" in res or "jsonrpc" in res
 
 
-def restart_cloudflared():
-    print("watchdog: restarting cloudflared via pm2…", flush=True)
+def _pm2_status(name: str) -> str | None:
     try:
-        subprocess.run(["pm2", "restart", CLOUD_FLARE_PM2], check=True, timeout=45)
+        result = subprocess.run(
+            ["pm2", "jlist"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=20,
+        )
     except subprocess.TimeoutExpired as exc:
-        print(f"watchdog: pm2 restart timed out after {exc.timeout}s", file=sys.stderr)
-    except Exception as e:
-        print(f"watchdog: pm2 restart failed: {e}", file=sys.stderr)
+        print(f"watchdog: pm2 jlist timed out after {exc.timeout}s", file=sys.stderr)
+        return None
+    except Exception as exc:  # pragma: no cover - diagnostic path
+        print(f"watchdog: pm2 jlist failed: {exc}", file=sys.stderr)
+        return None
+    try:
+        entries = json.loads(result.stdout or "[]")
+    except json.JSONDecodeError as exc:
+        print(f"watchdog: pm2 jlist returned invalid JSON: {exc}", file=sys.stderr)
+        return None
+    for entry in entries:
+        if entry.get("name") == name:
+            return entry.get("pm2_env", {}).get("status")
+    return None
+
+
+def _run_pm2(args: list[str], *, allow_error: bool = False, timeout: int = 45) -> bool:
+    try:
+        subprocess.run(["pm2", *args], check=not allow_error, timeout=timeout)
+        return True
+    except subprocess.TimeoutExpired as exc:
+        print(f"watchdog: pm2 {' '.join(args)} timed out after {exc.timeout}s", file=sys.stderr)
+    except subprocess.CalledProcessError as exc:
+        if not allow_error:
+            print(f"watchdog: pm2 {' '.join(args)} failed: {exc}", file=sys.stderr)
+    except Exception as exc:  # pragma: no cover - defensive
+        print(f"watchdog: pm2 {' '.join(args)} raised: {exc}", file=sys.stderr)
+    return False
+
+
+def _start_pm2_app(name: str) -> None:
+    _run_pm2(["start", str(PM2_ECOSYSTEM), "--only", name])
+
+
+def _restart_pm2_app(name: str) -> None:
+    _run_pm2(["restart", name, "--update-env"])
+
+
+def _delete_pm2_app(name: str) -> None:
+    _run_pm2(["delete", name], allow_error=True)
+
+
+def ensure_pm2_app(name: str) -> None:
+    status = _pm2_status(name)
+    if not status:
+        print(f"watchdog: pm2 ensure {name}: status=absent -> start", flush=True)
+        _start_pm2_app(name)
+        return
+    if status != "online":
+        print(f"watchdog: pm2 ensure {name}: status={status} -> delete+start", flush=True)
+        _delete_pm2_app(name)
+        _start_pm2_app(name)
+        return
+    print(f"watchdog: pm2 ensure {name}: status=online -> restart", flush=True)
+    _restart_pm2_app(name)
+
+
+def restart_cloudflared():
+    print("watchdog: repairing cloudflared via pm2…", flush=True)
+    ensure_pm2_app(CLOUD_FLARE_PM2)
 
 
 def main():

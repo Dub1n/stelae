@@ -239,7 +239,7 @@ source ~/.nvm/nvm.sh
   make down
   \```
 
-The helper script `scripts/run_restart_stelae.sh --full` wraps the full cycle (rebuild proxy, render config, restart PM2 fleet, redeploy Cloudflare worker, republish manifest) and is the fastest way to validate override changes end-to-end. When invoked by `manage_stelae` the script is called with `--keep-pm2 --no-bridge --full` so the MCP bridge stays connected; run it without those flags if you truly need a cold restart.
+The helper script `scripts/run_restart_stelae.sh --full` wraps the full cycle (rebuild proxy, render config, restart PM2 fleet, redeploy Cloudflare worker, republish manifest) and is the fastest way to validate override changes end-to-end. When invoked by `manage_stelae` the script is called with `--keep-pm2 --no-bridge --full` so the MCP bridge stays connected; run it without those flags if you truly need a cold restart. Each pm2 app now logs a one-line summary (e.g., `pm2 ensure cloudflared: status=errored -> delete+start`) so you can see exactly how the helper recovered missing or unhealthy entries.
 
 Logs default to `~/dev/stelae/logs/` (see `ecosystem.config.js`).
 
@@ -308,7 +308,7 @@ Operational steps:
 
 ## Connector Readiness
 
-- **Cloudflare tunnel up:** `pm2 start "cloudflared tunnel run stelae" --name cloudflared` (or `pm2 restart cloudflared`). `curl -sk https://mcp.infotopology.xyz/.well-known/mcp/manifest.json` must return HTTP 200; a Cloudflare 1033 error indicates the tunnel is down.
+- **Cloudflare tunnel up:** `pm2 start "cloudflared tunnel run stelae" --name cloudflared` (or `pm2 restart cloudflared`). `curl -sk https://mcp.infotopology.xyz/.well-known/mcp/manifest.json` must return HTTP 200; a Cloudflare 1033 error indicates the tunnel is down. The watchdog (`scripts/watch_public_mcp.py`) now reuses the same `pm2 ensure` logic, so it can delete+start the tunnel automatically if the PM2 entry disappears.
 - **Manifest sanity:** `curl -s http://localhost:9090/.well-known/mcp/manifest.json | jq '{servers, tools: (.tools | map(.name))}'` verifies every essential MCP (filesystem, ripgrep, shell, docs, memory, fetch, strata, 1mcp).
 - **SSE probes:** use the Python harness under `docs/openai-mcp.md` (or the snippets in this README) to connect to `/rg/sse` and `/fetch/sse`. Confirm `grep` returns results and `fetch` succeeds when `raw: true` (Docy’s markdown extraction still needs a fix; track in TODO).
 - **Streamable HTTP bridge:** `scripts/stelae_streamable_mcp.py` now proxies the full catalog for local desktop agents; ensure the `stelae-bridge` pm2 process stays online.

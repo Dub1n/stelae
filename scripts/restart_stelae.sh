@@ -77,14 +77,17 @@ ensure_pm2_app() {
   local status
   status=$(pm2 jlist | jq -r --arg name "$app" '.[] | select(.name==$name) | .pm2_env.status' 2>/dev/null || true)
   if [ -z "$status" ] || [ "$status" = "null" ]; then
+    log "pm2 ensure ${app}: status=absent -> start"
     pm2 start "$ECOSYSTEM" --only "$app"
     return
   fi
   if [ "$status" != "online" ]; then
+    log "pm2 ensure ${app}: status=${status} -> delete+start"
     pm2 delete "$app" >/dev/null 2>&1 || true
     pm2 start "$ECOSYSTEM" --only "$app"
     return
   fi
+  log "pm2 ensure ${app}: status=online -> restart"
   pm2 restart "$app" --update-env
 }
 
