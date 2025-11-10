@@ -21,10 +21,15 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started · `[!]` broken · 
 - [x] [tool-aggregations](./tasks/tool-aggregations.md) Add declarative tool aggregation helper + config to expose composite tools while hiding noisy downstream entries.
 - [x] [local-runtime-hardening](./tasks/local-runtime-hardening.md) Fix overlay regressions, add local-only runtime coverage, and strengthen generic-vs-local config hygiene.
 - [x] [core-stack-modularization](./tasks/core-stack-modularization.md) Ship a minimal core stack plus an optional starter bundle so clones stay lightweight while power users can opt into the full tool suite.
+- [ ] Deliver a Codex MCP wrapper (sandbox/missions interface) so agents can be launched programmatically for QA flows.
+- [ ] Add an automated + manual clone smoke test (Codex MCP harness + sandbox CLI runner) so the “self-managing MCP server” promise is regularly validated.
+- [ ] Refresh all integrated MCP servers (core + starter bundle) to the latest compatible versions and update overrides/docs as needed.
 - [ ] [1mcp-server-separation](./tasks/1mcp-server-separation.md) Align the forked `1mcp-server` repo with upstream hygiene while making AI/API integrations optional so offline clones avoid extra dependencies.
 - [x] [repo-maintenance-pass](./tasks/repo-maintenance-pass.md) Refresh architecture/docs, consolidate config helpers, and add the `make verify-clean` workflow so render/restart automation keeps `git status` clean.
 
 ## Action Items
+
+> Not for tasks (which live above), these are to be launched should a prerequesite be met, rather than completed in sequence
 
 - [x] Remove legacy Python shim (scripts/mcp_output_shim.py) and all references from docs/templates. Keep only proxy call-path adapter; confirm no server routes through shim; update README and ARCHITECTURE accordingly.
 - [ ] Create a `dev/tasks/*_task_dependencies.json` map if future work introduces enough parallel tasks to benefit from explicit DAG tracking.

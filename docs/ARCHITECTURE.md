@@ -14,8 +14,8 @@ Hygiene guardrail: `pytest tests/test_repo_sanitized.py` fails if tracked templa
 
 ### Core vs optional bundle
 
-- **Tracked core:** mcp-proxy, filesystem/ripgrep controllers, the terminal controller, custom tools, and the Stelae integrator (plus the FastMCP bridge). These five servers ship in `config/proxy.template.json` so every clone stays lightweight.
-- **Starter bundle:** Docy + Docy manager, the tool aggregator, Basic Memory, Strata, Fetch, Scrapling, Cloudflared/worker helpers, and any discovery-fed servers defined in `config/bundles/starter_bundle.json`. Install them (along with their overrides/aggregations) via `python scripts/install_stelae_bundle.py` so they only touch `${STELAE_CONFIG_HOME}/config/*.local.json`.
+- **Tracked core:** custom tools, the Stelae integrator, the tool aggregator helper, the 1mcp stdio agent, and the public 1mcp catalog bridge (plus the Go proxy and FastMCP bridge). These five servers ship in `config/proxy.template.json` so every clone can immediately discover and manage downstream MCP servers.
+- **Starter bundle:** Docy + Docy manager, Basic Memory, Strata, Fetch, Scrapling, Cloudflared/worker helpers, filesystem/ripgrep/terminal controllers, and any other discovery-fed servers defined in `config/bundles/starter_bundle.json`. Install them (along with their overrides/aggregations) via `python scripts/install_stelae_bundle.py` so they only touch `${STELAE_CONFIG_HOME}/config/*.local.json`.
 - Optional modules keep their writable state (`config/*.local.json`, `.env.local`, discovery caches) under `${STELAE_CONFIG_HOME}`. Delete a `.local` file or rerun the installer to move between the slim core and the starter bundle without mutating tracked templates.
 
 ### Legend

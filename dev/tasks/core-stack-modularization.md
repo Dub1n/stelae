@@ -15,6 +15,10 @@ Tags: `#infra`, `#docs`
 - [x] Update spec/progress/task entries with the new modular strategy.
 - [x] Commit with message `infra: modularize stelae core stack` after tests.
 
+## Follow-up
+
+- Rebalance the core template so the 1mcp helper(s) (`public_mcp_catalog`, `one_mcp`) and the tool aggregator ship by default while the developer-quality-of-life servers (`fs`, `rg`, `sh`) move into the starter bundle/local overlays. This keeps “one MCP server that self-manages” functional immediately after cloning while still letting operators opt into workspace helpers via the installer.
+
 ## References
 
 - Code: `config/proxy.template.json`, `config/tool_overrides.json`, `config/tool_aggregations.json`, `scripts/run_restart_stelae.sh`, `scripts/stelae_integrator_server.py`, potential new `scripts/install_stelae_bundle.py`.

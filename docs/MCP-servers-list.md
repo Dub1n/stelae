@@ -12,7 +12,7 @@
 
 - [!] [011] [1mcpserver](https://github.com/particlefuture/1mcpserver) — Core discovery agent that feeds `manage_stelae`; runs locally via FastMCP bridge. [WSL]
 - [!] [536] [mcp-proxy](https://github.com/TBXark/mcp-proxy) — Go proxy that aggregates downstream servers (filesystem, docs, memory, etc.) into the public endpoint.
-- [x] [---] [Strata MCP Router](https://github.com/Klavis-AI/klavis) — Routes/discovers MCP servers with action search/auth helpers; feeds the stack’s `strata_ops_suite`. [WSL]
+- [x] [05k] [Strata MCP Router](https://github.com/Klavis-AI/klavis) — Routes/discovers MCP servers with action search/auth helpers; feeds the stack’s `strata_ops_suite`. [WSL]
 - [x] [---] [Public MCP Catalog](https://github.com/Dub1n/stelae-1mcpserver) — Remote HTTP/SSE catalog powering `deep_search`/`list_servers` lookups for downstream installs.
 - [~] [022] [MCP Discovery](https://github.com/rust-mcp-stack/mcp-discovery) — CLI to enumerate server tools/resources; good to debug configs.
 - [~] [236] [ChatMCP](https://github.com/AI-QL/chat-mcp) — cross‑platform GUI to test & drive MCP servers; runs on Windows.

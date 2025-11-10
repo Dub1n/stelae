@@ -37,7 +37,7 @@ def test_tracked_configs_remain_placeholder_only() -> None:
 
 def test_proxy_template_only_lists_core_servers() -> None:
     data = json.loads(_read("config/proxy.template.json"))
-    core = {"custom", "fs", "integrator", "rg", "sh"}
+    core = {"custom", "integrator", "one_mcp", "public_mcp_catalog", "tool_aggregator"}
     assert set(data["mcpServers"].keys()) == core
 
 

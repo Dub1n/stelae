@@ -32,13 +32,6 @@
         "STELAE_CUSTOM_TOOLS_CONFIG": "{{STELAE_DIR}}/config/custom_tools.json"
       }
     },
-    "fs": {
-      "type": "stdio",
-      "command": "{{FILESYSTEM_BIN}}",
-      "args": [
-        "{{STELAE_DIR}}"
-      ]
-    },
     "integrator": {
       "type": "stdio",
       "command": "{{PYTHON}}",
@@ -49,24 +42,37 @@
         "STELAE_DISCOVERY_PATH": "{{STELAE_DISCOVERY_PATH}}"
       }
     },
-    "rg": {
+    "one_mcp": {
       "type": "stdio",
-      "command": "{{RG_BIN}}",
+      "command": "{{ONE_MCP_BIN}}",
       "args": [
-        "--stdio",
-        "--root",
-        "{{STELAE_DIR}}"
+        "--directory",
+        "{{ONE_MCP_DIR}}",
+        "run",
+        "server.py",
+        "--local"
       ]
     },
-    "sh": {
+    "public_mcp_catalog": {
+      "type": "http",
+      "url": "https://mcp.1mcpserver.com/mcp/",
+      "headers": {
+        "Accept": "text/event-stream",
+        "Cache-Control": "no-store"
+      },
+      "options": {
+        "enableAsync": false
+      }
+    },
+    "tool_aggregator": {
       "type": "stdio",
-      "command": "{{SHELL_BIN}}",
+      "command": "{{PYTHON}}",
       "args": [
-        "--workdir",
-        "{{PHOENIX_ROOT}}",
-        "--allow",
-        "npm,pytest,make,python,git"
-      ]
+        "{{STELAE_DIR}}/scripts/tool_aggregator_server.py"
+      ],
+      "env": {
+        "STELAE_TOOL_AGGREGATIONS": "{{STELAE_DIR}}/config/tool_aggregations.json"
+      }
     }
   }
 }

@@ -49,11 +49,12 @@ def _sample_bundle() -> dict[str, Any]:
         "name": "starter",
         "servers": [
             {"name": "docs", "transport": "stdio", "command": "python"},
-            {"name": "tool_aggregator", "transport": "stdio", "command": "python"},
+            {"name": "fs", "transport": "stdio", "command": "python"},
         ],
         "toolOverrides": {
             "servers": {
                 "docs": {"tools": {"fetch": {"enabled": True}}},
+                "fs": {"tools": {"read_file": {"enabled": True}}},
             }
         },
         "toolAggregations": {
@@ -78,7 +79,7 @@ def test_install_bundle_updates_overlays_and_runs_commands(tmp_path, monkeypatch
         command_runner=runner,
     )
     assert summary["errors"] == []
-    assert summary["installed"] == ["docs", "tool_aggregator"]
+    assert summary["installed"] == ["docs", "fs"]
     assert len(summary["overlays"]) == 2
     overlay_dir = tmp_path / "config_home" / "stelae" / "config"
     overrides_overlay = overlay_dir / "tool_overrides.local.json"
@@ -95,7 +96,7 @@ def test_install_bundle_respects_filters_and_dry_run(tmp_path, monkeypatch):
     config_overlays.config_home.cache_clear()
     assert config_overlays.config_home() == tmp_path / "config_home"
     bundle = _sample_bundle()
-    service = FakeService(unchanged={"docs"}, failures={"tool_aggregator"})
+    service = FakeService(unchanged={"docs"}, failures={"fs"})
     summary = bundles.install_bundle(
         bundle,
         server_filter=["docs"],

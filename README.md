@@ -28,8 +28,8 @@ Path placeholders expand from `.env`; see setup below.
 
 ### Core vs Optional Stack
 
-- **Core template:** the repo now ships only the fundamentals (custom tools, filesystem, ripgrep, the terminal controller, and the Stelae integrator) plus the Go proxy and FastMCP bridge. Every clone boots quickly without needing Docy, Memory, or other heavy services.
-- **Starter bundle:** Docy + Docy manager, the tool aggregator, Basic Memory, Strata, Fetch, Scrapling, the 1mcp catalog helper, and other discovery-fed servers live in `config/bundles/starter_bundle.json`. Install them (and their overrides/aggregations) with `python scripts/install_stelae_bundle.py` after cloning. Use `--server` to pick individual entries or `--dry-run` to preview without touching overlays.
+- **Core template:** the repo now ships only the self-management essentials (custom tools, the Stelae integrator, the tool aggregator helper, the 1mcp stdio agent, and the public 1mcp catalog bridge) plus the Go proxy and FastMCP bridge. Every clone can immediately discover, install, and manage downstream servers without any extra steps.
+- **Starter bundle:** Docy + Docy manager, Basic Memory, Strata, Fetch, Scrapling, and the developer-quality-of-life servers (filesystem, ripgrep, terminal controller) live in `config/bundles/starter_bundle.json`. Install them (and their overrides/aggregations) with `python scripts/install_stelae_bundle.py` after cloning. Use `--server` to pick individual entries or `--dry-run` to preview without touching overlays.
 - **Overlays only:** the installer writes to `${STELAE_CONFIG_HOME}/config/*.local.json`, so optional services never reappear in tracked templates. Delete a `.local` file to return to the lean core stack, or rerun the installer if you need to rehydrate the bundle later.
 
 - Scrapling’s canonical schema lives in the overrides template (`config/tool_overrides.json`) under the `scrapling` server. Both `s_fetch_page` and `s_fetch_pattern` advertise `{metadata, content}` payloads in the merged runtime file `${TOOL_OVERRIDES_PATH}`, and the Go proxy’s call-path adapter keeps those overrides in sync whenever a server emits a new structure. If Scrapling’s upstream contract changes, update the template or your local overlay and rerun `make render-proxy` so manifests and tools/list remain truthful.
@@ -117,7 +117,7 @@ Path placeholders expand from `.env`; see setup below.
 
    Declarative tool aggregations still use `config/tool_aggregations.json` (schema in `config/tool_aggregations.schema.json`), but the tracked template now only ships the stub definition plus the `facade.search` hide rule. Running `scripts/install_stelae_bundle.py` hydrates `${STELAE_CONFIG_HOME}/config/tool_aggregations.local.json` with the real aggregations. The helper `scripts/process_tool_aggregations.py` validates the merged file and writes descriptors directly to `${TOOL_OVERRIDES_PATH}` (without touching the template) so wrapped tools disappear from manifests. `make render-proxy` and `scripts/run_restart_stelae.sh` run the helper automatically, but you can lint changes manually with `python scripts/process_tool_aggregations.py --check-only`. The stdio server `scripts/tool_aggregator_server.py` reads the same config at runtime and exposes composite tools so the manifest stays concise.
 
-   Current suites exposed by the aggregator (once the starter bundle installs `tool_aggregator`):
+   Current suites exposed by the aggregator (once the starter bundle installs the aggregation config + optional servers):
    - `workspace_fs_read` – Read-only filesystem helpers (`list_*`, `read_*`, `find_*`, `search_*`, `get_file_info`, `calculate_directory_size`).
    - `workspace_fs_write` – Mutating filesystem helpers (`create_directory`, `edit_file`, `write_file`, `move_file`, `delete_*`, `insert_*`, `zip_*`, `unzip_file`).
    - `workspace_shell_control` – Terminal controller helpers (`execute_command`, `change_directory`, `get_current_directory`, `get_command_history`).
@@ -149,7 +149,7 @@ Path placeholders expand from `.env`; see setup below.
 
 ### Install the starter bundle
 
-The tracked templates stay lean on purpose. When you want Docy, Memory, Strata, Fetch, Scrapling, the tool aggregator, or the 1mcp helpers, run the installer so they land in your `${STELAE_CONFIG_HOME}` overlays instead of git:
+The tracked templates stay lean on purpose. When you want Docy, Memory, Strata, Fetch, Scrapling, or the developer helpers (filesystem, ripgrep, terminal controller), run the installer so they land in your `${STELAE_CONFIG_HOME}` overlays instead of git:
 
 ```bash
 python scripts/install_stelae_bundle.py
