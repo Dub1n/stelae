@@ -10,9 +10,11 @@
 ## Runtime, Build, and Dev Commands
 
 - Environment: copy `.env.example` → `.env`, update path/binary variables, then run `make render-proxy`. Keep `.env` local; renderers inject values for PM2.
+- Core stack = mcp-proxy, filesystem/ripgrep controllers, terminal controller, custom tools, tool aggregator, the Stelae integrator, and the FastMCP bridge. Treat Docy/Docy manager, Basic Memory, Strata, Fetch, Scrapling, and Cloudflare as opt-in servers enabled through `${STELAE_CONFIG_HOME}/config/proxy.template.local.json` overlays so clones can right-size the catalog.
 - PM2 lifecycle (`source ~/.nvm/nvm.sh` first):
   - `make up` / `make down` – start or stop the fleet described in `ecosystem.config.js`.
   - `make restart-proxy`, `make logs`, `make status` – restart, tail logs, or inspect process table.
+  - `make verify-clean` – run `make render-proxy` plus `scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --no-cloudflared --skip-populate-overrides` and fail if tracked files changed. Use `VERIFY_CLEAN_RESTART_ARGS` or `./scripts/verify_clean_repo.sh --skip-restart` when PM2/cloudflared aren’t available locally.
   - `scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --no-cloudflared` – render, rebuild, and restart the local stack without touching Cloudflare (default flow for `manage_stelae`). Append `--full` only when you need to redeploy the tunnel/worker.
 - Discovery & overrides:
   - `python scripts/discover_servers_cli.py` or the MCP tool `manage_stelae` (operations: discover/install/remove/refresh/run_reconciler) manage downstream servers.

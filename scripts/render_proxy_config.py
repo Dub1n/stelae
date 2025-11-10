@@ -5,79 +5,17 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
+import sys
 from pathlib import Path
 
-from stelae_lib.config_overlays import config_home, deep_merge, overlay_path_for
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from stelae_lib.config_overlays import config_home, deep_merge, load_layered_env, overlay_path_for
 
 TEMPLATE_PATTERN = re.compile(r"\{\{\s*([A-Z0-9_]+)\s*\}\}")
-VAR_PATTERN = re.compile(r"\$\{([A-Z0-9_]+)\}")
-
-
-def parse_env_file(path: Path | None) -> dict[str, str]:
-    values: dict[str, str] = {}
-    if not path or not path.exists():
-        return values
-
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, raw_value = line.split("=", 1)
-        values[key.strip()] = raw_value.strip().strip('"')
-    return values
-
-
-def expand_variables(values: dict[str, str], fallback: dict[str, str] | None = None) -> dict[str, str]:
-    """Expand ${VAR} expressions defined in .env files.
-
-    Only keys provided in *values* participate in recursive expansion so that
-    inherited shell variables containing prompt escapes (e.g. powerlevel10k's
-    P9K_*) do not trigger missing-variable errors. When an expanded name is not
-    present in *values*, we fall back to the original process environment.
-    """
-
-    resolved: dict[str, str] = {}
-    fallback = fallback or {}
-
-    def resolve(name: str, stack: set[str]) -> str:
-        if name in resolved:
-            return resolved[name]
-        if name in values:
-            if name in stack:
-                chain = " -> ".join(list(stack) + [name])
-                raise ValueError(f"Circular variable expansion detected: {chain}")
-            raw_value = values[name]
-
-            def replace(match: re.Match[str]) -> str:
-                inner = match.group(1)
-                return resolve(inner, stack | {name})
-
-            expanded = VAR_PATTERN.sub(replace, raw_value)
-            resolved[name] = expanded
-            return expanded
-        if name in fallback:
-            resolved[name] = fallback[name]
-            return fallback[name]
-        raise KeyError(f"Missing environment variable: {name}")
-
-    for key in values:
-        resolve(key, set())
-
-    return resolved
-
-
-def load_env(env_file: Path, fallback_file: Path | None, overlay_file: Path | None) -> dict[str, str]:
-    base_env = {k: v for k, v in os.environ.items() if isinstance(v, str)}
-    merged: dict[str, str] = {}
-    merged.update(parse_env_file(fallback_file))
-    merged.update(parse_env_file(env_file))
-    merged.update(parse_env_file(overlay_file))
-    expanded = expand_variables(merged, fallback=base_env)
-    merged_env = dict(base_env)
-    merged_env.update(expanded)
-    return merged_env
 
 
 def render(template: str, values: dict[str, str]) -> str:
@@ -109,7 +47,12 @@ def main() -> None:
     overlay_template = args.overlay_template or overlay_path_for(args.template)
     overlay_env = args.overlay_env or (config_home() / ".env.local")
 
-    env_values = load_env(args.env_file, args.fallback_env, overlay_env)
+    env_values = load_layered_env(
+        env_file=args.env_file,
+        fallback_file=args.fallback_env,
+        overlay_file=overlay_env,
+        include_process_env=True,
+    )
 
     try:
         base_template = json.loads(args.template.read_text(encoding="utf-8"))

@@ -51,7 +51,7 @@ render-cloudflared:
 up-with-tunnel: render-proxy render-cloudflared up
 	@echo "Cloudflared config ready. Ensure CF_CONF points to $(CF_OUTPUT) before pm2 start --only cloudflared."
 
-.PHONY: up down restart-proxy logs status render-proxy help discover-servers
+.PHONY: up down restart-proxy logs status render-proxy help discover-servers verify-clean
 
 help:
 	@echo "Targets:"
@@ -105,3 +105,6 @@ discover-servers:
 		DISCOVER_APPEND="$(DISCOVER_APPEND)" \
 		DISCOVER_DRY_RUN="$(DISCOVER_DRY_RUN)" \
 		$(PYTHON) scripts/discover_servers_cli.py
+
+verify-clean:
+	@./scripts/verify_clean_repo.sh

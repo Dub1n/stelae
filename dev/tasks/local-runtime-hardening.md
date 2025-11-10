@@ -31,6 +31,7 @@ Tags: `#infra`
 - Updated the integrator’s env layering: user-provided `env_files` are honored (and the last entry becomes the write target) while hydrated defaults fall back to `${STELAE_CONFIG_HOME}/.env.local`. This fixed `tests/test_stelae_integrator.py::test_discover_servers_hydrates_qdrant`.
 - Swapped the default restart flags from `--full` to `--keep-pm2 --no-bridge --no-cloudflared`, added `test_restart_defaults_skip_cloudflared`, and documented the new override knob (`STELAE_RESTART_ARGS`) across README + architecture notes so local-only restarts are officially supported.
 - Instrumented docs with the new hygiene test guidance, clarified that Cloudflare work is opt-in, and copied the results into this task log + `dev/progress.md`.
+- Follow-up guardrail (2025-11-10): added `scripts/verify_clean_repo.sh` + `make verify-clean` so the default render + restart automation fails fast if tracked files drift after overlays/local restarts.
 
 ## Verification
 

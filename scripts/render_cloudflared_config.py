@@ -9,60 +9,18 @@ Render ops/cloudflared.yml from layered templates and environment files.
 from __future__ import annotations
 
 import argparse
-import os
 import re
+import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
-from stelae_lib.config_overlays import config_home, overlay_path_for
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from stelae_lib.config_overlays import config_home, load_layered_env, overlay_path_for
 
 TEMPLATE_PATTERN = re.compile(r"\{\{\s*([A-Z0-9_]+)\s*\}\}")
-VAR_PATTERN = re.compile(r"\$\{([A-Z0-9_]+)\}")
-
-
-def parse_env_file(path: Path | None) -> dict[str, str]:
-    if not path or not path.exists():
-        return {}
-    out: dict[str, str] = {}
-    for raw in path.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        k, v = line.split("=", 1)
-        out[k.strip()] = v.strip().strip('"')
-    return out
-
-
-def expand(values: dict[str, str]) -> dict[str, str]:
-    resolved: dict[str, str] = {}
-
-    def resolve(name: str, stack: set[str]) -> str:
-        if name in resolved:
-            return resolved[name]
-        if name not in values:
-            return ""  # leave empty; we’ll validate later
-        if name in stack:
-            raise ValueError(f"circular variable: {' -> '.join([*stack, name])}")
-        raw = values[name]
-
-        def repl(m: re.Match[str]) -> str:
-            return resolve(m.group(1), stack | {name})
-
-        s = VAR_PATTERN.sub(repl, raw)
-        resolved[name] = s
-        return s
-
-    for k in list(values.keys()):
-        resolve(k, set())
-    return resolved
-
-
-def load_env(env_file: Path, fallback: Path | None, overlay_env: Path | None) -> dict[str, str]:
-    merged = {k: v for k, v in os.environ.items() if isinstance(v, str)}
-    merged.update(parse_env_file(fallback))
-    merged.update(parse_env_file(env_file))
-    merged.update(parse_env_file(overlay_env))
-    return expand(merged)
 
 
 def compute(values: dict[str, str]) -> dict[str, str]:
@@ -149,7 +107,13 @@ def main() -> None:
     overlay_template = args.overlay_template or overlay_path_for(args.template)
     overlay_env = args.overlay_env or (config_home() / ".env.local")
 
-    env_vals = load_env(args.env_file, args.fallback_env, overlay_env)
+    env_vals = load_layered_env(
+        env_file=args.env_file,
+        fallback_file=args.fallback_env,
+        overlay_file=overlay_env,
+        include_process_env=True,
+        allow_unresolved=True,
+    )
     vals = compute(env_vals)
     template_path = (
         overlay_template

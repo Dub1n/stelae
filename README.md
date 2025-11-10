@@ -26,6 +26,12 @@ A WSL-native deployment of [mcp-proxy](https://github.com/TBXark/mcp-proxy) that
 
 Path placeholders expand from `.env`; see setup below.
 
+### Core vs Optional Stack
+
+- **Core (always on):** mcp-proxy, filesystem, ripgrep, the terminal controller, custom tools, tool aggregator, the Stelae integrator, and the FastMCP bridge. These pieces keep the local-only workflow alive even when optional servers are disabled.
+- **Recommended add-ons:** Docy + Docy manager, Basic Memory, Strata, Fetch, Scrapling, and the Cloudflare tunnel/worker. Ship them via overlays or discovery when your environment needs the extra catalog depth.
+- Keep opt-in servers outside the tracked templates: enable/disable them through `${STELAE_CONFIG_HOME}/config/proxy.template.local.json` (and matching `.env.local` entries) so the repo continues to advertise the superset stack while every clone decides how much of it to boot.
+
 - Scrapling’s canonical schema lives in the overrides template (`config/tool_overrides.json`) under the `scrapling` server. Both `s_fetch_page` and `s_fetch_pattern` advertise `{metadata, content}` payloads in the merged runtime file `${TOOL_OVERRIDES_PATH}`, and the Go proxy’s call-path adapter keeps those overrides in sync whenever a server emits a new structure. If Scrapling’s upstream contract changes, update the template or your local overlay and rerun `make render-proxy` so manifests and tools/list remain truthful.
 
 ---
@@ -150,7 +156,10 @@ Every config file tracked in this repo is a template. Any local edits made via `
 - Renderers merge template → overlay → runtime (`${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${STELAE_CONFIG_HOME}/cloudflared.yml`, ...). Delete a `*.local.*` file and rerun the matching command to reset it.
 - Runtime caches such as `${STELAE_DISCOVERY_PATH}` and `${TOOL_SCHEMA_STATUS_PATH}` already sit under `${STELAE_CONFIG_HOME}`, so git remains clean even when the proxy or integrator writes back metadata.
 
-> Hygiene: `pytest tests/test_repo_sanitized.py` now fails if tracked configs reintroduce absolute `/home/...` paths or if `.env.example` stops pointing runtime outputs to `${STELAE_CONFIG_HOME}`. Run it whenever you touch templates to confirm `make render-proxy` keeps `git status` clean.
+### Hygiene Checks
+
+- `pytest tests/test_repo_sanitized.py` fails if tracked configs reintroduce absolute `/home/...` paths or if `.env.example` stops pointing runtime outputs to `${STELAE_CONFIG_HOME}`. Run it whenever you touch templates to confirm renderers keep git clean.
+- `make verify-clean` (wrapper around `scripts/verify_clean_repo.sh`) snapshots `git status --porcelain`, runs `make render-proxy` plus `scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --no-cloudflared --skip-populate-overrides`, and then fails if any tracked files changed. Pass `VERIFY_CLEAN_RESTART_ARGS` or `./scripts/verify_clean_repo.sh --skip-restart` when you need to adjust the restart flow on machines without PM2/Cloudflared.
 
 ### Custom Script Tools
 
@@ -178,6 +187,7 @@ Every config file tracked in this repo is a template. Any local edits made via `
 
 ### Docy Source Catalog
 
+- **Optional module:** Docy and the Docy manager MCP live in the optional bundle. Disable them by removing the `docy*` entries from `${STELAE_CONFIG_HOME}/config/proxy.template.local.json`; their catalog overlays stay under `${STELAE_CONFIG_HOME}/config/docy_sources.local.json` so the tracked template remains a superset.
 - `config/docy_sources.json` is the canonical list of documentation URLs. Each entry can carry `id`, `url`, `title`, `tags`, `notes`, `enabled`, and `refresh_hours` metadata so we can track provenance in git.
 - `scripts/render_docy_sources.py` converts the catalog into `.docy.urls`, which Docy reads live on every request (no restart needed). The renderer writes comments next to each URL so operators know not to edit the generated file manually.
 - The dedicated Docy manager MCP server (`scripts/docy_manager_server.py`) exposes the `manage_docy` tool. Operations cover `list_sources`, `add_source`, `remove_source`, `sync_catalog`, and `import_from_manifest`, mirroring the CLI mode (`python scripts/docy_manager_server.py --cli --operation add_source --params '{"url": "https://docs.crawl4ai.com/"}'`). The new importer can hydrate Docy in bulk from a JSON manifest (defaults to `${STELAE_DISCOVERY_PATH}`) or a remote MCP `.well-known` URL:
@@ -192,6 +202,7 @@ Every config file tracked in this repo is a template. Any local edits made via `
 
 ### Declarative Tool Aggregations
 
+- **Optional server:** `tool_aggregator` only runs when you keep it enabled in `${STELAE_CONFIG_HOME}/config/proxy.template.local.json`. The repo template documents every available wrapper, while `${STELAE_CONFIG_HOME}/config/tool_aggregations.local.json` carries your custom copies so local-only stacks can pare down the catalog.
 - `config/tool_aggregations.json` (validated by `config/tool_aggregations.schema.json`) describes composite MCP tools that we expose under the dedicated `tool_aggregator` server. Each entry defines manifest metadata plus a list of operations, and specifies which downstream tools should be hidden once the wrapper exists. `scripts/tool_aggregator_server.py` loads this file (plus `${STELAE_CONFIG_HOME}/config/tool_aggregations.local.json`) at runtime, while `scripts/process_tool_aggregations.py` writes the merged descriptors directly to `${TOOL_OVERRIDES_PATH}` and marks the `hideTools` entries as `enabled: false` so manifests stay tidy.
 - `manage_docy_sources` wraps every Docy manager operation behind a single schema. Example payload:
 

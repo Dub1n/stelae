@@ -19,7 +19,7 @@ from .one_mcp import OneMCPDiscovery, OneMCPDiscoveryError
 from .proxy_template import ProxyTemplate
 from .runner import CommandFailed, CommandRunner
 from .tool_overrides import ToolOverridesStore
-from stelae_lib.config_overlays import config_home, overlay_path_for
+from stelae_lib.config_overlays import config_home, overlay_path_for, parse_env_file
 
 ENV_PATTERN = re.compile(r"\{\{\s*([A-Z0-9_]+)\s*\}\}")
 
@@ -57,19 +57,6 @@ def _diff_text(path: Path, before: str, after: str) -> str:
     )
 
 
-def _parse_env_file(path: Path) -> Dict[str, str]:
-    values: Dict[str, str] = {}
-    if not path.exists():
-        return values
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, raw_value = line.split("=", 1)
-        values[key.strip()] = raw_value.strip().strip('"')
-    return values
-
-
 class StelaeIntegratorService:
     def __init__(
         self,
@@ -96,7 +83,7 @@ class StelaeIntegratorService:
             candidates.append(self.env_overlay)
         values: Dict[str, str] = {}
         for candidate in candidates:
-            values.update(_parse_env_file(candidate))
+            values.update(parse_env_file(candidate))
         for key, value in os.environ.items():
             if isinstance(key, str) and isinstance(value, str):
                 values.setdefault(key, value)
@@ -319,7 +306,7 @@ class StelaeIntegratorService:
         if not defaults:
             return
         env_path = Path(self.env_file)
-        existing = _parse_env_file(env_path)
+        existing = parse_env_file(env_path)
         missing = {k: v for k, v in defaults.items() if k not in existing}
         if not missing:
             return

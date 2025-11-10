@@ -10,6 +10,14 @@ Templates live under `config/` in this repo; all machine-specific state is writt
 
 Hygiene guardrail: `pytest tests/test_repo_sanitized.py` fails if tracked templates reintroduce absolute `/home/...` paths or if `.env.example` stops pointing runtime outputs at `${STELAE_CONFIG_HOME}`. Run it after touching configs to ensure `make render-proxy` followed by normal stack usage leaves `git status` clean.
 
+`make verify-clean` wraps the same automation path contributors run manually: it snapshots `git status`, executes `make render-proxy` plus `scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --no-cloudflared --skip-populate-overrides`, and then asserts the working tree matches the pre-run snapshot. Any tracked drift now fails the check immediately.
+
+### Core vs optional bundle
+
+- **Always-on:** mcp-proxy, filesystem/ripgrep controllers, the terminal controller, tool aggregator, custom tools, and the Stelae integrator (plus the FastMCP bridge). These form the contract the repo promises for every clone, even without external tunnels.
+- **Add-ons:** Docy + Docy manager, Basic Memory, Strata, Fetch, Scrapling, Cloudflared/worker, and any discovery-fed servers. Toggle them in `${STELAE_CONFIG_HOME}/config/proxy.template.local.json` (or remove their process definitions from the PM2 overlay) so each workstation can right-size the catalog without mutating tracked templates.
+- Optional modules keep their writable state (`config/*.local.json`, `.env.local`, discovery caches) under `${STELAE_CONFIG_HOME}`. That keeps the repository authoritative about capabilities while ensuring local-only deployments stay lean.
+
 ### Legend
 
 ```text
