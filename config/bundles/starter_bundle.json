@@ -93,6 +93,23 @@
         "--allow",
         "npm,pytest,make,python,git"
       ]
+    },
+    {
+      "name": "codex-wrapper",
+      "transport": "stdio",
+      "command": "{{CODEX_WRAPPER_BIN}}",
+      "args": [
+        "serve",
+        "--config",
+        "{{CODEX_WRAPPER_CONFIG}}"
+      ],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      },
+      "options": {
+        "displayName": "codex-wrapper",
+        "hydratedFrom": "starter_bundle"
+      }
     }
   ],
   "toolOverrides": {

@@ -149,7 +149,7 @@ Path placeholders expand from `.env`; see setup below.
 
 ### Install the starter bundle
 
-The tracked templates stay lean on purpose. When you want Docy, Memory, Strata, Fetch, Scrapling, or the developer helpers (filesystem, ripgrep, terminal controller), run the installer so they land in your `${STELAE_CONFIG_HOME}` overlays instead of git:
+The tracked templates stay lean on purpose. When you want Docy, Memory, Strata, Fetch, Scrapling, the developer helpers (filesystem, ripgrep, terminal controller), or the Codex wrapper, run the installer so they land in your `${STELAE_CONFIG_HOME}` overlays instead of git:
 
 ```bash
 python scripts/install_stelae_bundle.py
@@ -158,6 +158,7 @@ python scripts/install_stelae_bundle.py
 - Add `--server docs --server fetch` to target specific servers, or omit `--server` to install everything described in `config/bundles/starter_bundle.json`.
 - Use `--dry-run` to preview the changes; `--no-restart` writes overlays without touching PM2 (handy if the stack is already running elsewhere).
 - The script merges `tool_overrides.local.json` and `tool_aggregations.local.json`, then runs `make render-proxy` + `scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --no-cloudflared` once so the new catalog is live immediately.
+- To enable the optional Codex wrapper entry, first run `~/dev/codex-mcp-wrapper/scripts/build_release.py`. It creates a versioned virtualenv under `${STELAE_CONFIG_HOME}/codex-mcp-wrapper/releases/<version>` (plus a `latest/` symlink) that exposes `venv/bin/codex-mcp-wrapper` and a default `wrapper.toml`. Point `CODEX_WRAPPER_BIN`/`CODEX_WRAPPER_CONFIG` in `.env` at that release before installing the bundle.
 
 Rerun the installer after pulling template updates or whenever you delete your local overlays. Removing `${STELAE_CONFIG_HOME}/config/proxy.template.local.json` reverts back to the five-server core automatically.
 
