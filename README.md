@@ -1,6 +1,6 @@
 # Stelae MCP Stack
 
-A WSL-native deployment of [mcp-proxy](https://github.com/TBXark/mcp-proxy) that exposes your local Phoenix workspace to ChatGPT (and other MCP-aware agents) through a single HTTP/SSE endpoint. Everything runs on WSL, with an optional Cloudflare named tunnel for remote access.
+A WSL-native deployment of [mcp-proxy](https://github.com/TBXark/mcp-proxy) that exposes your local workspace to ChatGPT (and other MCP-aware agents) through a single HTTP/SSE endpoint. Everything runs on WSL, with an optional Cloudflare named tunnel for remote access.
 
 ---
 

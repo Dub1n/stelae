@@ -20,6 +20,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started · `[!]` broken · 
 - [~] [tool-overrides-schema-cleanup](./tasks/tool-overrides-schema-cleanup.md) Normalize tool override schema/automation with validation + per-server entries to eliminate drift and duplication.
 - [x] [tool-aggregations](./tasks/tool-aggregations.md) Add declarative tool aggregation helper + config to expose composite tools while hiding noisy downstream entries.
 - [ ] [local-runtime-hardening](./tasks/local-runtime-hardening.md) Fix overlay regressions, add local-only runtime coverage, and strengthen generic-vs-local config hygiene.
+- [ ] [repo-maintenance-pass](./tasks/repo-maintenance-pass.md) Refresh architecture/docs, consolidate config helpers, and add a repo hygiene verification workflow.
 
 ## Action Items
 

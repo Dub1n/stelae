@@ -8,7 +8,7 @@ Tags: `#infra`
 
 - [ ] Fix failing overlay regressions (`tests/test_repo_sanitized.py::test_tracked_configs_remain_placeholder_only` and `tests/test_stelae_integrator.py::test_discover_servers_hydrates_qdrant`).
 - [ ] Ensure full stack can run locally without Cloudflare (CF setup only required for remote exposure) and add a regression test that exercises the local-only path.
-- [ ] Audit config/render scripts to confirm every tracked file stays generic; document any gaps and, if feasible, add/extend a repo hygiene test that fails when local paths creep into tracked templates.
+- [ ] Audit config/render scripts to confirm every tracked file stays generic; document any gaps and, if feasible, add/extend a repo hygiene test that fails when local paths creep into tracked templates and verifies routine stack usage leaves `git status` clean.
 - [ ] Update docs/spec/progress/task entries with the new expectations/tests.
 - [ ] Commit with message `infra: stabilize local overlay runtime` after tests.
 
