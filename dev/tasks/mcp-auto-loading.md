@@ -119,9 +119,9 @@ The workflow should also cover manual JSON blobs and provide guardrails (dry-run
 - [x] **CI/automation hooks** – `make discover-servers` shells into `scripts/discover_servers_cli.py`, allowing env-driven queries (`DISCOVER_QUERY`, `DISCOVER_TAGS`, etc.) without leaving the terminal. The target doubles as the dry-run smoke test when you set `DISCOVER_DRY_RUN=1`.
 - [x] **Codex CLI end-to-end smoke test** – `dev/tasks/codex-manage-stelae-smoke.md` captures the full golden path (discover → dry-run install → install → reconciler) with ready-to-paste payloads plus validation commands (`curl` + CLI fallbacks).
 
-## Progress Report (2025-11-08)
+## Progress Report 1 (2025-11-08)
 
-### What’s done
+### 1. What’s done
 
 - `StelaeIntegratorService` now exposes `run()` so MCP + CLI callers share the same structured responses and error envelopes.
 - Restart orchestration runs `make render-proxy` followed by `scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --full`, capturing command transcripts and blocking on a JSON-RPC `tools/list` probe to avoid disconnecting Codex mid-install.
@@ -129,7 +129,7 @@ The workflow should also cover manual JSON blobs and provide guardrails (dry-run
 - README + docs updated to highlight the enforced `stelae.manage_stelae` payload, restart flags, and the new smoke-test flow; `tests/test_stelae_integrator.py` expanded with readiness/diff coverage (`PYTHONPATH=. .venv/bin/pytest tests/test_stelae_integrator.py`).
 - The streamable bridge injects a synthetic `manage_stelae` tool into `tools/list` and routes invocations through the integrator service using `asyncio.to_thread`, so local connectors can stay in-band.
 
-### Status review (2025-11-10)
+### 1. Status review (2025-11-10)
 
 - ✅ The Go proxy once again publishes `manage_stelae`. `config/tool_schema_status.json:17-26` now records healthy call-path telemetry for `integrator.manage_stelae`, and `README.md:182-205` documents that the tool is advertised in the manifest after restarts.
 - ✅ Codex smoke testing against the public endpoint now succeeds; see the updated transcript in `dev/tasks/codex-manage-stelae-smoke.md` and the verification commands that hit both localhost and `https://mcp.infotopology.xyz/mcp`.
@@ -137,25 +137,25 @@ The workflow should also cover manual JSON blobs and provide guardrails (dry-run
 - ✅ `discover_servers` has integration coverage (`tests/test_stelae_integrator.py:147-214`) that exercises append/overwrite, catalog hydration, and qdrant overrides rather than relying only on dry-run paths.
 - ✅ `scripts/run_restart_stelae.sh --no-bridge --full` was re-run end-to-end on `2025-11-09T01:23:21Z`. The helper rebuilt `~/apps/mcp-proxy`, rewrote `config/proxy.json`, restarted pm2 (cloudflared + watchdog + mcp-proxy), republished the Cloudflare worker, and verified both the local JSON-RPC probe and the public manifest (`https://mcp.infotopology.xyz/.well-known/mcp/manifest.json`).
 
-## Progress Report (2025-11-09)
+## Progress Report 2 (2025-11-09)
 
-### What’s done
+### 2. What’s done
 
 - Added `scripts/bootstrap_one_mcp.py` so new checkouts can clone/sync the vendored repo, seed the discovery cache, and emit `~/.config/1mcp/mcp.json` without hand-editing upstream files. README now references the workflow and sample config.
 - Introduced `scripts/discover_servers_cli.py` plus the `make discover-servers` target. Operators can drive `discover_servers` from the terminal via env knobs (`DISCOVER_QUERY`, `DISCOVER_LIMIT`, `DISCOVER_DRY_RUN`, etc.), which doubles as the CLI smoke test.
 - Authored `dev/tasks/codex-manage-stelae-smoke.md`, capturing the Codex CLI golden path along with validation commands and cleanup steps. The checklist documents the JSON payloads requested in item 4.5.
 
-### Next up
+### 2. Next up
 
 - Fold the new restart transcript into `dev/tasks/codex-manage-stelae-smoke.md` (tool counts + server names) so the Codex checklist references a known-good run.
 - Decide whether we need a `--keep-pm2` safe path that doesn’t depend on pm2 residual state (the recent run required letting the script own pm2 entirely).
 
-### Next session checklist
+### 2. Next session checklist
 
 1. Update the Codex smoke log with the restart verification notes and final server names.
 2. Evaluate if `scripts/run_restart_stelae.sh` needs a friendlier fallback for hosts where pm2 refuses to restart stopped apps when `--keep-pm2` is set.
 
-### Follow-ups logged 2025-11-11
+### 2. Follow-ups logged 2025-11-10
 
 - [x] **Restart helper observability polish** – `ensure_pm2_app` now prints single-line summaries such as `status=absent -> start` or `status=errored -> delete+start`, so Codex transcripts record how each pm2 app was recovered.
 - [x] **Watchdog self-healing parity** – `scripts/watch_public_mcp.py` reuses the same pm2 inspection logic (with the matching log format) to delete+start missing Cloudflared processes instead of looping on `pm2 restart`.

@@ -4,20 +4,20 @@ This note captures the current `tools/list` snapshot from the running proxy (que
 
 ## Current Catalog Snapshot
 
-| Primary server | Tool count | Key capabilities |
-| --- | --- | --- |
-| `fs` | 23 | Directory listings, metadata, searches, file edits, archive helpers |
-| `mem` | 18 | Basic Memory note/project lifecycle, search, context rebuild |
-| `sh` | 8 | Terminal controller for guarded shell commands + file patch helpers |
-| `one_mcp` | 7 | 1mcp CLI helpers (plan, fetch README, config scaffolding) |
-| `strata` | 5 | Strata discovery + action execution flow |
-| `docs` | 3 | Docy fetch (`fetch_document_links`, `fetch_documentation_page`, `list_documentation_sources_tool`) |
-| `scrapling` | 2 | `s_fetch_page`, `s_fetch_pattern` (web fetch modes) |
-| `docy_manager` | 1 | `manage_docy` (already wrapped by `manage_docy_sources`) |
-| `integrator` | 1 | `manage_stelae` (integrates 1mcp discovery) |
-| `fetch` | 1 | Canonical HTTP fetch |
-| `rg` | 1 | `grep` via ripgrep |
-| `facade` | 1 | `search` placeholder (for legacy connector checks) |
+| Primary server | Tool count | Key capabilities                                                                                   |
+| -------------- | ---------- | -------------------------------------------------------------------------------------------------- |
+| `fs`           | 23         | Directory listings, metadata, searches, file edits, archive helpers                                |
+| `mem`          | 18         | Basic Memory note/project lifecycle, search, context rebuild                                       |
+| `sh`           | 8          | Terminal controller for guarded shell commands + file patch helpers                                |
+| `one_mcp`      | 7          | 1mcp CLI helpers (plan, fetch README, config scaffolding)                                          |
+| `strata`       | 5          | Strata discovery + action execution flow                                                           |
+| `docs`         | 3          | Docy fetch (`fetch_document_links`, `fetch_documentation_page`, `list_documentation_sources_tool`) |
+| `scrapling`    | 2          | `s_fetch_page`, `s_fetch_pattern` (web fetch modes)                                                |
+| `docy_manager` | 1          | `manage_docy` (already wrapped by `manage_docy_sources`)                                           |
+| `integrator`   | 1          | `manage_stelae` (integrates 1mcp discovery)                                                        |
+| `fetch`        | 1          | Canonical HTTP fetch                                                                               |
+| `rg`           | 1          | `grep` via ripgrep                                                                                 |
+| `facade`       | 1          | `search` placeholder (for legacy connector checks)                                                 |
 
 71 tools are exposed today; most surface area is concentrated in the workspace filesystem (`fs` + `sh` overlaps) and Basic Memory servers. Without consolidation the manifest is noisy, which in turn makes it harder for agents to pick the right primitive on the first try.
 
@@ -48,17 +48,21 @@ Single-tool servers (`fetch`, `rg`, `manage_stelae`) stay as-is because an extra
 ## How to Apply the Aggregations
 
 1. **Validate + render**
+
    ```bash
    python3 scripts/process_tool_aggregations.py --check-only
    python3 scripts/process_tool_aggregations.py
    make render-proxy
    ```
+
 2. **Restart & verify**
+
    ```bash
    scripts/run_restart_stelae.sh --full
    curl -s http://127.0.0.1:9090/mcp -H 'Content-Type: application/json' \
      -d '{"jsonrpc":"2.0","id":"tools","method":"tools/list"}' | jq '.result.tools[].name'
    ```
+
    Expect only the aggregates + singleton servers (fetch, grep, manage_stelae, etc.) to remain.
 3. **Regression checks**
    - Spot-check a few aggregated operations (e.g., `workspace_fs_read` → `read_file`) to confirm argument routing.

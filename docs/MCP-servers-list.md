@@ -10,11 +10,13 @@
 
 ## Meta-MCP
 
-- [~] [011] [1mcpserver](https://github.com/particlefuture/1mcpserver) — MCP-of-MCPs that auto-discovers/configures local servers; great for auditing what ChatGPT can reach. [WSL]
+- [!] [011] [1mcpserver](https://github.com/particlefuture/1mcpserver) — Core discovery agent that feeds `manage_stelae`; runs locally via FastMCP bridge. [WSL]
+- [!] [536] [mcp-proxy](https://github.com/TBXark/mcp-proxy) — Go proxy that aggregates downstream servers (filesystem, docs, memory, etc.) into the public endpoint.
+- [x] [---] [Strata MCP Router](https://github.com/Klavis-AI/klavis) — Routes/discovers MCP servers with action search/auth helpers; feeds the stack’s `strata_ops_suite`. [WSL]
+- [x] [---] [Public MCP Catalog](https://github.com/Dub1n/stelae-1mcpserver) — Remote HTTP/SSE catalog powering `deep_search`/`list_servers` lookups for downstream installs.
 - [~] [022] [MCP Discovery](https://github.com/rust-mcp-stack/mcp-discovery) — CLI to enumerate server tools/resources; good to debug configs.
 - [~] [236] [ChatMCP](https://github.com/AI-QL/chat-mcp) — cross‑platform GUI to test & drive MCP servers; runs on Windows.
 - [~] [070] [Cursor MCP Installer](https://github.com/matthewdcage/cursor-mcp-installer) — tool to install/configure MCP servers inside Cursor IDE; also usable for VSCodium setups.
-- [ ] [536] [mcp-proxy](https://github.com/TBXark/mcp-proxy) — aggregate multiple servers behind one endpoint; tidy setups once your list grows.
 - [ ] [02k] [mcp-proxy](https://github.com/sparfenyuk/mcp-proxy) — stdio<->sse bridge; pick the proxy that matches transports you need.
 - [ ] [017] [MCP STDIO to Streamable HTTP Adapter](https://github.com/pyroprompts/mcp-stdio-to-streamable-http-adapter) — lets chatgpt (http client) reach stdio mcp servers; useful bridge piece.
 - [ ] [014] [mcp-mcp](https://github.com/wojtyniak/mcp-mcp) — discovery/indexing of available mcp tools; nice for auditing capabilities locally.
@@ -36,15 +38,15 @@
 
 ## Web Read
 
+- [x] [011] [Docy](https://github.com/oborchers/mcp-server-docy) — Real-time access to web documentation online; no outdated, broken, rate-limited files/links. Scrapes with crawl4ai.
+- [x] [050] [scrapling-fetch](https://github.com/cyberchitta/scrapling-fetch-mcp) — Access text content from bot-protected websites. Fetches HTML/markdown from sites with anti-automation measures using Scrapling.
+- [x] [---] [Fetch](https://github.com/modelcontextprotocol/servers/blob/main/src/fetch) — pull HTML/JSON/MD/plaintext from URLs for docs/samples; no account needed; sandbox outputs.
 - [~] [243] [consult7](https://github.com/szeider/consult7) — analyze large codebases/docs with high‑context models; useful for code review. [WSL]
-- [~] [011] [Docy](https://github.com/oborchers/mcp-server-docy) — Real-time access to web documentation online; no outdated, broken, rate-limited files/links. Scrapes with crawl4ai.
 - [~] [920] [Microsoft Learn](https://github.com/microsoftdocs/mcp) — bring trusted and up-to-date information directly from Microsoft's official documentation. It supports streamable http transport.
-- [ ] [050] [scrapling-fetch](https://github.com/cyberchitta/scrapling-fetch-mcp) — Access text content from bot-protected websites. Fetches HTML/markdown from sites with anti-automation measures using Scrapling.
 - [ ] [078] [mcp-local-rag](https://github.com/nkapila6/mcp-local-rag) — local embeddings (mediapipe) + duckduckgo fetch; handy RAG for web search, but adds deps. [WSL]
 - [ ] [086] [mcp-read-website-fast](https://github.com/just-every/mcp-read-website-fast) — converts web pages → clean markdown for notes/tests; useful for research, not required for local builds.
 - [ ] [081] [mcp-screenshot-website-fast](https://github.com/just-every/mcp-screenshot-website-fast) — high-quality full-page screenshots for debugging docs/ui; requires headless browser bits.
 - [ ] [452] [Octocode](https://github.com/bgauryy/octocode-mcp) — code research across github/npm; good for discovery; external reads but no account needed.
-- [ ] [---] [Fetch](https://github.com/modelcontextprotocol/servers/blob/main/src/fetch) — pull HTML/JSON/MD/plaintext from URLs for docs/samples; no account needed; sandbox outputs.
 
 ## Web Access
 
@@ -62,14 +64,14 @@
 - [~] [010] [Context Crystallizer](https://github.com/hubertciebiada/context-crystallizer) — transforms large repos into structured, AI‑friendly knowledge; good for project onboarding.
 - [~] [639] [context-portal](https://github.com/GreatScottyMac/context-portal) — builds project‑specific knowledge graph; RAG backend for local repos.
 - [~] [274] [llm-context](https://github.com/cyberchitta/llm-context.py) — “repo packer” to curate/include files by globs/profiles before asking; ideal for tight, reproducible context.
+- [~] [090] [ECharts MCP Server](https://github.com/hustcc/mcp-echarts) — chart generation via ECharts; useful alternative to AntV.
 - [ ] [000] [lucene-mcp-server](https://github.com/VivekKumarNeu/MCP-Lucene-Server) — run your own local full-text index over docs/code for fast search; Java/.NET variants exist.
 - [ ] [03k] [AntV Chart](https://github.com/antvis/mcp-server-chart) — local chart generation for docs/reporting; Node install. [WSL]
-- [~] [090] [ECharts MCP Server](https://github.com/hustcc/mcp-echarts) — chart generation via ECharts; useful alternative to AntV.
 
 ## File Search
 
+- [x] [015] [mcp-grep](https://github.com/erniebrodeur/mcp-grep) — fast, grep-like code search via mcp; great for scoped, recursive queries in repos. [WSL]
 - [~] [242] [Everything Search](https://github.com/mamertofabian/mcp-everything-search) — integrates Windows Everything search SDK for instant file search; Windows native.
-- [~] [015] [mcp-grep](https://github.com/erniebrodeur/mcp-grep) — fast, grep-like code search via mcp; great for scoped, recursive queries in repos. [WSL]
 - [~] [01k] [Minima](https://github.com/dmayboroda/minima) — local file RAG on your docs/code; no cloud key required; good for repo Q&A. [WSL]
 - [~] [011] [RAG Local](https://github.com/renl/mcp-rag-local) — simple local semantic store for text/code; nice lightweight alternative to heavier rag stacks.
 - [ ] [01k] [Language Server](https://github.com/isaacphi/mcp-language-server) — semantic code nav (defs/refs/rename/diagnostics) exposed via MCP; pairs well with files/git. Early but promising.
@@ -81,11 +83,11 @@
 
 ## File Access
 
+- [x] [070] [Rust MCP Filesystem](https://github.com/rust-mcp-stack/rust-mcp-filesystem) — fast, read-only-by-default file ops (opt-in writes), globbing, zips; great “do exactly what I say” FS access. [WSL]
 - [~] [---] [Filesystem](https://github.com/modelcontextprotocol/servers/blob/main/src/filesystem) — read/write files, list directories; configurable root + allow/deny patterns; pair with command tool for shell tasks.
 - [~] [095] [code-assistant](https://github.com/stippi/code-assistant) — explore a codebase and make edits; use on trusted repos only; good for supervised bulk refactors.
 - [~] [012] [Fast Filesystem](https://github.com/efforthye/fast-filesystem-mcp) — precise code search/edits across a repo; great for supervised refactors. [WSL]
 - [~] [512] [Golang Filesystem Server](https://github.com/mark3labs/mcp-filesystem-server) — minimal, secure read/write with allow-listed roots and access controls. [WSL]
-- [~] [070] [Rust MCP Filesystem](https://github.com/rust-mcp-stack/rust-mcp-filesystem) — fast, read-only-by-default file ops (opt-in writes), globbing, zips; great “do exactly what I say” FS access. [WSL]
 - [ ] [167] [filesystem-quarkus](https://github.com/quarkiverse/quarkus-mcp-servers/tree/main/filesystem) — list, read and modify files from the filesystem
 
 ## File Conversion
@@ -98,7 +100,7 @@
 
 ## Knowledge
 
-- [~] [02k] [Basic Memory](https://github.com/basicmachines-co/basic-memory) — local‑first Markdown knowledge graph (persistent project memory). [WSL]
+- [x] [02k] [Basic Memory](https://github.com/basicmachines-co/basic-memory) — local‑first Markdown knowledge graph (persistent project memory). [WSL]
 - [ ] [054] [PIF](https://github.com/hungryrobot1/MCP-PIF) — local file ops + journaling/structure; can act as a general helper if kept local.
 
 ## Code Execution
@@ -110,13 +112,13 @@
 
 ## Computer Control
 
+- [x] [083] [Terminal-Control](https://github.com/GongRzhe/terminal-controller-mcp) — basic local terminal/file ops via MCP; simpler surface than full shell bridges; keep the allow-list strict.
 - [~] [038] [computer-control-mcp](https://github.com/AB498/computer-control-mcp) — local mouse/keyboard/OCR automation via PyAutoGUI + OCR libs; Windows supported.
 - [~] [009] [kill-process-mcp](https://github.com/misiektoja/kill-process-mcp) — list/terminate local processes via allow-listed tools; useful for stuck dev servers/tests. [WSL]
 - [~] [007] [Python CLI MCP](https://github.com/ofek/pycli-mcp) — call local python clis/scripts from chat with allow-lists; perfect for ad-hoc utilities.
 - [ ] [05k] [DesktopCommander](https://github.com/wonderwhy-er/DesktopCommanderMCP) — powerful local control (edit files, run terminal, optional SSH); set read-only by default and log actions. [WSL]
 - [ ] [001] [SystemSage](https://github.com/Tarusharma1/SystemSage) — local system info/management (processes, services, nets, optional Docker/K8s); powerful, so run read-mostly unless you need control.
 - [ ] [005] [persistproc](https://github.com/irskep/persistproc) — manage long-running local processes (dev servers, watchers) from chat; powerful, log actions.
-- [ ] [083] [Terminal-Control](https://github.com/GongRzhe/terminal-controller-mcp) — basic local terminal/file ops via MCP; simpler surface than full shell bridges; use tight allow-lists.
 - [ ] [005] [APT MCP](https://github.com/GdMacmillan/apt-mcp-server) — exposes Debian `apt` inside WSL; useful for env setup. [WSL]
 
 ## Reasoning
@@ -200,7 +202,7 @@
 ## Tools
 
 - [~] [121] [Calculator](https://github.com/githejie/mcp-server-calculator) — numeric calc tool; trivial install.
-- [~] [176] [Depyler](https://github.com/paiml/depyler/tree/main) — Python‑to‑Rust transpiler with verification; reduces energy consumption; local CLI.
+- [~] [176] [Depyler](https://github.com/paiml/depyler/tree/main) — Python‑to-Rust transpiler with verification; reduces energy consumption; local CLI.
 - [~] [083] [PAIML MCP Agent Toolkit](https://github.com/paiml/paiml-mcp-agent-toolkit) — scaffolding/templates + code analysis helpers. [WSL]
 - [ ] [012] [it-tools-mcp](https://github.com/wrenchpilot/it-tools-mcp) — grab-bag of 100+ local dev utilities (encoders/decoders, hashing, small net tools); nice Swiss-army add-on.
 - [ ] [674] [Jupyter MCP Server](https://github.com/datalayer/jupyter-mcp-server) — control local notebooks (edit/exec/cell mgmt). Great for data wrangling; keep kernels constrained.
