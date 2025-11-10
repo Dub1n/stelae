@@ -158,7 +158,7 @@ python scripts/install_stelae_bundle.py
 - Add `--server docs --server fetch` to target specific servers, or omit `--server` to install everything described in `config/bundles/starter_bundle.json`.
 - Use `--dry-run` to preview the changes; `--no-restart` writes overlays without touching PM2 (handy if the stack is already running elsewhere).
 - The script merges `tool_overrides.local.json` and `tool_aggregations.local.json`, then runs `make render-proxy` + `scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --no-cloudflared` once so the new catalog is live immediately.
-- To enable the optional Codex wrapper entry, first run `~/dev/codex-mcp-wrapper/scripts/build_release.py`. It creates a versioned virtualenv under `${STELAE_CONFIG_HOME}/codex-mcp-wrapper/releases/<version>` (plus a `latest/` symlink) that exposes `venv/bin/codex-mcp-wrapper` and a default `wrapper.toml`. Point `CODEX_WRAPPER_BIN`/`CODEX_WRAPPER_CONFIG` in `.env` at that release before installing the bundle.
+- To enable the optional Codex wrapper entry, first run `~/dev/codex-mcp-wrapper/scripts/build_release.py`. It creates a versioned release under `~/dev/codex-mcp-wrapper/dist/releases/<version>` (with wheel/sdist, checksums, `wrapper.toml`, and a ready-to-run `venv`). Publish that bundle (or copy it) into `${STELAE_CONFIG_HOME}/codex-mcp-wrapper/releases/<version>` so the starter bundle can reference `CODEX_WRAPPER_BIN`/`CODEX_WRAPPER_CONFIG` via the defaults in `.env`.
 
 Rerun the installer after pulling template updates or whenever you delete your local overlays. Removing `${STELAE_CONFIG_HOME}/config/proxy.template.local.json` reverts back to the five-server core automatically.
 
@@ -175,6 +175,12 @@ Every config file tracked in this repo is a template. Any local edits made via `
 
 - `pytest tests/test_repo_sanitized.py` fails if tracked configs reintroduce absolute `/home/...` paths or if `.env.example` stops pointing runtime outputs to `${STELAE_CONFIG_HOME}`. Run it whenever you touch templates to confirm renderers keep git clean.
 - `make verify-clean` (wrapper around `scripts/verify_clean_repo.sh`) snapshots `git status --porcelain`, runs `make render-proxy` plus `scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --no-cloudflared --skip-populate-overrides`, and then fails if any tracked files changed. Pass `VERIFY_CLEAN_RESTART_ARGS` or `./scripts/verify_clean_repo.sh --skip-restart` when you need to adjust the restart flow on machines without PM2/Cloudflared.
+
+### Clone Smoke Test
+
+- `python scripts/run_e2e_clone_smoke_test.py --wrapper-release ~/dev/codex-mcp-wrapper/dist/releases/<version>` spins up a disposable workspace, clones both Stelae and `mcp-proxy`, writes an isolated `.env` (`STELAE_CONFIG_HOME`, `PM2_HOME`, Go caches, ports), runs `make render-proxy`, restarts the stack, and installs/removes `docy_manager` via the `manage_stelae` CLI while asserting `git status` stays clean.
+- The harness publishes `manual_playbook.md` and `manual_result.json` inside the workspace so a human (or the Codex MCP wrapper) can repeat the same install/remove cycle through the real MCP transport. Update `manual_result.json` to `"status": "passed"` once the wrapper mission succeeds; the harness will exit with an error if the file is not updated.
+- See `docs/e2e_clone_smoke_test.md` for prerequisites, CLI flags (`--workspace`, `--keep-workspace`, `--auto-only`), and the Codex wrapper mission flow.
 
 ### Custom Script Tools
 

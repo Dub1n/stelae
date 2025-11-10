@@ -148,6 +148,12 @@ anyio.run(main)
 PY
 ```
 
+### Clone smoke harness
+
+- `scripts/run_e2e_clone_smoke_test.py` provisions a throwaway workspace, clones Stelae + `mcp-proxy`, writes an isolated `.env`/`${STELAE_CONFIG_HOME}`, renders the proxy, restarts the stack with a sandboxed `PM2_HOME`, and installs/removes `docy_manager` via the `manage_stelae` CLI to confirm tracked templates stay untouched.
+- The harness emits `manual_playbook.md` and `manual_result.json` in the workspace. Follow the playbook to launch the Codex MCP wrapper (provide `--wrapper-release` so the release is mirrored into `${STELAE_CONFIG_HOME}/codex-mcp-wrapper/releases/<version>`), run the mission in `dev/tasks/missions/e2e_clone_smoke.json`, and update `manual_result.json` with `status: "passed"` plus the wrapper call IDs.
+- After the tester returns to the harness prompt and confirms completion, the script validates the manual result, kills the sandbox PM2 daemon, and deletes the workspace unless `--keep-workspace` is set. Full prerequisites and CLI options live in `docs/e2e_clone_smoke_test.md`.
+
 ### Tool aggregation helper
 
 **Why:** Operators wanted a way to expose curated, high-level tools without duplicating logic across MCP servers or manually editing the overrides template. The aggregation helper keeps the catalog clean by letting us describe composites in JSON, hide the noisy downstream entries, and reuse the existing proxy infrastructure for dispatch.

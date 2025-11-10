@@ -10,7 +10,7 @@
 ## Runtime, Build, and Dev Commands
 
 - Environment: copy `.env.example` → `.env`, update path/binary variables, then run `make render-proxy`. Keep `.env` local; renderers inject values for PM2.
-- Core stack = mcp-proxy, custom tools, the Stelae integrator, the tool aggregator helper, the 1mcp stdio agent, the public 1mcp catalog bridge, and the FastMCP bridge. The starter bundle (Docy + manager, Basic Memory, Strata, Fetch, Scrapling, filesystem/ripgrep/terminal helpers, Codex wrapper) lives in `config/bundles/starter_bundle.json`; install or update it via `python scripts/install_stelae_bundle.py [--server name...]` so the extras stay in `${STELAE_CONFIG_HOME}` overlays instead of git, and keep the Cloudflare tunnel/worker opt-in. Build the wrapper release first via `~/dev/codex-mcp-wrapper/scripts/build_release.py` so `CODEX_WRAPPER_BIN`/`CODEX_WRAPPER_CONFIG` point at `${STELAE_CONFIG_HOME}/codex-mcp-wrapper/releases/latest/...`.
+- Core stack = mcp-proxy, custom tools, the Stelae integrator, the tool aggregator helper, the 1mcp stdio agent, the public 1mcp catalog bridge, and the FastMCP bridge. The starter bundle (Docy + manager, Basic Memory, Strata, Fetch, Scrapling, filesystem/ripgrep/terminal helpers, Codex wrapper) lives in `config/bundles/starter_bundle.json`; install or update it via `python scripts/install_stelae_bundle.py [--server name...]` so the extras stay in `${STELAE_CONFIG_HOME}` overlays instead of git, and keep the Cloudflare tunnel/worker opt-in. Build the wrapper release first via `~/dev/codex-mcp-wrapper/scripts/build_release.py` (outputs to `~/dev/codex-mcp-wrapper/dist/releases/<version>`), then publish/copy it into `${STELAE_CONFIG_HOME}/codex-mcp-wrapper/releases/<version>` so `CODEX_WRAPPER_BIN`/`CODEX_WRAPPER_CONFIG` have something to point at.
 - PM2 lifecycle (`source ~/.nvm/nvm.sh` first):
   - `make up` / `make down` – start or stop the fleet described in `ecosystem.config.js`.
   - `make restart-proxy`, `make logs`, `make status` – restart, tail logs, or inspect process table.
@@ -20,6 +20,7 @@
   - `python scripts/discover_servers_cli.py` or the MCP tool `manage_stelae` (operations: discover/install/remove/refresh/run_reconciler) manage downstream servers.
   - `python scripts/populate_tool_overrides.py --proxy-url http://127.0.0.1:9090/mcp` snapshots schemas into `${STELAE_CONFIG_HOME}/config/tool_overrides.local.json` and rewrites `${TOOL_OVERRIDES_PATH}`.
 - Testing: run `pytest` from repo root; scope via `pytest tests/test_streamable_mcp.py::test_happy_path` when needed.
+- Clone smoke harness: `python scripts/run_e2e_clone_smoke_test.py --wrapper-release ~/dev/codex-mcp-wrapper/dist/releases/<version>` clones the repo + `mcp-proxy` into a temp workspace, renders/restarts the stack with isolated `STELAE_CONFIG_HOME`/`PM2_HOME`, drives the CLI side of `manage_stelae`, then pauses so a human (or Codex mission) can follow `manual_playbook.md` and update `manual_result.json`. See `docs/e2e_clone_smoke_test.md` for manual steps.
 
 ## Coding Style & Naming Conventions
 

@@ -6,13 +6,13 @@ Tags: `#infra`, `#tests`
 
 ## Checklist
 
-- [ ] Land a Codex MCP wrapper (or equivalent orchestrator) that can launch sandboxes with caller-provided env/layout and hand structured missions to the agent.
-- [ ] Build an automation harness that clones the repo into a temp workspace, points `STELAE_CONFIG_HOME`/`.env` at that sandbox, renders + restarts the stack, and drives the CLI portions of `stelae.manage_stelae` (install/remove) while asserting the git tree stays clean.
-- [ ] Write the companion manual playbook so testers can launch the Codex MCP wrapper inside the sandbox, follow the scripted MCP interactions (install server via tool, exercise it, remove it, finish), and feed results back to the harness/orchestrator.
-- [ ] If the Codex MCP wrapper cannot be delivered in time, fall back to a documented manual MCP procedure (still using the sandbox + CLI harness) and capture the gap in the task notes.
-- [ ] Update README/AGENTS/docs with instructions for running the smoke test (both automated portion and the human-in-the-loop MCP steps).
-- [ ] Update spec/progress/task files.
-- [ ] Commit with message `infra: add e2e clone smoke test harness` after tests.
+- [x] Land a Codex MCP wrapper (or equivalent orchestrator) that can launch sandboxes with caller-provided env/layout and hand structured missions to the agent. _(Delivered separately in `~/dev/codex-mcp-wrapper`; this task consumes the released bundle.)_
+- [x] Build an automation harness that clones the repo into a temp workspace, points `STELAE_CONFIG_HOME`/`.env` at that sandbox, renders + restarts the stack, and drives the CLI portions of `stelae.manage_stelae` (install/remove) while asserting the git tree stays clean.
+- [x] Write the companion manual playbook so testers can launch the Codex MCP wrapper inside the sandbox, follow the scripted MCP interactions (install server via tool, exercise it, remove it, finish), and feed results back to the harness/orchestrator.
+- [x] If the Codex MCP wrapper cannot be delivered in time, fall back to a documented manual MCP procedure (still using the sandbox + CLI harness) and capture the gap in the task notes. _(N/A – wrapper available; playbook references the release copy.)_
+- [x] Update README/AGENTS/docs with instructions for running the smoke test (both automated portion and the human-in-the-loop MCP steps).
+- [x] Update spec/progress/task files.
+- [x] Commit with message `infra: add e2e clone smoke test harness` after tests.
 
 ## References
 
@@ -28,10 +28,17 @@ Tags: `#infra`, `#tests`
 - Allocate alternate ports and/or pm2 app names for the smoke-test stack so it never collides with a developer’s running instance, even if both happen to be online simultaneously.
 - If this task changes prerequisites or dependency relationships, regenerate the project’s dependency map JSON (see `dev/tasks/*_task_dependencies.json`) and attach the updated file in the related progress planner.
 
+## Outcome
+
+- Added `scripts/run_e2e_clone_smoke_test.py`, which clones Stelae + `mcp-proxy` into a disposable workspace, writes a sandboxed `.env`/`${STELAE_CONFIG_HOME}`, copies an optional Codex wrapper release, runs `make render-proxy` + `scripts/run_restart_stelae.sh`, and exercises `manage_stelae` (install/remove) via the integrator CLI. The harness writes `manual_playbook.md` and `manual_result.json`, then waits for the human-in-the-loop Codex phase before validating/cleaning up.
+- Added helper utilities (`stelae_lib/smoke_harness.py`) and a Codex mission stub (`dev/tasks/missions/e2e_clone_smoke.json`) for the manual runbook.
+- Documented the workflow in `README.md`, `AGENTS.md`, `docs/ARCHITECTURE.md`, and the dedicated guide `docs/e2e_clone_smoke_test.md`.
+- Added unit coverage for the helper functions (see `tests/test_e2e_clone_smoke.py`).
+
 ## Checklist (Copy into PR or issue if needed)
 
-- [ ] Code/tests updated
-- [ ] Docs updated
-- [ ] progress.md updated
-- [ ] Task log updated
-- [ ] Checklist completed
+- [x] Code/tests updated
+- [x] Docs updated
+- [x] progress.md updated
+- [x] Task log updated
+- [x] Checklist completed

@@ -1,0 +1,21 @@
+{
+  "mission_id": "e2e-clone-smoke",
+  "workspace_root": "/tmp/replace-this-with-sandbox",
+  "notes": "Human-in-the-loop Codex mission that exercises manage_stelae inside a disposable clone.",
+  "tasks": [
+    {
+      "prompt": "Using the sandbox proxy URL, run tools/list and confirm manage_stelae is published. Then call manage_stelae install_server targeting docy_manager (set target_name to docy_manager_smoke). Capture the JSON response and note the files_updated and commands_run entries.",
+      "cwd": ".",
+      "sandbox": "workspace-write",
+      "approval_policy": "on-request",
+      "timeout_sec": 900
+    },
+    {
+      "prompt": "Call manage_stelae remove_server for docy_manager_smoke. Verify that both templateChanged and overridesChanged flags are true and that commands_run shows render+restart. Update the manual_result.json file under the sandbox root with status='passed' (or 'failed'), the call IDs for install/remove, and any notes about the session.",
+      "cwd": ".",
+      "sandbox": "workspace-write",
+      "approval_policy": "on-request",
+      "timeout_sec": 900
+    }
+  ]
+}
