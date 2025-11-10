@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 """
-Render ops/cloudflared.yml from a template and .env/.env.example.
+Render ops/cloudflared.yml from layered templates and environment files.
 - Figures out hostname from PUBLIC_BASE_URL if CF_PUBLIC_HOSTNAME is not set.
 - Requires either CF_TUNNEL_UUID or CF_TUNNEL_NAME (UUID strongly preferred).
 - Defaults CF_HA_CONNECTIONS=8, PUBLIC_PORT=9090.
 """
 
 from __future__ import annotations
+
 import argparse
 import os
 import re
 from pathlib import Path
 from urllib.parse import urlparse
+
+from stelae_lib.config_overlays import config_home, overlay_path_for
 
 TEMPLATE_PATTERN = re.compile(r"\{\{\s*([A-Z0-9_]+)\s*\}\}")
 VAR_PATTERN = re.compile(r"\$\{([A-Z0-9_]+)\}")
@@ -54,10 +57,11 @@ def expand(values: dict[str, str]) -> dict[str, str]:
     return resolved
 
 
-def load_env(env_file: Path, fallback: Path | None) -> dict[str, str]:
+def load_env(env_file: Path, fallback: Path | None, overlay_env: Path | None) -> dict[str, str]:
     merged = {k: v for k, v in os.environ.items() if isinstance(v, str)}
     merged.update(parse_env_file(fallback))
     merged.update(parse_env_file(env_file))
+    merged.update(parse_env_file(overlay_env))
     return expand(merged)
 
 
@@ -127,14 +131,32 @@ def main() -> None:
     ap.add_argument(
         "--template", default=Path("stelae/ops/cloudflared.template.yml"), type=Path
     )
+    ap.add_argument(
+        "--overlay-template",
+        type=Path,
+        help="Optional overlay template path (defaults to ~/.config/stelae mirror)",
+    )
     ap.add_argument("--output", default=Path("stelae/ops/cloudflared.yml"), type=Path)
     ap.add_argument("--env-file", default=Path("stelae/.env"), type=Path)
     ap.add_argument("--fallback-env", default=Path("stelae/.env.example"), type=Path)
+    ap.add_argument(
+        "--overlay-env",
+        type=Path,
+        help="Optional overlay env file (defaults to ~/.config/stelae/.env.local)",
+    )
     args = ap.parse_args()
 
-    env_vals = load_env(args.env_file, args.fallback_env)
+    overlay_template = args.overlay_template or overlay_path_for(args.template)
+    overlay_env = args.overlay_env or (config_home() / ".env.local")
+
+    env_vals = load_env(args.env_file, args.fallback_env, overlay_env)
     vals = compute(env_vals)
-    tmpl = args.template.read_text(encoding="utf-8")
+    template_path = (
+        overlay_template
+        if overlay_template and overlay_template.exists()
+        else args.template
+    )
+    tmpl = template_path.read_text(encoding="utf-8")
     out = render(tmpl, vals)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)

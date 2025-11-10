@@ -19,3 +19,9 @@ def test_cloudflared_samples_are_placeholder_only() -> None:
         assert "<your-" in text, f"{rel} should highlight placeholder values"
         assert "/home/gabri" not in text
         assert "mcp.infotopology.xyz" not in text
+
+
+def test_tracked_configs_remain_placeholder_only() -> None:
+    for rel in ("config/tool_overrides.json", "config/proxy.template.json"):
+        text = _read(rel)
+        assert "/home/" not in text, f"{rel} should not bake absolute paths"

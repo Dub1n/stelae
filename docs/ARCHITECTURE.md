@@ -4,6 +4,10 @@
 
 Stelae combines a Go-based MCP aggregation proxy, a fleet of downstream MCP servers, a FastMCP bridge for stdio clients, and a Cloudflare tunnel for public access. Everything originates from the local WSL workspace while remaining consumable by remote ChatGPT Connectors.
 
+### Config overlays
+
+Templates live under `config/` in this repo; all machine-specific state is written to `${STELAE_CONFIG_HOME}` (default `~/.config/stelae`). Each template gains a `*.local.*` companion file the first time you edit it via `manage_stelae`/renderers, and runtime artifacts such as `${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${STELAE_DISCOVERY_PATH}`, `${TOOL_SCHEMA_STATUS_PATH}`, and `${STELAE_CONFIG_HOME}/cloudflared.yml` are emitted there as well. Deleting the corresponding `*.local.*` file is enough to reset a config back to the tracked default.
+
 ### Legend
 
 ```text
@@ -68,13 +72,13 @@ flowchart LR
 * Downstream MCP servers register their tool descriptors during startup (`collectTools`).
 * Overrides are merged in the following order:
   1. `manifest.toolOverrides` from `config/proxy.json`.
-  2. `config/tool_overrides.json` (validated via `config/tool_overrides.schema.json`). Each tool override lives under its server while the `master.tools["*"]` wildcard provides shared defaults.
+  2. The overrides template (`config/tool_overrides.json`, validated via `config/tool_overrides.schema.json`) + your `${STELAE_CONFIG_HOME}/config/tool_overrides.local.json`. Each tool override lives under its server while the `master.tools["*"]` wildcard provides shared defaults, and the merged runtime file at `${TOOL_OVERRIDES_PATH}` is what the proxy consumes.
   3. Master (`*`) overrides apply last.
 * Overrides can rewrite names, descriptions, annotations, and full `inputSchema`/`outputSchema` blocks. We use this to advertise the adapted contract the proxy enforces at call time.
-* Scrapling’s `s_fetch_page` and `s_fetch_pattern` entries in `config/tool_overrides.json` are the canonical definition for their `{metadata, content}` outputs. The call-path adapter in the Go proxy writes back to the same file whenever it has to downgrade/upgrade a schema; rerun `make render-proxy` + the restart script after editing those overrides so manifests and streamable clients see the update immediately.
+* Scrapling’s `s_fetch_page` and `s_fetch_pattern` entries in the overrides template feed the runtime file `${TOOL_OVERRIDES_PATH}`. The call-path adapter in the Go proxy writes back to the runtime file whenever it has to downgrade/upgrade a schema; rerun `make render-proxy` + the restart script after editing those overrides so manifests and streamable clients see the update immediately.
 * The proxy filters out any tool/server marked `enabled: false` before producing `initialize`, `tools/list`, and manifest payloads.
 * Every `tools/list` descriptor carries `"x-stelae": {"servers": [...], "primaryServer": "..."}` metadata. The restart script + populate helper rely on this to map schemas back to the correct server even after the proxy deduplicates tool names.
-* Declarative aggregations are described in `config/tool_aggregations.json`. `scripts/process_tool_aggregations.py` validates the file, injects those descriptors into `config/tool_overrides.json`, and sets any `hideTools` entries to `enabled: false`. `scripts/tool_aggregator_server.py` loads the same config at runtime so wrappers such as `manage_docy_sources` show up once in manifests even though they fan out to underlying servers.
+* Declarative aggregations are described in `config/tool_aggregations.json` (with optional overlays under `${STELAE_CONFIG_HOME}/config/tool_aggregations.local.json`). `scripts/process_tool_aggregations.py` validates the merged file, writes the resulting descriptors to `${TOOL_OVERRIDES_PATH}`, and sets any `hideTools` entries to `enabled: false`. `scripts/tool_aggregator_server.py` loads the same config at runtime so wrappers such as `manage_docy_sources` show up once in manifests even though they fan out to underlying servers.
 
 ## Operations & Troubleshooting
 
@@ -83,11 +87,11 @@ flowchart LR
 | Symptom | Likely cause | How to fix |
 | --- | --- | --- |
 | `mcp-proxy` not listening on `:9090` | Go build failed or pm2 stopped | `./scripts/run_restart_stelae.sh` or `source ~/.nvm/nvm.sh && pm2 restart mcp-proxy` |
-| Override hints missing from manifest | override file not loaded or stale | confirm `config/tool_overrides.json` is valid JSON, rerun `make render-proxy`, then `scripts/run_restart_stelae.sh --full` |
+| Override hints missing from manifest | runtime overrides not loaded or stale | confirm `${TOOL_OVERRIDES_PATH}` is valid JSON, rerun `make render-proxy`, then `scripts/run_restart_stelae.sh --full` |
 | `tools/call search` returns `{ "results": [] }` | running an old version; static hits missing | rebuild Go proxy (`facade_search.go`) and restart |
 | Codex CLI reports “MCP client … request timed out” | STDIO bridge launched without proper env | ensure the Codex config exports `PYTHONPATH=/home/gabri/dev/stelae` and `STELAE_STREAMABLE_TRANSPORT=stdio`; run `make check-connector` locally |
 | Cloudflare 530 splash | tunnel momentarily unhealthy | rerun `scripts/run_restart_stelae.sh` (validates tunnel + pm2), or `source ~/.nvm/nvm.sh && pm2 restart cloudflared` |
-| `make check-connector` flags unexpected catalog | new upstream tools exposed or overrides missing | inspect `logs/mcp-proxy.err.log`, confirm `config/tool_overrides.json` is current, rerun restart |
+| `make check-connector` flags unexpected catalog | new upstream tools exposed or overrides missing | inspect `logs/mcp-proxy.err.log`, confirm `${TOOL_OVERRIDES_PATH}` is current, rerun restart |
 | Startup logs mention "master override" warnings | master-level description/title overrides present | keep only the wildcard `"*"` entry under `master.tools`; move other overrides under their server |
 | `tools/call fetch` returns network errors | upstream site blocked / fetch server delay | retry or inspect `logs/fetch.err.log` |
 | SSE drops quickly | Cloudflare idle timeout | ensure Go proxy heartbeat loop is running (keepalives every 15s) |
@@ -136,12 +140,12 @@ PY
 
 ### Tool aggregation helper
 
-**Why:** Operators wanted a way to expose curated, high-level tools without duplicating logic across MCP servers or manually editing `tool_overrides.json`. The aggregation helper keeps the catalog clean by letting us describe composites in JSON, hide the noisy downstream entries, and reuse the existing proxy infrastructure for dispatch.
+**Why:** Operators wanted a way to expose curated, high-level tools without duplicating logic across MCP servers or manually editing the overrides template. The aggregation helper keeps the catalog clean by letting us describe composites in JSON, hide the noisy downstream entries, and reuse the existing proxy infrastructure for dispatch.
 
 **How it works:**
 
 1. `config/tool_aggregations.json` declares each aggregate tool (manifest metadata, per-operation mappings, validation hints, and a `hideTools` list). The schema is enforced via `config/tool_aggregations.schema.json` so CI / restart scripts can lint config changes early.
-2. `scripts/process_tool_aggregations.py` runs during `make render-proxy` and the restart workflow. It loads the config, writes/upgrades the matching entries in `config/tool_overrides.json`, and flips every `hideTools` entry (`server/tool`) to `enabled: false` so manifests/initialize/tools.list only expose the aggregate.
+2. `scripts/process_tool_aggregations.py` runs during `make render-proxy` and the restart workflow. It loads the merged config (repo template + `${STELAE_CONFIG_HOME}/config/tool_aggregations.local.json`), writes/upgrades the matching entries in `${TOOL_OVERRIDES_PATH}`, and flips every `hideTools` entry (`server/tool`) to `enabled: false` so manifests/initialize/tools.list only expose the aggregate.
 3. `scripts/tool_aggregator_server.py` is a FastMCP stdio server launched by the proxy. On startup it registers one MCP tool per aggregation; at call time it validates the input per the declarative mapping rules, translates arguments into the downstream schema, and uses the proxy JSON-RPC endpoint to call the real tool. Response mappings (optional) can reshape the downstream payload before returning to the client.
 4. Because both the overrides and the stdio helper derive from the same config, adding a new aggregate requires zero Python changes—edit the JSON, run `make render-proxy`, and the proxy automatically restarts the helper with the new catalog.
 
@@ -157,7 +161,7 @@ Current suites declared in `config/tool_aggregations.json`:
 - `manage_docy_sources` – Docy catalog administration (list/add/remove/sync/import).
 
 If `tools/list` ever shrinks to the fallback `fetch`/`search` entries, the aggregator likely failed to register; rerun `make restart-proxy` (or `scripts/run_restart_stelae.sh --full`) to relaunch the stdio server and restore the curated catalog.
-* The proxy records per-tool adapter state in `config/tool_schema_status.json` (path via `manifest.toolSchemaStatusPath`) and patches `config/tool_overrides.json` whenever call-path adaptation selects a different schema (e.g., persisting generic for text-only servers). After rerunning `make render-proxy` + restarting PM2, external clients see the updated schemas. `scripts/populate_tool_overrides.py --proxy-url <endpoint> --quiet` now runs during `scripts/restart_stelae.sh` so every restart reuses the freshly collected `tools/list` payload to ensure all downstream schemas are persisted; the script still supports per-server scans for development via `--servers`, and operators can opt out entirely for a given restart with `--skip-populate-overrides`. When invoking manually, export `PYTHONPATH=$STELAE_DIR` so the helper can import `stelae_lib`.
+* The proxy records per-tool adapter state in `${TOOL_SCHEMA_STATUS_PATH}` (path set through `manifest.toolSchemaStatusPath`) and patches `${TOOL_OVERRIDES_PATH}` whenever call-path adaptation selects a different schema (e.g., persisting generic for text-only servers). After rerunning `make render-proxy` + restarting PM2, external clients see the updated schemas. `scripts/populate_tool_overrides.py --proxy-url <endpoint> --quiet` now runs during `scripts/restart_stelae.sh` so every restart reuses the freshly collected `tools/list` payload to ensure all downstream schemas are persisted; the script still supports per-server scans for development via `--servers`, and operators can opt out entirely for a given restart with `--skip-populate-overrides`. When invoking manually, export `PYTHONPATH=$STELAE_DIR` so the helper can import `stelae_lib`.
 * Facade fallback descriptors (`search`, `fetch`) remain available even if no downstream server supplies them, and they can also be overridden via the master block.
 
 ## Request / Response Paths
@@ -235,7 +239,7 @@ flowchart TD
     D --▶|pm2 restart| C
 
     Config["┌──────────────┐<br>config/proxy.json"] --> A
-    Overrides["┌──────────────┐<br>config/tool_overrides.json"] --> A
+    Overrides["┌──────────────┐<br>${TOOL_OVERRIDES_PATH}"] --> A
 ```
 
 ## Discovery & Auto-Loading Pipeline
@@ -246,7 +250,7 @@ flowchart TD
 3. `scripts/stelae_integrator_server.py` exposes the `manage_stelae` tool (and CLI) which loads the discovery cache, validates descriptors, and transforms them through three focussed helpers. The MCP bridge advertises the tool locally so Codex/clients call `stelae.manage_stelae` directly instead of shelling out:
    - `DiscoveryStore` normalises transports (`stdio`, `http`, `streamable-http`), cleans args/env, and flags incomplete entries.
    - `ProxyTemplate` ensures `config/proxy.template.json` gains sorted server stanzas, raising unless `force` is set when a duplicate exists.
-   - `ToolOverridesStore` pre-populates `config/tool_overrides.json` (master + per-server) with descriptions and tool metadata so manifests stay descriptive from the first render.
+   - `ToolOverridesStore` pre-populates `${STELAE_CONFIG_HOME}/config/tool_overrides.local.json` (and therefore `${TOOL_OVERRIDES_PATH}`) with descriptions and tool metadata so manifests stay descriptive from the first render.
 4. After writing files (or emitting diffs during dry-runs) the integrator re-runs `make render-proxy` and `scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --full`, guaranteeing that Cloudflare + streamable clients receive the new catalog immediately while keeping the MCP bridge connected. The tool waits for the proxy’s JSON-RPC health probes to succeed before returning.
 5. Operations available through `manage_stelae`/CLI: `discover_servers`, `list_discovered_servers`, `install_server`, `remove_server`, `refresh_discovery`, and `run_reconciler`. Every response shares a single envelope containing `status`, `details`, `files_updated`, `commands_run`, `warnings`, and `errors` for easier automation.
 6. Guardrails: commands referenced in descriptors must resolve on disk or via `.env` placeholders (`{{KEY}}`). The tool fails fast if binaries/vars are missing, before any template changes occur, and refuses to overwrite `.env.example` to keep the repo clone-friendly.
@@ -256,6 +260,6 @@ flowchart TD
 1. `make render-proxy` regenerates `config/proxy.json`, preserving the override file path.
 2. `bash scripts/run_restart_stelae.sh --full` rebuilds the proxy, restarts PM2 processes, redeploys the Cloudflare worker, and republishes the manifest (ensuring overrides take effect everywhere). The helper prints one-line `pm2 ensure <app>: status=<prev> -> <action>` entries so operators can see whether it started a missing process, deleted+started an unhealthy one, or simply refreshed an online entry.
 3. `scripts/watch_public_mcp.py` shares the same `pm2 ensure` logic; when the public JSON-RPC probes fail it can now recreate `cloudflared` (delete+start) instead of looping on `pm2 restart`.
-4. To temporarily hide a tool or server from clients, set `"enabled": false` in `config/tool_overrides.json`, rerun `make render-proxy`, then execute the restart script.
+4. To temporarily hide a tool or server from clients, set `"enabled": false` via the overrides overlay (`${STELAE_CONFIG_HOME}/config/tool_overrides.local.json`) or template, rerun `make render-proxy`, then execute the restart script.
 
 This document should serve as the reference for future diagnostics or enhancements to the catalog pipeline and transport topology.

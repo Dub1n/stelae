@@ -19,7 +19,7 @@ from .one_mcp import OneMCPDiscovery, OneMCPDiscoveryError
 from .proxy_template import ProxyTemplate
 from .runner import CommandFailed, CommandRunner
 from .tool_overrides import ToolOverridesStore
-from stelae_lib.fileio import atomic_write
+from stelae_lib.config_overlays import config_home, overlay_path_for
 
 ENV_PATTERN = re.compile(r"\{\{\s*([A-Z0-9_]+)\s*\}\}")
 
@@ -86,20 +86,62 @@ class StelaeIntegratorService:
         readiness_interval: float | None = None,
     ) -> None:
         self.root = root or Path(__file__).resolve().parents[2]
-        self.discovery_path = discovery_path or self.root / "config" / "discovered_servers.json"
-        self.template = ProxyTemplate(template_path or self.root / "config" / "proxy.template.json")
-        self.overrides = ToolOverridesStore(overrides_path or self.root / "config" / "tool_overrides.json")
-        self.discovery_store = DiscoveryStore(self.discovery_path)
-        # Load .env.example first so concrete .env overrides placeholder values.
-        env_candidates = env_files or [self.root / ".env.example", self.root / ".env"]
-        self.env_file = env_candidates[-1] if env_candidates else self.root / ".env"
+        self.config_home = config_home()
+        # Load env files (.env.example → .env → overlay) before wiring stores.
+        default_env_files = [self.root / ".env.example", self.root / ".env"]
+        candidates = list(env_files or default_env_files)
+        self.env_overlay = self.config_home / ".env.local"
+        if self.env_overlay not in candidates:
+            candidates.append(self.env_overlay)
         values: Dict[str, str] = {}
-        for candidate in env_candidates:
+        for candidate in candidates:
             values.update(_parse_env_file(candidate))
         for key, value in os.environ.items():
             if isinstance(key, str) and isinstance(value, str):
                 values.setdefault(key, value)
         self.env_values = values
+        self.env_file = self.env_overlay
+        discovery_base_path = discovery_path or self.root / "config" / "discovered_servers.json"
+        discovery_overlay_path = (
+            discovery_path
+            if discovery_path
+            else Path(
+                self.env_values.get("STELAE_DISCOVERY_PATH")
+                or overlay_path_for(discovery_base_path)
+            )
+        )
+        template_base_path = template_path or self.root / "config" / "proxy.template.json"
+        template_overlay_path = template_path if template_path else overlay_path_for(template_base_path)
+        overrides_base_path = overrides_path or self.root / "config" / "tool_overrides.json"
+        overrides_overlay_path = overrides_path if overrides_path else overlay_path_for(overrides_base_path)
+        self.discovery_path = discovery_overlay_path
+        self.env_values.setdefault("STELAE_DISCOVERY_PATH", str(discovery_overlay_path))
+        self._discovery_base_path = discovery_base_path
+        self.template = ProxyTemplate(template_base_path, overlay_path=template_overlay_path)
+        self._template_base_path = template_base_path
+        self._template_overlay_path = template_overlay_path
+        tool_overrides_output = Path(
+            self.env_values.get("TOOL_OVERRIDES_PATH")
+            or (self.config_home / "tool_overrides.json")
+        )
+        self.env_values.setdefault("TOOL_OVERRIDES_PATH", str(tool_overrides_output))
+        tool_schema_status_path = Path(
+            self.env_values.get("TOOL_SCHEMA_STATUS_PATH")
+            or (self.config_home / "tool_schema_status.json")
+        )
+        self.env_values.setdefault("TOOL_SCHEMA_STATUS_PATH", str(tool_schema_status_path))
+        self.overrides = ToolOverridesStore(
+            overrides_base_path,
+            overlay_path=overrides_overlay_path,
+            runtime_path=tool_overrides_output,
+        )
+        self._overrides_base_path = overrides_base_path
+        self._overrides_overlay_path = overrides_overlay_path
+        self._tool_overrides_output = tool_overrides_output
+        self.discovery_store = DiscoveryStore(
+            discovery_base_path,
+            overlay_path=discovery_overlay_path,
+        )
         self.command_runner = command_runner or CommandRunner(self.root)
         restart_args = os.getenv("STELAE_RESTART_ARGS", "--keep-pm2 --no-bridge --full").strip()
         parsed_restart = shlex.split(restart_args) if restart_args else []
@@ -488,8 +530,12 @@ class StelaeIntegratorService:
         return None
 
     def _reload_template_overrides(self) -> None:
-        self.template = ProxyTemplate(self.template.path)
-        self.overrides = ToolOverridesStore(self.overrides.path)
+        self.template = ProxyTemplate(self._template_base_path, overlay_path=self._template_overlay_path)
+        self.overrides = ToolOverridesStore(
+            self._overrides_base_path,
+            overlay_path=self._overrides_overlay_path,
+            runtime_path=self._tool_overrides_output,
+        )
 
     def _probe_proxy(self) -> bool:
         payload = json.dumps(
@@ -530,10 +576,7 @@ class StelaeIntegratorService:
         )
 
     def _load_discovery_data(self) -> List[Dict[str, Any]]:
-        try:
-            return json.loads(self.discovery_store.text)
-        except json.JSONDecodeError:
-            return []
+        return self.discovery_store.overlay_entries()
 
     def _persist_discovery_data(self, data: List[Dict[str, Any]], *, dry_run: bool) -> List[Dict[str, Any]]:
         before = self.discovery_store.text
@@ -548,6 +591,5 @@ class StelaeIntegratorService:
             }
         ]
         if not dry_run and before != rendered:
-            atomic_write(self.discovery_path, rendered)
-            self.discovery_store = DiscoveryStore(self.discovery_path)
+            self.discovery_store.save_overlay(data)
         return files

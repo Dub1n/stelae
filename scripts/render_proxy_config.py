@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Render config/proxy.json from a template and environment variables."""
+"""Render the proxy config from layered templates and environment variables."""
 
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 from pathlib import Path
+
+from stelae_lib.config_overlays import config_home, deep_merge, overlay_path_for
 
 TEMPLATE_PATTERN = re.compile(r"\{\{\s*([A-Z0-9_]+)\s*\}\}")
 VAR_PATTERN = re.compile(r"\$\{([A-Z0-9_]+)\}")
@@ -65,11 +68,12 @@ def expand_variables(values: dict[str, str], fallback: dict[str, str] | None = N
     return resolved
 
 
-def load_env(env_file: Path, fallback_file: Path | None) -> dict[str, str]:
+def load_env(env_file: Path, fallback_file: Path | None, overlay_file: Path | None) -> dict[str, str]:
     base_env = {k: v for k, v in os.environ.items() if isinstance(v, str)}
     merged: dict[str, str] = {}
     merged.update(parse_env_file(fallback_file))
     merged.update(parse_env_file(env_file))
+    merged.update(parse_env_file(overlay_file))
     expanded = expand_variables(merged, fallback=base_env)
     merged_env = dict(base_env)
     merged_env.update(expanded)
@@ -91,21 +95,42 @@ def main() -> None:
     parser.add_argument(
         "--template", default=Path("config/proxy.template.json"), type=Path
     )
+    parser.add_argument(
+        "--overlay-template", type=Path, help="Optional overlay template path (defaults to ~/.config/stelae mirror)"
+    )
     parser.add_argument("--output", default=Path("config/proxy.json"), type=Path)
     parser.add_argument("--env-file", default=Path(".env"), type=Path)
     parser.add_argument("--fallback-env", default=Path(".env.example"), type=Path)
+    parser.add_argument(
+        "--overlay-env", type=Path, help="Optional overlay env file (defaults to ~/.config/stelae/.env.local)"
+    )
     args = parser.parse_args()
 
-    env_values = load_env(args.env_file, args.fallback_env)
-    template_text = args.template.read_text(encoding="utf-8")
-    rendered = render(template_text, env_values)
+    overlay_template = args.overlay_template or overlay_path_for(args.template)
+    overlay_env = args.overlay_env or (config_home() / ".env.local")
 
-    import json
+    env_values = load_env(args.env_file, args.fallback_env, overlay_env)
+
+    try:
+        base_template = json.loads(args.template.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"Template {args.template} invalid JSON: {exc}") from exc
+
+    merged_template = base_template
+    if overlay_template and overlay_template.exists():
+        try:
+            overlay_data = json.loads(overlay_template.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"Overlay template {overlay_template} invalid JSON: {exc}") from exc
+        merged_template = deep_merge(base_template, overlay_data)
+
+    template_text = json.dumps(merged_template, indent=2, ensure_ascii=False)
+    rendered = render(template_text, env_values)
 
     try:
         json.loads(rendered)
-    except Exception as e:
-        raise SystemExit(f"Rendered JSON invalid: {e}")
+    except Exception as exc:
+        raise SystemExit(f"Rendered JSON invalid: {exc}") from exc
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(rendered + "\n", encoding="utf-8")

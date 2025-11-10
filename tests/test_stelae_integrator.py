@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 import stelae_lib.integrator.core as core_module
+from stelae_lib.config_overlays import overlay_path_for
 from stelae_lib.integrator.core import StelaeIntegratorService
 from stelae_lib.integrator.one_mcp import DiscoveryResult
 from stelae_lib.integrator.runner import CommandResult
@@ -39,7 +40,7 @@ def _write_json(path: Path, payload) -> None:
 
 
 @pytest.fixture()
-def integrator_workspace(tmp_path: Path):
+def integrator_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     config_dir = tmp_path / "config"
     config_dir.mkdir()
     template_path = config_dir / "proxy.template.json"
@@ -59,12 +60,15 @@ def integrator_workspace(tmp_path: Path):
     (tmp_path / "one_mcp").mkdir()
     _write_json(tmp_path / "one_mcp" / "discovered_servers.json", [SAMPLE_DISCOVERY | {"name": "refreshed"}])
     env_file.write_text(f"ONE_MCP_DIR={tmp_path / 'one_mcp'}\n", encoding="utf-8")
+    config_home = tmp_path / ".stelae-config"
+    monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_home))
     return {
         "root": tmp_path,
         "template": template_path,
         "overrides": overrides_path,
         "discovery": discovery_path,
         "env": env_file,
+        "config_home": config_home,
     }
 
 
@@ -74,6 +78,15 @@ def _service(workspace, runner=None, readiness_probe=None):
         discovery_path=workspace["discovery"],
         template_path=workspace["template"],
         overrides_path=workspace["overrides"],
+        env_files=[workspace["env"]],
+        command_runner=runner or FakeRunner(),
+        readiness_probe=readiness_probe or (lambda: True),
+    )
+
+
+def _service_with_defaults(workspace, runner=None, readiness_probe=None):
+    return StelaeIntegratorService(
+        root=workspace["root"],
         env_files=[workspace["env"]],
         command_runner=runner or FakeRunner(),
         readiness_probe=readiness_probe or (lambda: True),
@@ -117,6 +130,23 @@ def test_install_server_applies_changes(integrator_workspace):
     overrides = json.loads(integrator_workspace["overrides"].read_text(encoding="utf-8"))
     assert "demo_tool" in overrides["servers"]["demo_server"]["tools"]
     assert runner.invocations, "commands should run"
+
+
+def test_install_server_writes_overlay_when_not_overridden(integrator_workspace):
+    runner = FakeRunner()
+    service = _service_with_defaults(integrator_workspace, runner)
+    response = service.dispatch("install_server", {"name": "demo_server"})
+    assert response["status"] == "ok"
+    base_template = json.loads(integrator_workspace["template"].read_text(encoding="utf-8"))
+    assert "demo_server" not in base_template["mcpServers"]
+    overlay_template_path = overlay_path_for(integrator_workspace["template"])
+    overlay_data = json.loads(overlay_template_path.read_text(encoding="utf-8"))
+    assert "demo_server" in overlay_data["mcpServers"]
+    base_overrides = json.loads(integrator_workspace["overrides"].read_text(encoding="utf-8"))
+    assert "demo_server" not in base_overrides["servers"]
+    overlay_overrides_path = overlay_path_for(integrator_workspace["overrides"])
+    overlay_overrides = json.loads(overlay_overrides_path.read_text(encoding="utf-8"))
+    assert "demo_server" in overlay_overrides["servers"]
 
 
 def test_install_server_waits_for_readiness(integrator_workspace):

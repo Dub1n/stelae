@@ -189,33 +189,57 @@ class DiscoveryEntry:
 
 
 class DiscoveryStore:
-    def __init__(self, path: Path):
-        self.path = path
+    def __init__(self, base_path: Path, *, overlay_path: Path | None = None):
+        self.base_path = base_path
+        self.overlay_path = overlay_path or base_path
+        self.path = self.overlay_path
+        self._base_text = base_path.read_text(encoding="utf-8") if base_path.exists() else "[]\n"
+        self._overlay_text = self.overlay_path.read_text(encoding="utf-8") if self.overlay_path.exists() else "[]\n"
+        self._base_entries = self._parse_entries(self._base_text)
+        self._overlay_entries = self._parse_entries(self._overlay_text)
         self._entries: List[DiscoveryEntry] | None = None
-        self._raw_text = path.read_text(encoding="utf-8") if path.exists() else "[]\n"
+
+    @staticmethod
+    def _parse_entries(raw: str) -> List[Dict[str, Any]]:
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            return []
+        return data if isinstance(data, list) else []
 
     @property
     def text(self) -> str:
-        return self._raw_text
+        return self._overlay_text
 
-    def _load(self) -> List[DiscoveryEntry]:
-        data = load_json(self.path, default=[])
-        if not isinstance(data, list):
-            raise ValueError(f"Discovery file {self.path} must contain an array of servers")
-        entries: List[DiscoveryEntry] = []
-        for entry in data:
-            if not isinstance(entry, dict):
-                continue
-            try:
-                entries.append(DiscoveryEntry.from_data(entry))
-            except Exception:
-                continue
-        return entries
+    def _combined_payload(self) -> List[Dict[str, Any]]:
+        combined: Dict[str, Dict[str, Any]] = {}
+        order: List[str] = []
+
+        def _ingest(source: List[Dict[str, Any]]) -> None:
+            for entry in source:
+                name = str(entry.get("name") or "").strip()
+                if not name:
+                    continue
+                key = name.lower()
+                if key not in combined:
+                    order.append(key)
+                combined[key] = entry
+
+        _ingest(self._base_entries)
+        _ingest(self._overlay_entries)
+        return [combined[key] for key in order]
 
     def entries(self) -> List[DiscoveryEntry]:
-        if self._entries is None:
-            self._entries = self._load()
-        return list(self._entries)
+        if self._entries is not None:
+            return list(self._entries)
+        entries: List[DiscoveryEntry] = []
+        for payload in self._combined_payload():
+            try:
+                entries.append(DiscoveryEntry.from_data(payload))
+            except Exception:
+                continue
+        self._entries = entries
+        return list(entries)
 
     def get(self, name: str) -> DiscoveryEntry:
         target = name.strip().lower()
@@ -224,16 +248,28 @@ class DiscoveryStore:
                 return entry
         raise KeyError(f"No discovered server named '{name}'")
 
+    def overlay_entries(self) -> List[Dict[str, Any]]:
+        return json.loads(json.dumps(self._overlay_entries))
+
     def refresh_from(self, source_path: Path) -> Dict[str, Any]:
         if not source_path.exists():
             raise FileNotFoundError(f"Discovery source {source_path} does not exist")
-        payload = source_path.read_text(encoding="utf-8")
-        json.loads(payload)
-        atomic_write(self.path, payload if payload.endswith("\n") else payload + "\n")
-        self._entries = None
-        self._raw_text = payload
+        data = load_json(source_path, default=[])
+        if not isinstance(data, list):
+            raise ValueError(f"Discovery source {source_path} must contain an array")
+        self.save_overlay(data)
         return {
             "path": str(self.path),
             "source": str(source_path),
-            "bytes": len(payload.encode("utf-8")),
+            "entries": len(data),
         }
+
+    def save_overlay(self, entries: List[Dict[str, Any]]) -> None:
+        sanitized = json.loads(json.dumps(entries, ensure_ascii=False))
+        rendered = json.dumps(sanitized, indent=2, ensure_ascii=False) + "\n"
+        if rendered == self._overlay_text:
+            return
+        atomic_write(self.path, rendered)
+        self._overlay_text = rendered
+        self._overlay_entries = sanitized
+        self._entries = None

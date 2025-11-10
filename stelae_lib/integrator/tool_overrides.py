@@ -4,33 +4,77 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Iterable
 
+from stelae_lib.config_overlays import deep_merge
 from stelae_lib.fileio import atomic_write
 from .discovery import ToolInfo
 
+DEFAULT_OVERRIDES = {
+    "schemaVersion": 2,
+    "master": {"tools": {"*": {"annotations": {}}}},
+    "servers": {},
+}
+
 
 class ToolOverridesStore:
-    def __init__(self, path: Path):
-        self.path = path
-        self._schema_path = self.path.with_name("tool_overrides.schema.json")
-        default_text = json.dumps(
-            {
-                "schemaVersion": 2,
-                "master": {"tools": {"*": {"annotations": {}}}},
-                "servers": {},
-            },
-            indent=2,
+    def __init__(
+        self,
+        base_path: Path,
+        *,
+        overlay_path: Path | None = None,
+        runtime_path: Path | None = None,
+        target: str = "overlay",
+    ) -> None:
+        if target not in {"base", "overlay", "runtime"}:
+            raise ValueError("target must be 'base', 'overlay', or 'runtime'")
+        if target == "runtime" and runtime_path is None:
+            raise ValueError("runtime_path is required when target='runtime'")
+        self.base_path = base_path
+        self.overlay_path = overlay_path or base_path
+        self.runtime_path = runtime_path
+        self._target = target if not (target == "overlay" and self.overlay_path is None) else "base"
+        self._schema_path = self.base_path.with_name("tool_overrides.schema.json")
+
+        base_text = (
+            self.base_path.read_text(encoding="utf-8")
+            if self.base_path.exists()
+            else json.dumps(DEFAULT_OVERRIDES, indent=2, ensure_ascii=False) + "\n"
         )
-        self._original_text = path.read_text(encoding="utf-8") if path.exists() else default_text + "\n"
-        try:
-            self._data = json.loads(self._original_text)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"Invalid JSON in overrides {path}: {exc}") from exc
+        self._base_data = self._load_payload(base_text)
+        overlay_text = (
+            self.overlay_path.read_text(encoding="utf-8")
+            if self.overlay_path and self.overlay_path.exists()
+            else ""
+        )
+        self._overlay_data = self._load_payload(overlay_text) if overlay_text else {}
+
         self._legacy_global_tools: Dict[str, Dict[str, Any]] = {}
         self._legacy_master_tools: Dict[str, Dict[str, Any]] = {}
-        self._ensure_roots()
+        self._ensure_roots(self._base_data)
+        self._ensure_roots(self._overlay_data)
 
-    def _ensure_roots(self) -> None:
-        data = self._data
+        if self._target == "base":
+            self.path = self.base_path
+            self._data = self._base_data
+            self._original_text = base_text
+        elif self._target == "runtime":
+            self.path = runtime_path
+            self._data = self._merged_payload()
+            self._original_text = json.dumps(self._data, indent=2, ensure_ascii=False) + "\n"
+        else:
+            self.path = self.overlay_path
+            self._data = self._overlay_data
+            self._original_text = overlay_text or ""
+
+    def _load_payload(self, text: str) -> Dict[str, Any]:
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Invalid JSON in overrides {self.base_path}: {exc}") from exc
+        if not isinstance(data, dict):
+            return {}
+        return data
+
+    def _ensure_roots(self, data: Dict[str, Any]) -> None:
         if not isinstance(data, dict):
             data.clear()
         schema_version = data.get("schemaVersion")
@@ -66,7 +110,7 @@ class ToolOverridesStore:
             metadata = fragment.get("metadata")
             if metadata is not None and not isinstance(metadata, dict):
                 fragment["metadata"] = {}
-        
+
     def _ensure_tool_block(self, server_name: str, tool_name: str) -> Dict[str, Any]:
         servers = self._data.setdefault("servers", {})
         server_block = servers.setdefault(server_name, {"enabled": True, "tools": {}})
@@ -166,7 +210,14 @@ class ToolOverridesStore:
                 changed = True
         return changed
 
-    def apply(self, server_name: str, tools: Iterable[ToolInfo], *, server_description: str | None, source: str | None) -> bool:
+    def apply(
+        self,
+        server_name: str,
+        tools: Iterable[ToolInfo],
+        *,
+        server_description: str | None,
+        source: str | None,
+    ) -> bool:
         changed = False
         server_block = self._data.setdefault("servers", {}).setdefault(server_name, {"enabled": True, "tools": {}})
         tool_map: Dict[str, Dict[str, Any]] = server_block.setdefault("tools", {})
@@ -209,6 +260,10 @@ class ToolOverridesStore:
     def render(self) -> str:
         return json.dumps(self._data, indent=2, ensure_ascii=False) + "\n"
 
+    def render_merged(self) -> str:
+        merged = self._merged_payload()
+        return json.dumps(merged, indent=2, ensure_ascii=False) + "\n"
+
     def diff(self) -> str:
         after = self.render().splitlines(keepends=True)
         before = self._original_text.splitlines(keepends=True)
@@ -220,21 +275,37 @@ class ToolOverridesStore:
 
     def write(self) -> None:
         text = self.render()
-        if text == self._original_text:
-            return
-        self._validate()
-        atomic_write(self.path, text)
-        self._original_text = text
+        if text != self._original_text:
+            self._validate(self._data)
+            atomic_write(self.path, text)
+            self._original_text = text
+        if self._target != "runtime" and self.runtime_path:
+            self.export_runtime()
 
-    def _validate(self) -> None:
+    def export_runtime(self, path: Path | None = None) -> None:
+        target = path or self.runtime_path
+        if not target:
+            return
+        payload = self._merged_payload()
+        self._validate(payload)
+        atomic_write(target, json.dumps(payload, indent=2, ensure_ascii=False) + "\n")
+
+    def _validate(self, payload: Dict[str, Any]) -> None:
         if not self._schema_path.exists():
             return
         try:
             import jsonschema  # type: ignore
-        except ModuleNotFoundError:  # pragma: no cover - optional dep at runtime
+        except ModuleNotFoundError:  # pragma: no cover
             return
         schema = json.loads(self._schema_path.read_text(encoding="utf-8"))
-        jsonschema.validate(self._data, schema)
+        jsonschema.validate(payload, schema)
 
-    def snapshot(self) -> dict:
+    def _merged_payload(self) -> Dict[str, Any]:
+        merged = deep_merge(self._base_data, self._overlay_data)
+        return json.loads(json.dumps(merged, ensure_ascii=False))
+
+    def snapshot(self) -> Dict[str, Any]:
         return json.loads(json.dumps(self._data, ensure_ascii=False))
+
+    def merged_snapshot(self) -> Dict[str, Any]:
+        return self._merged_payload()

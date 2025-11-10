@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, Mapping, MutableMapping, Sequence
 
+from stelae_lib.config_overlays import deep_merge, overlay_path_for
 from stelae_lib.integrator.tool_overrides import ToolOverridesStore
 
 ProxyCaller = Callable[[str, Dict[str, Any], float | None], Awaitable[Dict[str, Any]]]
@@ -431,10 +432,60 @@ def load_tool_aggregation_config(
     *,
     schema_path: Path | None = None,
 ) -> ToolAggregationConfig:
-    data = json.loads(path.read_text(encoding="utf-8"))
+    base_data = json.loads(path.read_text(encoding="utf-8"))
+    overlay_path = overlay_path_for(path)
+    if overlay_path.exists():
+        overlay_data = json.loads(overlay_path.read_text(encoding="utf-8"))
+        data = _merge_aggregation_payload(base_data, overlay_data)
+    else:
+        data = base_data
     schema_candidate = schema_path or path.with_name("tool_aggregations.schema.json")
     _validate_schema(data, schema_candidate)
     return ToolAggregationConfig.from_data(data)
+
+
+def _merge_aggregation_payload(base: Any, overlay: Any) -> Any:
+    if not isinstance(base, dict) or not isinstance(overlay, dict):
+        return overlay
+    result = json.loads(json.dumps(base, ensure_ascii=False))
+    for key, value in overlay.items():
+        if key == "aggregations" and isinstance(value, list):
+            existing = result.get(key)
+            result[key] = _merge_named_list(existing if isinstance(existing, list) else [], value, lambda item: str(item.get("name") or "").strip())
+        elif key == "hiddenTools" and isinstance(value, list):
+            existing = result.get(key)
+            result[key] = _merge_named_list(
+                existing if isinstance(existing, list) else [],
+                value,
+                lambda item: f"{item.get('server')}::{item.get('tool')}" if item.get("server") and item.get("tool") else None,
+            )
+        elif isinstance(value, dict):
+            existing = result.get(key)
+            if isinstance(existing, dict):
+                result[key] = deep_merge(existing, value)
+            else:
+                result[key] = json.loads(json.dumps(value, ensure_ascii=False))
+        else:
+            result[key] = json.loads(json.dumps(value, ensure_ascii=False))
+    return result
+
+
+def _merge_named_list(base_list: Sequence[Mapping[str, Any]], overlay_list: Sequence[Mapping[str, Any]], key_fn: Callable[[Mapping[str, Any]], str | None]) -> list[dict[str, Any]]:
+    merged: Dict[str, Dict[str, Any]] = {}
+    order: list[str] = []
+
+    def _ingest(items: Sequence[Mapping[str, Any]]) -> None:
+        for item in items:
+            key = key_fn(item)
+            if not key:
+                continue
+            if key not in merged:
+                order.append(key)
+            merged[key] = json.loads(json.dumps(item, ensure_ascii=False))
+
+    _ingest(base_list)
+    _ingest(overlay_list)
+    return [merged[key] for key in order]
 
 
 def _lookup_path(data: Mapping[str, Any], path: str) -> Any:

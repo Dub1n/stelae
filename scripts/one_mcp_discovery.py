@@ -5,13 +5,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, List
 
 from stelae_lib.fileio import atomic_write
 from stelae_lib.integrator.one_mcp import OneMCPDiscovery, OneMCPDiscoveryError
 
-DEFAULT_OUTPUT = Path("config/discovered_servers.json")
+DEFAULT_OUTPUT = Path(
+    os.getenv("STELAE_DISCOVERY_PATH")
+    or (Path(os.getenv("STELAE_CONFIG_HOME", Path.home() / ".config" / "stelae")) / "discovered_servers.json")
+)
 
 
 def load_existing(path: Path) -> List[Dict[str, Any]]:

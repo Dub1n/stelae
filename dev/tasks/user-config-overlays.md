@@ -6,12 +6,12 @@ Tags: `#infra`
 
 ## Checklist
 
-- [ ] Inventory every file/script that reads/writes config (proxy renderer, integrator, tool overrides, cloudflared helpers) and document where local overlays should hook in.
-- [ ] Implement support for `~/.config/stelae/…` overlays (e.g. `tool_overrides.local.json`, `proxy.template.local.json`, `cloudflared.local.yml`) with clear merge semantics.
-- [ ] Ensure `manage_stelae` writes MCP-specific env/config deltas into the overlay paths (NEVER into tracked files), including append-only `.env` behaviour.
-- [ ] Update docs (README, AGENTS, ARCHITECTURE) + templates to explain the two-layer config model and how to reset/inspect local overlays.
-- [ ] Add regression tests (unit + integration) that fail if tracked defaults contain localised values or if overlays aren’t picked up.
-- [ ] Update spec/progress/task file.
+- [x] Inventory every file/script that reads/writes config (proxy renderer, integrator, tool overrides, cloudflared helpers) and document where local overlays should hook in.
+- [x] Implement support for `~/.config/stelae/…` overlays (e.g. `tool_overrides.local.json`, `proxy.template.local.json`, `cloudflared.local.yml`) with clear merge semantics.
+- [x] Ensure `manage_stelae` writes MCP-specific env/config deltas into the overlay paths (NEVER into tracked files), including append-only `.env` behaviour.
+- [x] Update docs (README, AGENTS, ARCHITECTURE) + templates to explain the two-layer config model and how to reset/inspect local overlays.
+- [x] Add regression tests (unit + integration) that fail if tracked defaults contain localised values or if overlays aren’t picked up.
+- [x] Update spec/progress/task file.
 - [ ] Commit with message `infra: add stelae config overlay system` after tests.
 
 ## References
@@ -33,6 +33,7 @@ Tags: `#infra`
 ## Notes
 
 - Current pain: tracked `config/…` files end up with user-specific entries (disabled tools, custom env placeholders). We need a clean separation: repo defaults stay generic; user customizations live under XDG (`~/.config/stelae/…`) or other ignored paths.
+- Solution: added `stelae_lib.config_overlays` to standardise overlay locations, taught renderers + `ToolOverridesStore` + `ProxyTemplate` + `DiscoveryStore` to merge base/overlay data, and defaulted all runtime outputs to `${STELAE_CONFIG_HOME}` so git stays clean.
 - Requirements:
   - **Two-layer merge**: template/overrides/proxy configs should load `config/*.json` then overlay any files found under `~/.config/stelae/<same-name>.local.json`.
   - **Auto-seeding**: when `manage_stelae` injects hydrated descriptors or env vars, it must write to the overlay layer (local `.env` or overlay JSON), not the tracked base.

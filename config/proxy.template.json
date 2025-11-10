@@ -18,8 +18,8 @@
     "publicBaseURL": "{{PUBLIC_BASE_URL}}",
     "serverName": "stelae",
     "resources": [],
-    "toolOverridesPath": "{{STELAE_DIR}}/config/tool_overrides.json",
-    "toolSchemaStatusPath": "{{STELAE_DIR}}/config/tool_schema_status.json"
+    "toolOverridesPath": "{{TOOL_OVERRIDES_PATH}}",
+    "toolSchemaStatusPath": "{{TOOL_SCHEMA_STATUS_PATH}}"
   },
   "mcpServers": {
     "custom": {
@@ -78,7 +78,7 @@
         "{{STELAE_DIR}}/scripts/stelae_integrator_server.py"
       ],
       "env": {
-        "STELAE_DISCOVERY_PATH": "{{STELAE_DIR}}/config/discovered_servers.json"
+        "STELAE_DISCOVERY_PATH": "{{STELAE_DISCOVERY_PATH}}"
       }
     },
     "mem": {

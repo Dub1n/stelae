@@ -21,13 +21,14 @@ A WSL-native deployment of [mcp-proxy](https://github.com/TBXark/mcp-proxy) that
 | Fetch MCP | HTTP | `${LOCAL_BIN}/mcp-server-fetch` | Official MCP providing canonical `fetch`. |
 | Scrapling MCP | stdio | `uvx scrapling-fetch-mcp --stdio` | Scrapling fetcher (basic/stealth/max-stealth), adapted by the Go proxy at call time. |
 | FastMCP bridge | streamable HTTP (`/mcp`) / stdio | `python -m scripts.stelae_streamable_mcp` | Exposes the full proxy catalog to desktop agents; falls back to local search/fetch if the proxy is unavailable. |
-| 1mcp agent | stdio | `${ONE_MCP_BIN} --transport stdio` | Discovers nearby MCP servers and writes `config/discovered_servers.json` for the integrator. |
+| 1mcp agent | stdio | `${ONE_MCP_BIN} --transport stdio` | Discovers nearby MCP servers and writes `${STELAE_DISCOVERY_PATH}` (defaults to `~/.config/stelae/discovered_servers.json`) for the integrator. |
 | Custom tools MCP | stdio | `${PYTHON} ${STELAE_DIR}/scripts/custom_tools_server.py` | Config-driven wrapper that exposes scripts listed in `config/custom_tools.json`. |
 
 Path placeholders expand from `.env`; see setup below.
 
-- Scrapling’s canonical schema lives in `config/tool_overrides.json` under the `scrapling` server. Both `s_fetch_page` and `s_fetch_pattern` advertise `{metadata, content}` payloads there, and the Go proxy’s call-path adapter keeps those overrides in sync whenever a server emits a new structure. If Scrapling’s upstream contract changes, update the override entries and `make render-proxy` so manifests and tools/list remain truthful.
---- 
+- Scrapling’s canonical schema lives in the overrides template (`config/tool_overrides.json`) under the `scrapling` server. Both `s_fetch_page` and `s_fetch_pattern` advertise `{metadata, content}` payloads in the merged runtime file `${TOOL_OVERRIDES_PATH}`, and the Go proxy’s call-path adapter keeps those overrides in sync whenever a server emits a new structure. If Scrapling’s upstream contract changes, update the template or your local overlay and rerun `make render-proxy` so manifests and tools/list remain truthful.
+
+---
 
 ## Prerequisites
 
@@ -44,12 +45,14 @@ Path placeholders expand from `.env`; see setup below.
    - Project roots: `STELAE_DIR`, `APPS_DIR`, `PHOENIX_ROOT`, `SEARCH_ROOT`.
    - Binaries: `FILESYSTEM_BIN`, `RG_BIN`, `SHELL_BIN`, `DOCY_BIN`, `MEMORY_BIN`, `STRATA_BIN`, `ONE_MCP_BIN`, `LOCAL_BIN/mcp-server-fetch`.
    - Public URLs: `PUBLIC_BASE_URL=https://mcp.infotopology.xyz`, `PUBLIC_SSE_URL=${PUBLIC_BASE_URL}/stream`.
+   - Local overlay home: `STELAE_CONFIG_HOME=${HOME}/.config/stelae`. Automation writes `${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${STELAE_DISCOVERY_PATH}`, and `${TOOL_SCHEMA_STATUS_PATH}` into that directory so git never sees per-machine data. Additional values appended by the integrator land in `${STELAE_CONFIG_HOME}/.env.local`; keep the repo `.env` focused on human-edited keys.
 2. Regenerate runtime config:
    \```bash
    make render-proxy
    \```
-   This renders `config/proxy.json` from `config/proxy.template.json` using `.env` (with `.env.example` as fallback). The renderer now merges the live shell environment with your `.env` overrides, so placeholders such as `{{ PATH }}` resolve correctly without tripping over prompt-specific variables (e.g., `P9K_*`). Keep `.env` focused on the values you actually need to override; anything else falls back to your login shell.
-3. (Optional) Tailor tool metadata with `config/tool_overrides.json`. The file is validated against `config/tool_overrides.schema.json`, carries an explicit `schemaVersion`, and supports per-tool `description`, aliasing via `name`, richer annotation fields (including `title`), plus full `inputSchema`/`outputSchema` overrides so manifests always describe the wrapped payloads we return. Extend it per downstream server and reserve the `master` section for wildcard defaults:
+   This renders `${PROXY_CONFIG}` (defaults to `~/.config/stelae/proxy.json`) from `config/proxy.template.json` plus `config_home/proxy.template.local.json` if present. The renderer also merges `.env`, `.env.example`, and `${STELAE_CONFIG_HOME}/.env.local`, so placeholders such as `{{ PATH }}` resolve correctly without pulling in fragile shell state.
+3. (Optional) Tailor tool metadata with the overrides template (`config/tool_overrides.json`). The file is validated against `config/tool_overrides.schema.json`, carries an explicit `schemaVersion`, and supports per-tool `description`, aliasing via `name`, richer annotation fields (including `title`), plus full `inputSchema`/`outputSchema` overrides so manifests always describe the wrapped payloads we return. The merged runtime file lives at `${TOOL_OVERRIDES_PATH}`; personal tweaks stay in `${STELAE_CONFIG_HOME}/config/tool_overrides.local.json`, so keep the template focused on defaults that should ship with the repo:
+
    ```json
    {
      "schemaVersion": 2,
@@ -60,34 +63,34 @@ Path placeholders expand from `.env`; see setup below.
            "description": "Filesystem helpers"
          },
          "tools": {
-          "read_file": {
-            "enabled": true,
-            "name": "fs_read_file",
-            "description": "Read a file from the workspace without mutating it.",
-            "annotations": {
-              "title": "Read File",
-              "readOnlyHint": true
-            },
-            "outputSchema": {
-              "type": "object",
-              "properties": {
-                "result": {"type": "string"}
-              },
-              "required": ["result"]
-            }
-       }
-      }
-    },
-    "fetch": {
+           "read_file": {
+             "enabled": true,
+             "name": "fs_read_file",
+             "description": "Read a file from the workspace without mutating it.",
+             "annotations": {
+               "title": "Read File",
+               "readOnlyHint": true
+             },
+             "outputSchema": {
+               "type": "object",
+               "properties": {
+                 "result": {"type": "string"}
+               },
+               "required": ["result"]
+             }
+           }
+         }
+       },
+       "fetch": {
          "enabled": true,
          "tools": {
            "fetch": {
              "enabled": true,
-            "description": "Fetch a cached document by id via the sandboxed fetch server.",
-            "annotations": {
-              "title": "Fetch URL",
-              "openWorldHint": true
-            }
+           "description": "Fetch a cached document by id via the sandboxed fetch server.",
+           "annotations": {
+             "title": "Fetch URL",
+             "openWorldHint": true
+             }
            }
          }
        }
@@ -98,14 +101,15 @@ Path placeholders expand from `.env`; see setup below.
           "annotations": {}
         }
        }
+     }
    }
-  }
-  ```
+   ```
+
    Each override lives under its originating server; the only legal `master.tools` entry is the wildcard `"*"` for global defaults. Setting `"enabled": false` at the server or tool level hides those entries from the manifest, `initialize`, and `tools/list` responses (and therefore from remote clients). Only the hints you specify are changed; unspecified hints keep the proxy defaults. Master-level renames are rejected on startup, and master-level description/title overrides emit a warning so you know global copy was applied.
 
    Aliases defined via `name` automatically flow through manifests, `initialize`, `tools/list`, and `tools/call`. Client requests using the alias are resolved back to the original downstream tool, while the original name remains available as a fallback for compatibility. The proxy annotates every `tools/list` entry with `"x-stelae": {"servers": [...], "primaryServer": "..."}` so automation (and the override population script) can map schemas back to the correct server without guessing.
 
-   Declarative tool aggregations live in `config/tool_aggregations.json` (schema in `config/tool_aggregations.schema.json`). The helper `scripts/process_tool_aggregations.py` validates that file, updates `config/tool_overrides.json` with the aggregated descriptors, and flips `enabled: false` for any `hideTools` entries so wrapped tools disappear from manifests. `make render-proxy` and `scripts/run_restart_stelae.sh` run the helper automatically, but you can lint changes manually with `python scripts/process_tool_aggregations.py --check-only`. The stdio server `scripts/tool_aggregator_server.py` reads the same config at runtime and exposes composite tools so the manifest stays concise.
+   Declarative tool aggregations live in `config/tool_aggregations.json` (schema in `config/tool_aggregations.schema.json`). The helper `scripts/process_tool_aggregations.py` validates that file, applies any overlays from `${STELAE_CONFIG_HOME}/config/tool_aggregations.local.json`, and writes the merged descriptors directly to `${TOOL_OVERRIDES_PATH}` (without touching the template) so wrapped tools disappear from manifests. `make render-proxy` and `scripts/run_restart_stelae.sh` run the helper automatically, but you can lint changes manually with `python scripts/process_tool_aggregations.py --check-only`. The stdio server `scripts/tool_aggregator_server.py` reads the same config at runtime and exposes composite tools so the manifest stays concise.
 
    Current suites exposed by the aggregator:
    - `workspace_fs_read` – Read-only filesystem helpers (`list_*`, `read_*`, `find_*`, `search_*`, `get_file_info`, `calculate_directory_size`).
@@ -118,13 +122,14 @@ Path placeholders expand from `.env`; see setup below.
    - `manage_docy_sources` – Docy catalog management (list/add/remove/sync/import).
 
    If `tools/list` ever collapses to the fallback `fetch`/`search` entries, restart the proxy (`make restart-proxy` or `scripts/run_restart_stelae.sh --full`) to respawn the aggregator server.
-4. Proxy call-path adapter keeps flaky MCP servers usable without touching upstream code:
-   - The Go proxy adapts tool call results at response time. Chain: pass-through → declared (uses `config/tool_overrides.json` outputSchema and inline heuristics when the declared schema implies it) → generic `{ "result": "..." }`.
-   - On success, the proxy updates `config/tool_overrides.json` atomically when the used schema differs (e.g., persists generic when no declared exists). It tracks runtime state in `config/tool_schema_status.json` (path set via `manifest.toolSchemaStatusPath`).
-   - This works for both stdio and HTTP servers and avoids inserting per-server shims.
-4. Prime new servers’ schemas automatically: `scripts/restart_stelae.sh` now calls `scripts/populate_tool_overrides.py --proxy-url http://127.0.0.1:9090/mcp --quiet` after the local `tools/list` probe so freshly launched stacks immediately persist every tool’s `inputSchema`/`outputSchema`. For ad-hoc use (e.g., focusing on a single stdio server), you can still run `PYTHONPATH=$STELAE_DIR ~/.venvs/stelae-bridge/bin/python scripts/populate_tool_overrides.py --servers fs` to launch that server directly, or hit any MCP endpoint with `--proxy-url` to reuse its catalog without re-spawning processes; append `--quiet` to either mode to suppress per-tool logs. When debugging and you truly need to skip the automatic write-back, pass `--skip-populate-overrides` to `scripts/run_restart_stelae.sh`.
 
-5. Ensure the FastMCP bridge virtualenv (`.venv/` by default) includes `mcp`, `fastmcp`, `anyio`, and `httpx`:
+4. Proxy call-path adapter keeps flaky MCP servers usable without touching upstream code:
+   - The Go proxy adapts tool call results at response time. Chain: pass-through → declared (uses `${TOOL_OVERRIDES_PATH}` and inline heuristics when the declared schema implies it) → generic `{ "result": "..." }`.
+   - On success, the proxy updates `${TOOL_OVERRIDES_PATH}` atomically when the used schema differs (e.g., persists generic when no declared exists). It tracks runtime state in `${TOOL_SCHEMA_STATUS_PATH}` (path set via `manifest.toolSchemaStatusPath`).
+   - This works for both stdio and HTTP servers and avoids inserting per-server shims.
+5. Prime new servers’ schemas automatically: `scripts/restart_stelae.sh` now calls `scripts/populate_tool_overrides.py --proxy-url http://127.0.0.1:9090/mcp --quiet` after the local `tools/list` probe so freshly launched stacks immediately persist every tool’s `inputSchema`/`outputSchema` into `${STELAE_CONFIG_HOME}/config/tool_overrides.local.json` plus the merged `${TOOL_OVERRIDES_PATH}`. For ad-hoc use (e.g., focusing on a single stdio server), you can still run `PYTHONPATH=$STELAE_DIR ~/.venvs/stelae-bridge/bin/python scripts/populate_tool_overrides.py --servers fs` to launch that server directly, or hit any MCP endpoint with `--proxy-url` to reuse its catalog without re-spawning processes; append `--quiet` to either mode to suppress per-tool logs. When debugging and you truly need to skip the automatic write-back, pass `--skip-populate-overrides` to `scripts/run_restart_stelae.sh`.
+
+6. Ensure the FastMCP bridge virtualenv (`.venv/` by default) includes `mcp`, `fastmcp`, `anyio`, and `httpx`:
    \```bash
    .venv/bin/python -m pip install --upgrade mcp fastmcp anyio httpx
    \```
@@ -136,11 +141,21 @@ Path placeholders expand from `.env`; see setup below.
    uvx --from scrapling-fetch-mcp scrapling install
    \```
 
+### Two-layer overlays
+
+Every config file tracked in this repo is a template. Any local edits made via `manage_stelae`, the restart scripts, or manual tweaks are written to `${STELAE_CONFIG_HOME}` instead:
+
+- `${STELAE_CONFIG_HOME}/.env.local` receives hydrated secrets and generated values so `.env` stays portable.
+- `${STELAE_CONFIG_HOME}/config/*.local.json` mirrors the repo files (e.g., `proxy.template.local.json`, `tool_overrides.local.json`, `tool_aggregations.local.json`) and contains only your deviations.
+- Renderers merge template → overlay → runtime (`${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${STELAE_CONFIG_HOME}/cloudflared.yml`, ...). Delete a `*.local.*` file and rerun the matching command to reset it.
+- Runtime caches such as `${STELAE_DISCOVERY_PATH}` and `${TOOL_SCHEMA_STATUS_PATH}` already sit under `${STELAE_CONFIG_HOME}`, so git remains clean even when the proxy or integrator writes back metadata.
+
 ### Custom Script Tools
 
 - `scripts/custom_tools_server.py` loads `config/custom_tools.json` (override with `STELAE_CUSTOM_TOOLS_CONFIG`) and registers each entry as part of the `custom` stdio server now declared in `config/proxy.template.json`.
 - Every tool definition can include `name`, `description`, `command`, optional `args`, `cwd`, `env`, `timeout`, and `inputMode` (`json` to send arguments on stdin/`STELAE_TOOL_ARGS`, or `none` for fire-and-forget scripts).
 - Sample config:
+
   ```json
   {
     "tools": [
@@ -155,25 +170,29 @@ Path placeholders expand from `.env`; see setup below.
     ]
   }
   ```
+
 - After editing `config/custom_tools.json`, rerun `make render-proxy` and restart the proxy via PM2 so the manifest reflects the new tools.
-- Legacy connector-only fallbacks (`search`, `fetch`) are disabled through `config/tool_overrides.json`, keeping the catalog limited to real servers and your custom scripts.
+- Legacy connector-only fallbacks (`search`, `fetch`) are disabled via the overrides template/overlay pair (`config/tool_overrides.json` + `${STELAE_CONFIG_HOME}/config/tool_overrides.local.json`), keeping the catalog limited to real servers and your custom scripts.
 
 ### Docy Source Catalog
 
 - `config/docy_sources.json` is the canonical list of documentation URLs. Each entry can carry `id`, `url`, `title`, `tags`, `notes`, `enabled`, and `refresh_hours` metadata so we can track provenance in git.
 - `scripts/render_docy_sources.py` converts the catalog into `.docy.urls`, which Docy reads live on every request (no restart needed). The renderer writes comments next to each URL so operators know not to edit the generated file manually.
-- The dedicated Docy manager MCP server (`scripts/docy_manager_server.py`) exposes the `manage_docy` tool. Operations cover `list_sources`, `add_source`, `remove_source`, `sync_catalog`, and `import_from_manifest`, mirroring the CLI mode (`python scripts/docy_manager_server.py --cli --operation add_source --params '{"url": "https://docs.crawl4ai.com/"}'`). The new importer can hydrate Docy in bulk from a JSON manifest (defaults to `config/discovered_servers.json`) or a remote MCP `.well-known` URL:
+- The dedicated Docy manager MCP server (`scripts/docy_manager_server.py`) exposes the `manage_docy` tool. Operations cover `list_sources`, `add_source`, `remove_source`, `sync_catalog`, and `import_from_manifest`, mirroring the CLI mode (`python scripts/docy_manager_server.py --cli --operation add_source --params '{"url": "https://docs.crawl4ai.com/"}'`). The new importer can hydrate Docy in bulk from a JSON manifest (defaults to `${STELAE_DISCOVERY_PATH}`) or a remote MCP `.well-known` URL:
+
   ```bash
   python scripts/docy_manager_server.py --cli --operation import_from_manifest \
-    --params '{"manifest_path": "config/discovered_servers.json", "tags": ["1mcp"], "dry_run": true}'
+    --params '{"manifest_path": "${STELAE_DISCOVERY_PATH}", "tags": ["1mcp"], "dry_run": true}'
   ```
+
   When `dry_run` is `false` the catalog is saved and `.docy.urls` is re-rendered automatically; pass `manifest_url` instead of `manifest_path` to stream directly from a remote endpoint.
 - Set `STELAE_DOCY_CATALOG` / `STELAE_DOCY_URL_FILE` if you relocate the catalog; otherwise defaults are `config/docy_sources.json` and `.docy.urls` at the repo root.
 
 ### Declarative Tool Aggregations
 
-- `config/tool_aggregations.json` (validated by `config/tool_aggregations.schema.json`) describes composite MCP tools that we expose under the dedicated `tool_aggregator` server. Each entry defines manifest metadata plus a list of operations, and specifies which downstream tools should be hidden once the wrapper exists. `scripts/tool_aggregator_server.py` loads this file at runtime, while `scripts/process_tool_aggregations.py` syncs the config into `config/tool_overrides.json` and marks the `hideTools` entries as `enabled: false` so manifests stay tidy.
+- `config/tool_aggregations.json` (validated by `config/tool_aggregations.schema.json`) describes composite MCP tools that we expose under the dedicated `tool_aggregator` server. Each entry defines manifest metadata plus a list of operations, and specifies which downstream tools should be hidden once the wrapper exists. `scripts/tool_aggregator_server.py` loads this file (plus `${STELAE_CONFIG_HOME}/config/tool_aggregations.local.json`) at runtime, while `scripts/process_tool_aggregations.py` writes the merged descriptors directly to `${TOOL_OVERRIDES_PATH}` and marks the `hideTools` entries as `enabled: false` so manifests stay tidy.
 - `manage_docy_sources` wraps every Docy manager operation behind a single schema. Example payload:
+
   ```json
   {
     "operation": "import_from_manifest",
@@ -182,11 +201,13 @@ Path placeholders expand from `.env`; see setup below.
     "tags": ["vendor:auto"]
   }
   ```
+
   The helper checks for required fields per operation (e.g., `url` for adds, `url` or `id` for removes, `manifest_path` or `manifest_url` for imports) before proxying the call to the original `manage_docy` tool.
 - To add another aggregate tool:
+
  1. Copy the `manage_docy_sources` block inside `config/tool_aggregations.json` and adjust the manifest metadata, `operations`, `argumentMappings`, `responseMappings`, and `hideTools` list for the downstream tool(s) you want to wrap.
-  2. (Optional) Run `python scripts/process_tool_aggregations.py --check-only` to validate the JSON/schema without mutating overrides.
-  3. Run `make render-proxy` (or `scripts/run_restart_stelae.sh`) so the helper refreshes `config/tool_overrides.json`, disables the wrapped tools, and restarts the `tool_aggregator` stdio server.
+ 2. (Optional) Run `python scripts/process_tool_aggregations.py --check-only` to validate the JSON/schema without mutating overrides.
+ 3. Run `make render-proxy` (or `scripts/run_restart_stelae.sh`) so the helper refreshes `${TOOL_OVERRIDES_PATH}`, disables the wrapped tools, and restarts the `tool_aggregator` stdio server.
  4. Call the new MCP tool as normal (e.g., `tools/call name="manage_docy_sources" arguments={...}`); arguments are validated per the rules you encoded, then forwarded through the proxy to the downstream tool, and the downstream result is returned unchanged.
 
 ### Bootstrapping the 1mcp catalogue
@@ -194,9 +215,10 @@ Path placeholders expand from `.env`; see setup below.
 - Run `python scripts/bootstrap_one_mcp.py` after cloning this repo. The helper will:
   - clone or update `stelae-1mcpserver` under `${ONE_MCP_DIR:-~/apps/vendor/1mcpserver}`;
   - run `uv sync` inside the vendored repo (skip with `--skip-sync` if you manage deps elsewhere);
-  - ensure `config/discovered_servers.json` exists so discovery output can be tracked in git;
+  - ensure `${STELAE_DISCOVERY_PATH}` exists so discovery output can be reviewed locally;
   - write `~/.config/1mcp/mcp.json` (override via `--config`) with a ready-to-use `one_mcp` stdio stanza pointing at `ONE_MCP_BIN` and the vendored repo path.
 - Sample CLI config generated by the script:
+
   ```json
   {
     "mcpServers": {
@@ -212,17 +234,19 @@ Path placeholders expand from `.env`; see setup below.
       }
     },
     "discovery": {
-      "cachePath": "/home/gabri/dev/stelae/config/discovered_servers.json"
+      "cachePath": "${STELAE_DISCOVERY_PATH}"
     }
   }
   ```
+
 - Re-run the bootstrap script any time you relocate the repo or want to refresh the CLI config; use `--skip-update`/`--skip-sync` if you only need to rewrite the config file.
 
 ### Installing servers discovered by 1mcp
 
-- 1mcp writes its discovery payload to `config/discovered_servers.json` (array of `{name, transport, command|url, args, env, description, source, tools, requiresAuth, options}` objects). Keep the file in git so you can review pending server additions.
+- 1mcp writes its discovery payload to `${STELAE_DISCOVERY_PATH}` (array of `{name, transport, command|url, args, env, description, source, tools, requiresAuth, options}` objects). Keep the repo template generic; local discoveries now live entirely under `${STELAE_CONFIG_HOME}`.
 - The `manage_stelae` MCP tool is now served directly by the `stelae` bridge. Calls such as `tools/call name="manage_stelae"` stay connected even while the proxy restarts. Under the hood the tool updates templates/overrides and then runs `make render-proxy` plus `scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --full`, waiting for the proxy to come back before replying. Override the restart flags via `STELAE_RESTART_ARGS` if you need a different flow.
 - CLI examples (identical payload shape to the MCP tool):
+
   ```bash
   # Inspect discovery output
   python scripts/stelae_integrator_server.py --cli --operation list_discovered_servers
@@ -231,6 +255,7 @@ Path placeholders expand from `.env`; see setup below.
   python scripts/stelae_integrator_server.py --cli --operation install_server \
     --params '{"name": "demo_server", "dry_run": true}'
   ```
+
 - Catalog overrides that hydrate descriptors (for example the Qdrant MCP) may require new environment keys. When `manage_stelae` encounters missing keys it appends safe defaults to your local `.env` automatically, keeping `.env.example` generic for fresh clones.
 - Supported operations:
   - `discover_servers` – Calls the vendored 1mcp catalogue to find candidates. Accepts `query`, `tags` (list or comma-separated), `preset`, `limit`, `min_score`, `append`, and `dry_run`. The response now echoes the matching descriptors under `details.servers` so you can immediately pick a `name` to install without running `list_discovered_servers`.
@@ -243,7 +268,7 @@ Path placeholders expand from `.env`; see setup below.
 - `manage_stelae` now ships in the proxy manifest like any other downstream server; the streamable bridge only injects a local fallback descriptor if the proxy catalog is missing the tool (for example during restart). Codex sessions keep working, but once the proxy is healthy all calls flow through the canonical manifest entry.
 - The tool reports file diffs, commands executed, proxy readiness waits, and warnings/errors in a uniform JSON envelope. All validations happen before any file writes so a missing binary or placeholder halts the operation early.
 - Manual override-only workflows remain supported via `python scripts/populate_tool_overrides.py --servers <name> --dry-run`, which refreshes schemas without consulting the discovery cache.
-- For non-MCP workflows you can inspect the catalogue directly via `scripts/one_mcp_discovery.py "vector search" --limit 10`, which uses the same backend as `discover_servers` and, unless `--dry-run` is set, merges the results into `config/discovered_servers.json`.
+- For non-MCP workflows you can inspect the catalogue directly via `scripts/one_mcp_discovery.py "vector search" --limit 10`, which uses the same backend as `discover_servers` and, unless `--dry-run` is set, merges the results into `${STELAE_DISCOVERY_PATH}`.
 
 ---
 

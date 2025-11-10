@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -11,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from stelae_lib.config_overlays import config_home, overlay_path_for
 from stelae_lib.integrator.tool_aggregations import load_tool_aggregation_config
 from stelae_lib.integrator.tool_overrides import ToolOverridesStore
 
@@ -40,6 +42,16 @@ def main() -> None:
         action="store_true",
         help="Only validate the aggregation config; do not modify overrides",
     )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Merged overrides destination (defaults to ${TOOL_OVERRIDES_PATH} or ~/.config/stelae/tool_overrides.json)",
+    )
+    parser.add_argument(
+        "--persist-overlay",
+        action="store_true",
+        help="Write aggregation results into the overlay file (used when refreshing tracked data)",
+    )
     args = parser.parse_args()
 
     config = load_tool_aggregation_config(args.config, schema_path=args.schema)
@@ -49,7 +61,14 @@ def main() -> None:
         )
         return
 
-    store = ToolOverridesStore(args.overrides)
+    runtime_default = args.output or os.getenv("TOOL_OVERRIDES_PATH") or (config_home() / "tool_overrides.json")
+    target_mode = "overlay" if args.persist_overlay else "runtime"
+    store = ToolOverridesStore(
+        args.overrides,
+        overlay_path=overlay_path_for(args.overrides),
+        runtime_path=Path(runtime_default),
+        target=target_mode,
+    )
     changed = config.apply_overrides(store)
     if changed:
         store.write()
