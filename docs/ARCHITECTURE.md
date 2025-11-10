@@ -14,9 +14,9 @@ Hygiene guardrail: `pytest tests/test_repo_sanitized.py` fails if tracked templa
 
 ### Core vs optional bundle
 
-- **Always-on:** mcp-proxy, filesystem/ripgrep controllers, the terminal controller, tool aggregator, custom tools, and the Stelae integrator (plus the FastMCP bridge). These form the contract the repo promises for every clone, even without external tunnels.
-- **Add-ons:** Docy + Docy manager, Basic Memory, Strata, Fetch, Scrapling, Cloudflared/worker, and any discovery-fed servers. Toggle them in `${STELAE_CONFIG_HOME}/config/proxy.template.local.json` (or remove their process definitions from the PM2 overlay) so each workstation can right-size the catalog without mutating tracked templates.
-- Optional modules keep their writable state (`config/*.local.json`, `.env.local`, discovery caches) under `${STELAE_CONFIG_HOME}`. That keeps the repository authoritative about capabilities while ensuring local-only deployments stay lean.
+- **Tracked core:** mcp-proxy, filesystem/ripgrep controllers, the terminal controller, custom tools, and the Stelae integrator (plus the FastMCP bridge). These five servers ship in `config/proxy.template.json` so every clone stays lightweight.
+- **Starter bundle:** Docy + Docy manager, the tool aggregator, Basic Memory, Strata, Fetch, Scrapling, Cloudflared/worker helpers, and any discovery-fed servers defined in `config/bundles/starter_bundle.json`. Install them (along with their overrides/aggregations) via `python scripts/install_stelae_bundle.py` so they only touch `${STELAE_CONFIG_HOME}/config/*.local.json`.
+- Optional modules keep their writable state (`config/*.local.json`, `.env.local`, discovery caches) under `${STELAE_CONFIG_HOME}`. Delete a `.local` file or rerun the installer to move between the slim core and the starter bundle without mutating tracked templates.
 
 ### Legend
 
@@ -88,7 +88,7 @@ flowchart LR
 * Scrapling’s `s_fetch_page` and `s_fetch_pattern` entries in the overrides template feed the runtime file `${TOOL_OVERRIDES_PATH}`. The call-path adapter in the Go proxy writes back to the runtime file whenever it has to downgrade/upgrade a schema; rerun `make render-proxy` + the restart script after editing those overrides so manifests and streamable clients see the update immediately.
 * The proxy filters out any tool/server marked `enabled: false` before producing `initialize`, `tools/list`, and manifest payloads.
 * Every `tools/list` descriptor carries `"x-stelae": {"servers": [...], "primaryServer": "..."}` metadata. The restart script + populate helper rely on this to map schemas back to the correct server even after the proxy deduplicates tool names.
-* Declarative aggregations are described in `config/tool_aggregations.json` (with optional overlays under `${STELAE_CONFIG_HOME}/config/tool_aggregations.local.json`). `scripts/process_tool_aggregations.py` validates the merged file, writes the resulting descriptors to `${TOOL_OVERRIDES_PATH}`, and sets any `hideTools` entries to `enabled: false`. `scripts/tool_aggregator_server.py` loads the same config at runtime so wrappers such as `manage_docy_sources` show up once in manifests even though they fan out to underlying servers.
+* Declarative aggregations are described in `config/tool_aggregations.json`, but the tracked template now only contains the schema defaults and the `facade.search` hide rule. Run `python scripts/install_stelae_bundle.py` to seed `${STELAE_CONFIG_HOME}/config/tool_aggregations.local.json` with the full definitions from `config/bundles/starter_bundle.json`. `scripts/process_tool_aggregations.py` validates the merged file, writes the resulting descriptors to `${TOOL_OVERRIDES_PATH}`, and sets any `hideTools` entries to `enabled: false`. `scripts/tool_aggregator_server.py` loads the same config at runtime so wrappers such as `manage_docy_sources` show up once in manifests even though they fan out to underlying servers.
 
 ## Operations & Troubleshooting
 
@@ -154,7 +154,7 @@ PY
 
 **How it works:**
 
-1. `config/tool_aggregations.json` declares each aggregate tool (manifest metadata, per-operation mappings, validation hints, and a `hideTools` list). The schema is enforced via `config/tool_aggregations.schema.json` so CI / restart scripts can lint config changes early.
+1. `config/tool_aggregations.json` declares each aggregate tool (manifest metadata, per-operation mappings, validation hints, and a `hideTools` list). The tracked template is a stub; the starter bundle populates `${STELAE_CONFIG_HOME}/config/tool_aggregations.local.json` with the real entries, and the merged payload still obeys `config/tool_aggregations.schema.json` so CI / restart scripts can lint config changes early.
 2. `scripts/process_tool_aggregations.py` runs during `make render-proxy` and the restart workflow. It loads the merged config (repo template + `${STELAE_CONFIG_HOME}/config/tool_aggregations.local.json`), writes/upgrades the matching entries in `${TOOL_OVERRIDES_PATH}`, and flips every `hideTools` entry (`server/tool`) to `enabled: false` so manifests/initialize/tools.list only expose the aggregate.
 3. `scripts/tool_aggregator_server.py` is a FastMCP stdio server launched by the proxy. On startup it registers one MCP tool per aggregation; at call time it validates the input per the declarative mapping rules, translates arguments into the downstream schema, and uses the proxy JSON-RPC endpoint to call the real tool. Response mappings (optional) can reshape the downstream payload before returning to the client.
 4. Because both the overrides and the stdio helper derive from the same config, adding a new aggregate requires zero Python changes—edit the JSON, run `make render-proxy`, and the proxy automatically restarts the helper with the new catalog.

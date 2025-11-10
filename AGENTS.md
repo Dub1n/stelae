@@ -10,7 +10,7 @@
 ## Runtime, Build, and Dev Commands
 
 - Environment: copy `.env.example` → `.env`, update path/binary variables, then run `make render-proxy`. Keep `.env` local; renderers inject values for PM2.
-- Core stack = mcp-proxy, filesystem/ripgrep controllers, terminal controller, custom tools, tool aggregator, the Stelae integrator, and the FastMCP bridge. Treat Docy/Docy manager, Basic Memory, Strata, Fetch, Scrapling, and Cloudflare as opt-in servers enabled through `${STELAE_CONFIG_HOME}/config/proxy.template.local.json` overlays so clones can right-size the catalog.
+- Core stack = mcp-proxy, filesystem/ripgrep controllers, the terminal controller, custom tools, the Stelae integrator, and the FastMCP bridge. The starter bundle (Docy + manager, tool aggregator, Basic Memory, Strata, Fetch, Scrapling, the 1mcp catalog helpers) lives in `config/bundles/starter_bundle.json`; install or update it via `python scripts/install_stelae_bundle.py [--server name...]` so the extras stay in `${STELAE_CONFIG_HOME}` overlays instead of git, and keep the Cloudflare tunnel/worker opt-in.
 - PM2 lifecycle (`source ~/.nvm/nvm.sh` first):
   - `make up` / `make down` – start or stop the fleet described in `ecosystem.config.js`.
   - `make restart-proxy`, `make logs`, `make status` – restart, tail logs, or inspect process table.

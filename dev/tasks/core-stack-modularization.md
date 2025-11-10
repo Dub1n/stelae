@@ -6,14 +6,14 @@ Tags: `#infra`, `#docs`
 
 ## Checklist
 
-- [ ] Define the minimal "core" Stelae stack (proxy + integrator/self-management dependencies) and document which servers/configs are required for a functional clone.
-- [ ] Trim tracked templates/manifests so only the core servers ship out of the box; move Docy, tool aggregator, Memory, Strata, etc. into an optional bundle.
-- [ ] Create a curated starter bundle (JSON descriptors matching 1mcp output) and an installer CLI/script that feeds those descriptors to `manage_stelae install_server`.
-- [ ] Relocate Docy manager aggregation + non-core tool overrides into `${STELAE_CONFIG_HOME}` overlays when the starter bundle is applied; ensure existing users retain their local overlays.
-- [ ] Update README/AGENTS/ARCHITECTURE with a "core vs starter pack" quick-start flow, including guidance for running the installer script.
-- [ ] Extend repo hygiene/tests to ensure the core templates remain slim and that optional bundles stay out of git (`tests/test_repo_sanitized.py` or new coverage).
-- [ ] Update spec/progress/task entries with the new modular strategy.
-- [ ] Commit with message `infra: modularize stelae core stack` after tests.
+- [x] Define the minimal "core" Stelae stack (proxy + integrator/self-management dependencies) and document which servers/configs are required for a functional clone.
+- [x] Trim tracked templates/manifests so only the core servers ship out of the box; move Docy, tool aggregator, Memory, Strata, etc. into an optional bundle.
+- [x] Create a curated starter bundle (JSON descriptors matching 1mcp output) and an installer CLI/script that feeds those descriptors to `manage_stelae install_server`.
+- [x] Relocate Docy manager aggregation + non-core tool overrides into `${STELAE_CONFIG_HOME}` overlays when the starter bundle is applied; ensure existing users retain their local overlays.
+- [x] Update README/AGENTS/ARCHITECTURE with a "core vs starter pack" quick-start flow, including guidance for running the installer script.
+- [x] Extend repo hygiene/tests to ensure the core templates remain slim and that optional bundles stay out of git (`tests/test_repo_sanitized.py` or new coverage).
+- [x] Update spec/progress/task entries with the new modular strategy.
+- [x] Commit with message `infra: modularize stelae core stack` after tests.
 
 ## References
 

@@ -20,7 +20,8 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started · `[!]` broken · 
 - [~] [tool-overrides-schema-cleanup](./tasks/tool-overrides-schema-cleanup.md) Normalize tool override schema/automation with validation + per-server entries to eliminate drift and duplication.
 - [x] [tool-aggregations](./tasks/tool-aggregations.md) Add declarative tool aggregation helper + config to expose composite tools while hiding noisy downstream entries.
 - [x] [local-runtime-hardening](./tasks/local-runtime-hardening.md) Fix overlay regressions, add local-only runtime coverage, and strengthen generic-vs-local config hygiene.
-- [ ] [core-stack-modularization](./tasks/core-stack-modularization.md) Ship a minimal core stack plus an optional starter bundle so clones stay lightweight while power users can opt into the full tool suite.
+- [x] [core-stack-modularization](./tasks/core-stack-modularization.md) Ship a minimal core stack plus an optional starter bundle so clones stay lightweight while power users can opt into the full tool suite.
+- [ ] [1mcp-server-separation](./tasks/1mcp-server-separation.md) Align the forked `1mcp-server` repo with upstream hygiene while making AI/API integrations optional so offline clones avoid extra dependencies.
 - [x] [repo-maintenance-pass](./tasks/repo-maintenance-pass.md) Refresh architecture/docs, consolidate config helpers, and add the `make verify-clean` workflow so render/restart automation keeps `git status` clean.
 
 ## Action Items

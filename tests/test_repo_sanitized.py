@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,3 +33,16 @@ def test_tracked_configs_remain_placeholder_only() -> None:
     for rel in tracked:
         text = _read(rel)
         assert "/home/" not in text, f"{rel} should not bake absolute paths"
+
+
+def test_proxy_template_only_lists_core_servers() -> None:
+    data = json.loads(_read("config/proxy.template.json"))
+    core = {"custom", "fs", "integrator", "rg", "sh"}
+    assert set(data["mcpServers"].keys()) == core
+
+
+def test_tool_aggregations_template_is_empty_stub() -> None:
+    data = json.loads(_read("config/tool_aggregations.json"))
+    assert data["aggregations"] == []
+    hidden_servers = {item["server"] for item in data.get("hiddenTools", [])}
+    assert hidden_servers <= {"facade"}

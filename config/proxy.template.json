@@ -32,38 +32,6 @@
         "STELAE_CUSTOM_TOOLS_CONFIG": "{{STELAE_DIR}}/config/custom_tools.json"
       }
     },
-    "docs": {
-      "type": "stdio",
-      "command": "{{DOCY_BIN}}",
-      "args": [
-        "--stdio"
-      ]
-    },
-    "docy_manager": {
-      "type": "stdio",
-      "command": "{{PYTHON}}",
-      "args": [
-        "{{STELAE_DIR}}/scripts/docy_manager_server.py"
-      ],
-      "env": {
-        "STELAE_DOCY_CATALOG": "{{STELAE_DIR}}/config/docy_sources.json",
-        "STELAE_DOCY_URL_FILE": "{{STELAE_DIR}}/.docy.urls"
-      }
-    },
-    "tool_aggregator": {
-      "type": "stdio",
-      "command": "{{PYTHON}}",
-      "args": [
-        "{{STELAE_DIR}}/scripts/tool_aggregator_server.py"
-      ],
-      "env": {
-        "STELAE_TOOL_AGGREGATIONS": "{{STELAE_DIR}}/config/tool_aggregations.json"
-      }
-    },
-    "fetch": {
-      "type": "http",
-      "command": "{{LOCAL_BIN}}/mcp-server-fetch"
-    },
     "fs": {
       "type": "stdio",
       "command": "{{FILESYSTEM_BIN}}",
@@ -81,39 +49,6 @@
         "STELAE_DISCOVERY_PATH": "{{STELAE_DISCOVERY_PATH}}"
       }
     },
-    "mem": {
-      "type": "stdio",
-      "command": "{{MEMORY_BIN}}",
-      "args": [
-        "--project",
-        "{{BASIC_MEMORY_PROJECT}}",
-        "mcp",
-        "--transport",
-        "stdio"
-      ]
-    },
-    "one_mcp": {
-      "type": "stdio",
-      "command": "{{ONE_MCP_BIN}}",
-      "args": [
-        "--directory",
-        "{{ONE_MCP_DIR}}",
-        "run",
-        "server.py",
-        "--local"
-      ]
-    },
-    "public_mcp_catalog": {
-      "type": "http",
-      "url": "https://mcp.1mcpserver.com/mcp/",
-      "headers": {
-        "Accept": "text/event-stream",
-        "Cache-Control": "no-store"
-      },
-      "options": {
-        "enableAsync": false
-      }
-    },
     "rg": {
       "type": "stdio",
       "command": "{{RG_BIN}}",
@@ -122,18 +57,6 @@
         "--root",
         "{{STELAE_DIR}}"
       ]
-    },
-    "scrapling": {
-      "type": "stdio",
-      "command": "uvx",
-      "args": [
-        "scrapling-fetch-mcp",
-        "--stdio"
-      ],
-      "env": {
-        "PATH": "{{ PATH }}",
-        "PLAYWRIGHT_BROWSERS_PATH": "{{PLAYWRIGHT_BROWSERS_PATH}}"
-      }
     },
     "sh": {
       "type": "stdio",
@@ -144,10 +67,6 @@
         "--allow",
         "npm,pytest,make,python,git"
       ]
-    },
-    "strata": {
-      "type": "stdio",
-      "command": "{{STRATA_BIN}}"
     }
   }
 }
