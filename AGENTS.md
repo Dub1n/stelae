@@ -13,7 +13,7 @@
 - PM2 lifecycle (`source ~/.nvm/nvm.sh` first):
   - `make up` / `make down` – start or stop the fleet described in `ecosystem.config.js`.
   - `make restart-proxy`, `make logs`, `make status` – restart, tail logs, or inspect process table.
-  - `scripts/run_restart_stelae.sh --full` – render, restart, validate Cloudflare, and republish the manifest (use `--keep-pm2 --no-bridge` for integrator calls).
+  - `scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --no-cloudflared` – render, rebuild, and restart the local stack without touching Cloudflare (default flow for `manage_stelae`). Append `--full` only when you need to redeploy the tunnel/worker.
 - Discovery & overrides:
   - `python scripts/discover_servers_cli.py` or the MCP tool `manage_stelae` (operations: discover/install/remove/refresh/run_reconciler) manage downstream servers.
   - `python scripts/populate_tool_overrides.py --proxy-url http://127.0.0.1:9090/mcp` snapshots schemas into `${STELAE_CONFIG_HOME}/config/tool_overrides.local.json` and rewrites `${TOOL_OVERRIDES_PATH}`.
@@ -39,7 +39,7 @@
 
 ## Security & Configuration Tips
 
-- All generated artifacts and local overrides live under `${STELAE_CONFIG_HOME}` (default `~/.config/stelae`). Automation writes `proxy.json`, merged tool overrides, discovery caches, tool schema status, and your `*.local.*` templates there so git never sees machine-specific data. Delete a `*.local.*` file to reset it to the tracked default.
+- All generated artifacts and local overrides live under `${STELAE_CONFIG_HOME}` (default `~/.config/stelae`). Automation writes `proxy.json`, merged tool overrides, discovery caches, tool schema status, and your `*.local.*` templates there so git never sees machine-specific data. Delete a `*.local.*` file to reset it to the tracked default. Run `pytest tests/test_repo_sanitized.py` before committing template changes to ensure tracked configs stay placeholder-only.
 - Keep `.env` out of git; renderers (`scripts/render_proxy_config.py`, `scripts/render_cloudflared_config.py`) handle substitution. Regenerate Cloudflare configs via `make render-cloudflared`, store credentials under `~/.cloudflared`, and validate the public endpoint with the curl/JQ commands in `README.md`.
 - Never manually edit `${PROXY_CONFIG}`, `${STELAE_CONFIG_HOME}/cloudflared.yml`, or `${TOOL_SCHEMA_STATUS_PATH}`; rerender or let automation update them.
 - Cloudflare worker expects KV data (`scripts/push_manifest_to_kv.sh`). After pushing, deploy with `npx wrangler deploy --config cloudflare/worker/wrangler.toml`.

@@ -1766,7 +1766,7 @@
         },
         "create_memory_project": {
           "enabled": false,
-          "description": "Create a new Basic Memory project.\n\nCreates a new project with the specified name and path. The project directory\nwill be created if it doesn't exist. Optionally sets the new project as default.\n\nArgs:\n    project_name: Name for the new project (must be unique)\n    project_path: File system path where the project will be stored\n    set_default: Whether to set this project as the default (optional, defaults to False)\n\nReturns:\n    Confirmation message with project details\n\nExample:\n    create_memory_project(\"my-research\", \"~/Documents/research\")\n    create_memory_project(\"work-notes\", \"/home/user/work\", set_default=True)",
+          "description": "Create a new Basic Memory project.\n\nCreates a new project with the specified name and path. The project directory\nwill be created if it doesn't exist. Optionally sets the new project as default.\n\nArgs:\n    project_name: Name for the new project (must be unique)\n    project_path: File system path where the project will be stored\n    set_default: Whether to set this project as the default (optional, defaults to False)\n\nReturns:\n    Confirmation message with project details\n\nExample:\n    create_memory_project(\"my-research\", \"~/Documents/research\")\n    create_memory_project(\"work-notes\", \"~/work\", set_default=True)",
           "name": "create_memory_project",
           "inputSchema": {
             "type": "object",

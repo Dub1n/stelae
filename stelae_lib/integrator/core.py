@@ -89,7 +89,8 @@ class StelaeIntegratorService:
         self.config_home = config_home()
         # Load env files (.env.example → .env → overlay) before wiring stores.
         default_env_files = [self.root / ".env.example", self.root / ".env"]
-        candidates = list(env_files or default_env_files)
+        provided_envs = [Path(p) for p in env_files] if env_files else []
+        candidates = list(provided_envs or default_env_files)
         self.env_overlay = self.config_home / ".env.local"
         if self.env_overlay not in candidates:
             candidates.append(self.env_overlay)
@@ -100,7 +101,7 @@ class StelaeIntegratorService:
             if isinstance(key, str) and isinstance(value, str):
                 values.setdefault(key, value)
         self.env_values = values
-        self.env_file = self.env_overlay
+        self.env_file = provided_envs[-1] if provided_envs else self.env_overlay
         discovery_base_path = discovery_path or self.root / "config" / "discovered_servers.json"
         discovery_overlay_path = (
             discovery_path
@@ -143,7 +144,7 @@ class StelaeIntegratorService:
             overlay_path=discovery_overlay_path,
         )
         self.command_runner = command_runner or CommandRunner(self.root)
-        restart_args = os.getenv("STELAE_RESTART_ARGS", "--keep-pm2 --no-bridge --full").strip()
+        restart_args = os.getenv("STELAE_RESTART_ARGS", "--keep-pm2 --no-bridge --no-cloudflared").strip()
         parsed_restart = shlex.split(restart_args) if restart_args else []
         self.default_commands: List[List[str]] = [
             ["make", "render-proxy"],

@@ -257,3 +257,12 @@ def test_run_wraps_errors(integrator_workspace):
     response = service.run("unknown_op", {})
     assert response["status"] == "error"
     assert response["details"]["operation"] == "unknown_op"
+
+
+def test_restart_defaults_skip_cloudflared(monkeypatch, integrator_workspace):
+    monkeypatch.delenv("STELAE_RESTART_ARGS", raising=False)
+    service = _service(integrator_workspace)
+    restart_command = service.default_commands[-1]
+    assert "run_restart_stelae.sh" in restart_command[0]
+    assert "--no-cloudflared" in restart_command
+    assert "--full" not in restart_command

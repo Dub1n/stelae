@@ -150,6 +150,8 @@ Every config file tracked in this repo is a template. Any local edits made via `
 - Renderers merge template → overlay → runtime (`${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${STELAE_CONFIG_HOME}/cloudflared.yml`, ...). Delete a `*.local.*` file and rerun the matching command to reset it.
 - Runtime caches such as `${STELAE_DISCOVERY_PATH}` and `${TOOL_SCHEMA_STATUS_PATH}` already sit under `${STELAE_CONFIG_HOME}`, so git remains clean even when the proxy or integrator writes back metadata.
 
+> Hygiene: `pytest tests/test_repo_sanitized.py` now fails if tracked configs reintroduce absolute `/home/...` paths or if `.env.example` stops pointing runtime outputs to `${STELAE_CONFIG_HOME}`. Run it whenever you touch templates to confirm `make render-proxy` keeps `git status` clean.
+
 ### Custom Script Tools
 
 - `scripts/custom_tools_server.py` loads `config/custom_tools.json` (override with `STELAE_CUSTOM_TOOLS_CONFIG`) and registers each entry as part of the `custom` stdio server now declared in `config/proxy.template.json`.
@@ -244,7 +246,8 @@ Every config file tracked in this repo is a template. Any local edits made via `
 ### Installing servers discovered by 1mcp
 
 - 1mcp writes its discovery payload to `${STELAE_DISCOVERY_PATH}` (array of `{name, transport, command|url, args, env, description, source, tools, requiresAuth, options}` objects). Keep the repo template generic; local discoveries now live entirely under `${STELAE_CONFIG_HOME}`.
-- The `manage_stelae` MCP tool is now served directly by the `stelae` bridge. Calls such as `tools/call name="manage_stelae"` stay connected even while the proxy restarts. Under the hood the tool updates templates/overrides and then runs `make render-proxy` plus `scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --full`, waiting for the proxy to come back before replying. Override the restart flags via `STELAE_RESTART_ARGS` if you need a different flow.
+- The `manage_stelae` MCP tool is now served directly by the `stelae` bridge. Calls such as `tools/call name="manage_stelae"` stay connected even while the proxy restarts. Under the hood the tool updates templates/overrides and then runs `make render-proxy` plus `scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --no-cloudflared`, waiting for the proxy to come back before replying.
+- When you need to redeploy the Cloudflare tunnel + worker, override the restart flags via `STELAE_RESTART_ARGS` (for example `STELAE_RESTART_ARGS="--keep-pm2 --no-bridge --full"` adds the manifest push + tunnel management back in).
 - CLI examples (identical payload shape to the MCP tool):
 
   ```bash
@@ -256,7 +259,7 @@ Every config file tracked in this repo is a template. Any local edits made via `
     --params '{"name": "demo_server", "dry_run": true}'
   ```
 
-- Catalog overrides that hydrate descriptors (for example the Qdrant MCP) may require new environment keys. When `manage_stelae` encounters missing keys it appends safe defaults to your local `.env` automatically, keeping `.env.example` generic for fresh clones.
+- Catalog overrides that hydrate descriptors (for example the Qdrant MCP) may require new environment keys. When `manage_stelae` encounters missing keys it appends safe defaults to your writable env overlay (default `${STELAE_CONFIG_HOME}/.env.local`, or the last `env` file you pass), keeping `.env.example` + tracked configs generic for fresh clones.
 - Supported operations:
   - `discover_servers` – Calls the vendored 1mcp catalogue to find candidates. Accepts `query`, `tags` (list or comma-separated), `preset`, `limit`, `min_score`, `append`, and `dry_run`. The response now echoes the matching descriptors under `details.servers` so you can immediately pick a `name` to install without running `list_discovered_servers`.
   - `list_discovered_servers` – Normalized entries + validation issues, helpful when vetting 1mcp output.
@@ -300,7 +303,7 @@ source ~/.nvm/nvm.sh
   make down
   \```
 
-The helper script `scripts/run_restart_stelae.sh --full` wraps the full cycle (rebuild proxy, render config, restart PM2 fleet, redeploy Cloudflare worker, republish manifest) and is the fastest way to validate override changes end-to-end. When invoked by `manage_stelae` the script is called with `--keep-pm2 --no-bridge --full` so the MCP bridge stays connected; run it without those flags if you truly need a cold restart. Each pm2 app now logs a one-line summary (e.g., `pm2 ensure cloudflared: status=errored -> delete+start`) so you can see exactly how the helper recovered missing or unhealthy entries.
+The helper script `scripts/run_restart_stelae.sh` wraps the full cycle (rebuild proxy, render config, restart PM2 fleet, optionally redeploy Cloudflare). For local-only parity run it with `--keep-pm2 --no-bridge --no-cloudflared` (the default invoked by `manage_stelae`) so the stack restarts cleanly even on laptops without a tunnel configured. Add `--full` when you explicitly want to push the manifest to Cloudflare KV and restart the named tunnel/worker. Each pm2 app now logs a one-line summary (e.g., `pm2 ensure cloudflared: status=errored -> delete+start`) so you can see exactly how the helper recovered missing or unhealthy entries.
 
 Logs default to `~/dev/stelae/logs/` (see `ecosystem.config.js`).
 
