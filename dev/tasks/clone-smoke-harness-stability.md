@@ -130,6 +130,13 @@ Documenting these probes here keeps the workbook synchronized with the expectati
 - Updated README + docs (`docs/e2e_clone_smoke_test.md`, `docs/ARCHITECTURE.md`) to call out the dynamic `PROXY_PORT` behavior and the harness’ graceful shutdown guarantees.
 - Local renderer smoke test: `timeout 120s python3 scripts/render_proxy_config.py --template config/proxy.template.json --output /tmp/proxy-test.json --env-file .env --fallback-env .env.example` → `jq '.mcpProxy.addr' /tmp/proxy-test.json == ":9090"` (expected because workstation `.env` still defaults to 9090, confirming substitution works).
 - Re-running the harness immediately afterward still produced a port collision (`:9090`) because the disposable clone fetches the last committed template (without the new placeholder). Once these changes are merged, the next harness run should inherit the fix.
+- Updated README + docs (`docs/e2e_clone_smoke_test.md`, `docs/ARCHITECTURE.md`) to call out the dynamic `PROXY_PORT` behavior and the harness’ graceful shutdown guarantees.
+
+### Stage 7 – Post-fix harness run (bounded at 120 s)
+
+- `timeout 120s python3 scripts/run_e2e_clone_smoke_test.py --wrapper-release ~/dev/codex-mcp-wrapper/dist/releases/0.1.0 --manual-stage install` (workspace `/tmp/stelae-smoke-workspace-8w5lmp9f`) still hit the external timeout but progressed substantially further: `run_restart_stelae.sh` restarted pm2 cleanly on `:20847` (see `jq '.mcpProxy.addr' config-home/proxy.json → ":20847"` and the absence of any `bind: address already in use` lines).
+- `harness.log` captures the full downstream server registration stream plus healthy readiness probes; the remaining delay is now the total wall-clock for clone + Go build + restart rather than a hard stall on pm2.
+- Because the outer `timeout` terminated the harness mid-flight, the new SIGINT/SIGTERM handler logged the interrupt but did not finish killing pm2 before the supervising `timeout` sent SIGKILL; I manually ran `PM2_HOME=/tmp/stelae-smoke-workspace-8w5lmp9f/.pm2 pm2 kill` afterward to ensure the sandbox daemon stopped. Next iteration should either finish inside 120 s (now that module downloads are warm) or bolt on a resumable resume flag to keep proving post-install steps without restarting from scratch.
 
 ## Checklist (Copy into PR or issue if needed)
 
