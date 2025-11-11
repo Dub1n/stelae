@@ -53,6 +53,13 @@ def main() -> None:
         overlay_file=overlay_env,
         include_process_env=True,
     )
+    proxy_port = env_values.get("PROXY_PORT")
+    if not proxy_port:
+        public_port = env_values.get("PUBLIC_PORT")
+        if public_port:
+            env_values["PROXY_PORT"] = public_port
+        else:
+            env_values["PROXY_PORT"] = "9090"
 
     try:
         base_template = json.loads(args.template.read_text(encoding="utf-8"))

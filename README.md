@@ -8,7 +8,7 @@ A WSL-native deployment of [mcp-proxy](https://github.com/TBXark/mcp-proxy) that
 
 | Component | Transport | Launch Command | Purpose |
 |-----------|-----------|----------------|---------|
-| mcp-proxy | HTTP/SSE (:9090) | `${PROXY_BIN}` | Aggregates tools/prompts/resources from local MCP servers into one endpoint. |
+| mcp-proxy | HTTP/SSE (:${PROXY_PORT:-9090}) | `${PROXY_BIN}` | Aggregates tools/prompts/resources from local MCP servers into one endpoint. |
 | Filesystem MCP | stdio | `${FILESYSTEM_BIN} --root ${STELAE_DIR}` | Scoped read/write access to the repo. |
 | ripgrep MCP | stdio | `${RG_BIN} --stdio --root ${SEARCH_ROOT}` | Code search backend powering the `grep` tool. |
 | Terminal Controller MCP | stdio | `${SHELL_BIN}` | Allowlisted command execution in Phoenix workspace. |
@@ -52,6 +52,7 @@ Path placeholders expand from `.env`; see setup below.
    - Binaries: `FILESYSTEM_BIN`, `RG_BIN`, `SHELL_BIN`, `DOCY_BIN`, `MEMORY_BIN`, `STRATA_BIN`, `ONE_MCP_BIN`, `LOCAL_BIN/mcp-server-fetch`.
    - Public URLs: `PUBLIC_BASE_URL=https://mcp.infotopology.xyz`, `PUBLIC_SSE_URL=${PUBLIC_BASE_URL}/stream`.
    - Local overlay home: `STELAE_CONFIG_HOME=${HOME}/.config/stelae`. Automation writes `${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${STELAE_DISCOVERY_PATH}`, and `${TOOL_SCHEMA_STATUS_PATH}` into that directory so git never sees per-machine data. Additional values appended by the integrator land in `${STELAE_CONFIG_HOME}/.env.local`; keep the repo `.env` focused on human-edited keys.
+   - Ports: `PROXY_PORT` controls where `mcp-proxy` listens locally; `PUBLIC_PORT` defaults to the same value so tunnels/cloudflared point to the correct listener. The clone smoke harness randomizes `PROXY_PORT` per workspace to avoid colliding with your long-lived dev stack, so keep these fields in sync.
 2. Regenerate runtime config:
    \```bash
    make render-proxy
@@ -133,7 +134,7 @@ Path placeholders expand from `.env`; see setup below.
    - The Go proxy adapts tool call results at response time. Chain: pass-through → declared (uses `${TOOL_OVERRIDES_PATH}` and inline heuristics when the declared schema implies it) → generic `{ "result": "..." }`.
    - On success, the proxy updates `${TOOL_OVERRIDES_PATH}` atomically when the used schema differs (e.g., persists generic when no declared exists). It tracks runtime state in `${TOOL_SCHEMA_STATUS_PATH}` (path set via `manifest.toolSchemaStatusPath`).
    - This works for both stdio and HTTP servers and avoids inserting per-server shims.
-5. Prime new servers’ schemas automatically: `scripts/restart_stelae.sh` now calls `scripts/populate_tool_overrides.py --proxy-url http://127.0.0.1:9090/mcp --quiet` after the local `tools/list` probe so freshly launched stacks immediately persist every tool’s `inputSchema`/`outputSchema` into `${STELAE_CONFIG_HOME}/config/tool_overrides.local.json` plus the merged `${TOOL_OVERRIDES_PATH}`. For ad-hoc use (e.g., focusing on a single stdio server), you can still run `PYTHONPATH=$STELAE_DIR ~/.venvs/stelae-bridge/bin/python scripts/populate_tool_overrides.py --servers fs` to launch that server directly, or hit any MCP endpoint with `--proxy-url` to reuse its catalog without re-spawning processes; append `--quiet` to either mode to suppress per-tool logs. When debugging and you truly need to skip the automatic write-back, pass `--skip-populate-overrides` to `scripts/run_restart_stelae.sh`.
+5. Prime new servers’ schemas automatically: `scripts/restart_stelae.sh` now calls `scripts/populate_tool_overrides.py --proxy-url http://127.0.0.1:${PROXY_PORT}/mcp --quiet` after the local `tools/list` probe so freshly launched stacks immediately persist every tool’s `inputSchema`/`outputSchema` into `${STELAE_CONFIG_HOME}/config/tool_overrides.local.json` plus the merged `${TOOL_OVERRIDES_PATH}`. For ad-hoc use (e.g., focusing on a single stdio server), you can still run `PYTHONPATH=$STELAE_DIR ~/.venvs/stelae-bridge/bin/python scripts/populate_tool_overrides.py --servers fs` to launch that server directly, or hit any MCP endpoint with `--proxy-url` to reuse its catalog without re-spawning processes; append `--quiet` to either mode to suppress per-tool logs. When debugging and you truly need to skip the automatic write-back, pass `--skip-populate-overrides` to `scripts/run_restart_stelae.sh`.
 
 6. Ensure the FastMCP bridge virtualenv (`.venv/` by default) includes `mcp`, `fastmcp`, `anyio`, and `httpx`:
    \```bash
@@ -356,7 +357,7 @@ credentials-file: ~/.cloudflared/7a74f696-46b7-4573-b575-1ac25d038899.json
 ingress:
 
 - hostname: mcp.infotopology.xyz
-    service: http://localhost:9090
+    service: http://localhost:${PROXY_PORT:-9090}
 - service: http_status:404
 \```
 
@@ -379,7 +380,7 @@ Operational steps:
    \```
 4. Validate endpoints:
    \```bash
-   curl -s http://localhost:9090/.well-known/mcp/manifest.json | jq '{servers, tools: (.tools | map(.name))}'
+  curl -s http://localhost:${PROXY_PORT:-9090}/.well-known/mcp/manifest.json | jq '{servers, tools: (.tools | map(.name))}'
    curl -s https://mcp.infotopology.xyz/.well-known/mcp/manifest.json | jq '{servers, tools: (.tools | map(.name))}'
    curl -skI https://mcp.infotopology.xyz/stream
    \```
@@ -389,7 +390,7 @@ Operational steps:
 ## Local vs Remote Consumers
 
 - Remote agents (e.g. ChatGPT) use the public manifest served via Cloudflare, which now mirrors the complete downstream tool catalog (annotations included).
-- Local MCP clients can connect to `http://localhost:9090` and receive the same tool metadata, so overrides remain consistent between environments.
+- Local MCP clients can connect to `http://localhost:${PROXY_PORT:-9090}` and receive the same tool metadata, so overrides remain consistent between environments.
 
 ---
 
@@ -400,7 +401,7 @@ Operational steps:
 
 ## Validation Checklist
 
-1. `curl -s http://localhost:9090/.well-known/mcp/manifest.json | jq '{tools: (.tools | map(.name))}'` shows the full downstream catalog (filesystem, ripgrep, shell, docs, memory, strata, fetch, etc.).
+1. `curl -s http://localhost:${PROXY_PORT:-9090}/.well-known/mcp/manifest.json | jq '{tools: (.tools | map(.name))}'` shows the full downstream catalog (filesystem, ripgrep, shell, docs, memory, strata, fetch, etc.).
 2. From ChatGPT, exercise `fetch` (canonical) and `rg/search` (ripgrep) to confirm both return JSON payloads.
 3. `pm2 status` shows `online` for proxy, the FastMCP bridge, each MCP, and `cloudflared`.
 
@@ -409,7 +410,7 @@ Operational steps:
 ## Connector Readiness
 
 - **Cloudflare tunnel up:** `pm2 start "cloudflared tunnel run stelae" --name cloudflared` (or `pm2 restart cloudflared`). `curl -sk https://mcp.infotopology.xyz/.well-known/mcp/manifest.json` must return HTTP 200; a Cloudflare 1033 error indicates the tunnel is down. The watchdog (`scripts/watch_public_mcp.py`) now reuses the same `pm2 ensure` logic, so it can delete+start the tunnel automatically if the PM2 entry disappears.
-- **Manifest sanity:** `curl -s http://localhost:9090/.well-known/mcp/manifest.json | jq '{servers, tools: (.tools | map(.name))}'` verifies every essential MCP (filesystem, ripgrep, shell, docs, memory, fetch, strata, 1mcp).
+- **Manifest sanity:** `curl -s http://localhost:${PROXY_PORT:-9090}/.well-known/mcp/manifest.json | jq '{servers, tools: (.tools | map(.name))}'` verifies every essential MCP (filesystem, ripgrep, shell, docs, memory, fetch, strata, 1mcp).
 - **SSE probes:** use the Python harness under `docs/openai-mcp.md` (or the snippets in this README) to connect to `/rg/sse` and `/fetch/sse`. Confirm `grep` returns results and `fetch` succeeds when `raw: true` (Docy’s markdown extraction still needs a fix; track in TODO).
 - **Streamable HTTP bridge:** `scripts/stelae_streamable_mcp.py` now proxies the full catalog for local desktop agents; ensure the `stelae-bridge` pm2 process stays online.
 
@@ -425,7 +426,7 @@ from mcp.client.sse import SessionMessage
 from mcp import types
 
 async def smoke_rg():
-    url = "http://localhost:9090/rg/sse"
+    url = "http://localhost:${PROXY_PORT:-9090}/rg/sse"
     async with httpx.AsyncClient(timeout=httpx.Timeout(10, read=30)) as client:
         async with client.stream("GET", url, headers={"Accept": "text/event-stream", "Cache-Control": "no-store"}) as response:
             response.raise_for_status()

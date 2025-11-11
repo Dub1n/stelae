@@ -96,7 +96,7 @@ flowchart LR
 
 | Symptom | Likely cause | How to fix |
 | --- | --- | --- |
-| `mcp-proxy` not listening on `:9090` | Go build failed or pm2 stopped | `./scripts/run_restart_stelae.sh` or `source ~/.nvm/nvm.sh && pm2 restart mcp-proxy` |
+| `mcp-proxy` not listening on `:${PROXY_PORT}` | Go build failed or pm2 stopped | `./scripts/run_restart_stelae.sh` or `source ~/.nvm/nvm.sh && pm2 restart mcp-proxy` |
 | Override hints missing from manifest | runtime overrides not loaded or stale | confirm `${TOOL_OVERRIDES_PATH}` is valid JSON, rerun `make render-proxy`, then `scripts/run_restart_stelae.sh --full` |
 | `tools/call search` returns `{ "results": [] }` | running an old version; static hits missing | rebuild Go proxy (`facade_search.go`) and restart |
 | Codex CLI reports “MCP client … request timed out” | STDIO bridge launched without proper env | ensure the Codex config exports `PYTHONPATH=/home/gabri/dev/stelae` and `STELAE_STREAMABLE_TRANSPORT=stdio`; run `make check-connector` locally |
@@ -129,7 +129,7 @@ params = StdioServerParameters(
     args=['-m', 'scripts.stelae_streamable_mcp'],
     env={
         'PYTHONPATH': '/home/gabri/dev/stelae',
-        'STELAE_PROXY_BASE': 'http://127.0.0.1:9090',
+        'STELAE_PROXY_BASE': f'http://127.0.0.1:{os.environ.get("PROXY_PORT", "9090")}',
         'STELAE_STREAMABLE_TRANSPORT': 'stdio',
         'PATH': os.environ['PATH'],
     },
@@ -249,7 +249,7 @@ flowchart TD
     A ==▷|stdio| INT
 
     B ==▷|stdio| A
-    A --▶|HTTP/SSE :9090| C
+    A --▶|HTTP/SSE :${PROXY_PORT}| C
     C --▶|HTTPS| Public(("╔ChatGPT / Clients╗"))
 
     D --▶|diagnostic probes| C

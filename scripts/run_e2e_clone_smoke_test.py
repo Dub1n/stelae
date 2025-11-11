@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -188,6 +189,10 @@ class CloneSmokeHarness:
         self._env.setdefault("GIT_AUTHOR_EMAIL", "smoke-harness@example.com")
         self._env.setdefault("GIT_COMMITTER_NAME", self._env["GIT_AUTHOR_NAME"])
         self._env.setdefault("GIT_COMMITTER_EMAIL", self._env["GIT_AUTHOR_EMAIL"])
+        self._shutdown_requested = False
+        self._signal_exit = False
+        self._original_signal_handlers: dict[int, signal.HandlersType | None] = {}
+        self._install_signal_handlers()
         self._log(f"Workspace: {self.workspace}")
 
     # --------------------------------------------------------------------- utils
@@ -310,7 +315,11 @@ class CloneSmokeHarness:
             if success and not self.args.keep_workspace:
                 self._cleanup_workspace()
             elif not success:
-                self._log(f"Workspace left at {self.workspace} for triage (set --keep-workspace to always retain).")
+                if not self._signal_exit:
+                    self._log(
+                        f"Workspace left at {self.workspace} for triage (set --keep-workspace to always retain)."
+                    )
+            self._restore_signal_handlers()
 
     def _clone_repo(self) -> None:
         self._log("Cloning stelae repo...")
@@ -355,7 +364,6 @@ class CloneSmokeHarness:
             extra={
                 "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY", "test-clone-smoke-key"),
                 "GITHUB_TOKEN": os.environ.get("GITHUB_TOKEN", ""),
-                "PROXY_PORT": str(self.proxy_port),
             },
         )
         env_contents = format_env_lines(env_map)
@@ -709,6 +717,47 @@ class CloneSmokeHarness:
     def _cleanup_workspace(self) -> None:
         if cleanup_workspace_path(self.workspace):
             self._log(f"Cleaning up workspace {self.workspace}…")
+
+    # ---------------------------------------------------------------- signal mgmt
+    def _install_signal_handlers(self) -> None:
+        for sig in (getattr(signal, "SIGINT", None), getattr(signal, "SIGTERM", None)):
+            if sig is None:
+                continue
+            try:
+                previous = signal.getsignal(sig)
+                self._original_signal_handlers[sig] = previous
+                signal.signal(sig, self._handle_signal)
+            except (ValueError, OSError, RuntimeError):
+                continue
+
+    def _restore_signal_handlers(self) -> None:
+        for sig, handler in self._original_signal_handlers.items():
+            try:
+                signal.signal(sig, handler)
+            except (ValueError, OSError, RuntimeError):
+                continue
+
+    def _handle_signal(self, signum: int, frame: Any) -> None:
+        if self._shutdown_requested:
+            return
+        self._shutdown_requested = True
+        self._signal_exit = True
+        try:
+            sig_name = signal.Signals(signum).name
+        except Exception:
+            sig_name = str(signum)
+        self._log(f"Received {sig_name}; tearing down sandbox processes…")
+        try:
+            self._teardown_processes()
+        except Exception as exc:  # pragma: no cover - best effort logging
+            self._log(f"Process teardown after {sig_name} failed: {exc}")
+        if not self.args.keep_workspace:
+            try:
+                self._cleanup_workspace()
+            except Exception as exc:  # pragma: no cover - best effort logging
+                self._log(f"Workspace cleanup after {sig_name} failed: {exc}")
+        exit_code = 130 if signum == getattr(signal, "SIGINT", signum) else 143
+        raise SystemExit(exit_code)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:

@@ -1,7 +1,7 @@
 {
   "mcpProxy": {
     "baseURL": "{{PUBLIC_BASE_URL}}",
-    "addr": ":9090",
+    "addr": ":{{PROXY_PORT}}",
     "name": "stelae",
     "version": "1.0.0",
     "type": "streamable-http",
