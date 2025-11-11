@@ -138,6 +138,12 @@ Documenting these probes here keeps the workbook synchronized with the expectati
 - `harness.log` captures the full downstream server registration stream plus healthy readiness probes; the remaining delay is now the total wall-clock for clone + Go build + restart rather than a hard stall on pm2.
 - Because the outer `timeout` terminated the harness mid-flight, the new SIGINT/SIGTERM handler logged the interrupt but did not finish killing pm2 before the supervising `timeout` sent SIGKILL; I manually ran `PM2_HOME=/tmp/stelae-smoke-workspace-8w5lmp9f/.pm2 pm2 kill` afterward to ensure the sandbox daemon stopped. Next iteration should either finish inside 120 s (now that module downloads are warm) or bolt on a resumable resume flag to keep proving post-install steps without restarting from scratch.
 
+### Stage 8 – Five-minute bounding experiment (still timing out)
+
+- `timeout 300s python3 scripts/run_e2e_clone_smoke_test.py --wrapper-release ~/dev/codex-mcp-wrapper/dist/releases/0.1.0 --manual-stage install` created workspace `/tmp/stelae-smoke-workspace-pxvtbyhd` and again timed out. Port selection landed on `:21738` (`jq '.mcpProxy.addr' config-home/proxy.json → ":21738"`), and pm2 showed `mcp-proxy`, `watchdog`, and (despite `--no-cloudflared`) a briefly auto-started `cloudflared` instance as `online` before I killed the sandbox daemon manually.
+- `harness.log` ends with pm2 streaming downstream server registrations (`<mem> Handling requests at /mem/`) but never reaches the `==> Local probe: HEAD …` / `Syncing tool overrides…` lines that run after `wait_port`. That implies the script was still inside `run_restart_stelae.sh` when `timeout` fired—most likely waiting for its readiness probes or schema sync to finish—rather than stalling on pm2.
+- I ran `PM2_HOME=/tmp/stelae-smoke-workspace-pxvtbyhd/.pm2 pm2 kill` after the timeout to avoid leaving a stray stack online.
+
 ## Checklist (Copy into PR or issue if needed)
 
 - [ ] Code/tests updated
