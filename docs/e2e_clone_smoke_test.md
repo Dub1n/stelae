@@ -31,8 +31,9 @@ python scripts/run_e2e_clone_smoke_test.py \
 The harness will:
 
 1. Clone Stelae + `mcp-proxy` into a disposable workspace, create an isolated `.env`,
-   and install the entire starter bundle so filesystem/Docy/rg/Strata/etc. are
-   available before Codex connects.
+   and install the entire starter bundle (using `--no-restart`) so filesystem/Docy/rg/Strata/etc. are
+   available before Codex connects. Restarts happen in the next step so the harness can stream the
+   log output directly.
 2. Seed a tiny "client" git repo next to the clone so `codex exec` can run inside a
    clean working tree while MCP calls operate on the clone itself.
 3. Automatically delete any prior smoke workspaces it finds (directories that start
@@ -69,8 +70,10 @@ Common options:
 - `--codex-cli /path/to/codex` – pin a specific Codex binary (defaults to `shutil.which("codex")`).
 - `--codex-home /path/to/.codex` – mirror a custom Codex config/auth directory into the sandbox.
 - `--wrapper-release …` – copy a Codex MCP wrapper release into the sandbox so the starter bundle can expose it.
-- `--manual` – generate `manual_playbook.md` / `manual_result.json`, then exit immediately so you can follow the instructions manually.
+- `--manual` – generate `manual_playbook.md` / `manual_result.json`, then exit immediately so you can follow the instructions manually. The harness still provisions the sandbox (clone, bundle install, restart) so the manual steps have a ready workspace; this flag simply skips the Codex automation that would normally follow.
 - `--manual-stage bundle-tools|install|remove` – stop right before a specific Codex stage, emit `manual_stage_<stage>.md`, and exit. After finishing those steps, rerun with `--workspace <path> --reuse-workspace` (and without that `--manual-stage`) to continue.
+
+**Important:** The “install” phase (starter bundle + `make render-proxy` + restart script) consistently completes in under one minute on a clean sandbox. If you see the harness stuck on “Installing starter bundle…” or “Restarting stack…” for several minutes, the issue is almost certainly not a slow install—investigate I/O hangs, missing `STELAE_CONFIG_HOME`, or Codex/manual orchestration instead of raising the timeout.
 - `--force-workspace` – overwrite the directory passed to `--workspace` even if it predates the harness marker or contains other files. Recommended when you want deterministic paths plus full logs (pair with `--keep-workspace`).
 - `--reuse-workspace` – reuse an existing smoke workspace (identified by `.stelae_smoke_workspace`) instead of deleting it. Required when resuming a manual stage; pair with `--workspace <path>`.
 - `--cleanup-only [--workspace /path]` – delete previously kept smoke workspaces (or a specific path) and exit without provisioning a new clone.

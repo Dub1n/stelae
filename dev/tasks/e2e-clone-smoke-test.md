@@ -27,6 +27,7 @@ Tags: `#infra`, `#tests`
 - Consider staging the workflow (e.g., `setup`, `manual`, `verify`) so the manual portion slots naturally between automated steps.
 - Allocate alternate ports and/or pm2 app names for the smoke-test stack so it never collides with a developer’s running instance, even if both happen to be online simultaneously.
 - If this task changes prerequisites or dependency relationships, regenerate the project’s dependency map JSON (see `dev/tasks/*_task_dependencies.json`) and attach the updated file in the related progress planner.
+- **Do not bump timeouts blindly.** The starter bundle + render + restart sequence finishes in <60 s when `STELAE_CONFIG_HOME`/`.env` are correct. If the harness appears to “hang” at “Installing starter bundle…” or “Restarting stack…”, assume an orchestration issue (blocked subprocess, Codex/manual pause, wrong env) rather than a slow install and debug accordingly.
 
 ## Outcome
 

@@ -454,6 +454,8 @@ class StelaeIntegratorService:
             for cmd in self.default_commands:
                 results.append({"command": cmd, "status": "skipped", "output": "dry-run", "returncode": None})
             return results
+        if not self.default_commands:
+            return results
         try:
             executed = self.command_runner.sequence(self.default_commands)
         except CommandFailed as exc:
@@ -475,7 +477,8 @@ class StelaeIntegratorService:
                     "returncode": result.returncode,
                 }
             )
-        self._await_proxy_ready()
+        if executed:
+            self._await_proxy_ready()
         return results
 
     def _validate_entry(self, entry: DiscoveryEntry) -> None:

@@ -45,7 +45,12 @@ def install_bundle(
     restart: bool = True,
     service_factory: Callable[[], StelaeIntegratorService] = StelaeIntegratorService,
     command_runner: CommandRunner | None = None,
+    log: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
+    def emit(message: str) -> None:
+        if log:
+            log(message)
+
     filter_set = {name.strip() for name in (server_filter or []) if name and name.strip()}
     service = service_factory()
     if hasattr(service, "default_commands"):
@@ -59,28 +64,39 @@ def install_bundle(
             continue
         name = str(raw_descriptor.get("name") or "").strip()
         if not name or (filter_set and name not in filter_set):
+            if filter_set and name:
+                emit(f"[bundle] Skipping '{name}' (filtered)")
             continue
+        emit(f"[bundle] Installing '{name}'…")
         payload = {"descriptor": raw_descriptor, "dry_run": dry_run}
         result = service.run("install_server", payload)
         if result.get("status") != "ok":
             errors.append({"name": name, "error": result})
+            emit(f"[bundle] ❌ '{name}' failed: {result}")
             continue
         details = result.get("details") or {}
         if not details.get("templateChanged") and not details.get("overridesChanged"):
             skipped.append(name)
+            emit(f"[bundle] '{name}' already up to date")
         else:
             installed.append(name)
+            emit(
+                f"[bundle] ✅ '{details.get('server', name)}' updated "
+                f"(template={details.get('templateChanged')}, overrides={details.get('overridesChanged')})"
+            )
     overlay_updates: list[dict[str, Any]] = []
     overrides_payload = bundle.get("toolOverrides")
     if isinstance(overrides_payload, dict) and overrides_payload.get("servers"):
         changed, path = _apply_overlay(ROOT / "config" / "tool_overrides.json", overrides_payload, dry_run=dry_run)
         if changed:
             overlay_updates.append({"path": str(path), "dryRun": dry_run})
+            emit(f"[bundle] Overlay updated → {path}")
     aggregations_payload = bundle.get("toolAggregations")
     if isinstance(aggregations_payload, dict) and aggregations_payload.get("aggregations"):
         changed, path = _apply_overlay(ROOT / "config" / "tool_aggregations.json", aggregations_payload, dry_run=dry_run)
         if changed:
             overlay_updates.append({"path": str(path), "dryRun": dry_run})
+            emit(f"[bundle] Overlay updated → {path}")
     commands_run: list[list[str]] = []
     if restart and not dry_run and (installed or overlay_updates) and not errors:
         for command in DEFAULT_RESTART_COMMANDS:

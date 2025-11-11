@@ -15,6 +15,10 @@ if str(ROOT) not in sys.path:
 from stelae_lib.bundles import install_bundle, load_bundle  # noqa: E402
 
 
+def _log_progress(message: str) -> None:
+    print(message, flush=True)
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Install optional Stelae bundle descriptors")
     parser.add_argument(
@@ -50,6 +54,7 @@ def main() -> None:
         server_filter=args.servers,
         dry_run=args.dry_run,
         restart=not args.no_restart,
+        log=_log_progress,
     )
     print(f"Bundle '{bundle.get('name', bundle_path.name)}' ({bundle_path})")
     if args.servers:

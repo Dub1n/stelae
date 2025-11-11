@@ -178,6 +178,7 @@ class CloneSmokeHarness:
                 "CODEX_HOME": str(self.codex_home),
             }
         )
+        self._env.setdefault("PYTHONUNBUFFERED", "1")
         if self.pm2_bin:
             pm2_dir = str(self.pm2_bin.parent)
             self._env["PATH"] = os.pathsep.join([pm2_dir, self._env.get("PATH", "")])
@@ -233,25 +234,42 @@ class CloneSmokeHarness:
         if cwd:
             display = f"(cd {cwd} && {display})"
         self._log(f"$ {display}")
-        result = subprocess.run(
+        if capture_output:
+            result = subprocess.run(
+                cmd,
+                cwd=str(cwd) if cwd else None,
+                env=self._env,
+                text=True,
+                capture_output=True,
+                check=check,
+            )
+            if log_output:
+                if result.stdout:
+                    self._log(result.stdout.strip())
+                if result.stderr:
+                    self._log(result.stderr.strip())
+            return result
+        proc = subprocess.Popen(
             cmd,
             cwd=str(cwd) if cwd else None,
             env=self._env,
             text=True,
-            capture_output=capture_output,
-            check=check,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
         )
-        if capture_output and log_output:
-            if result.stdout:
-                self._log(result.stdout.strip())
-            if result.stderr:
-                self._log(result.stderr.strip())
-        elif not capture_output and log_output:
-            if result.stdout:
-                self._log(result.stdout.strip())
-            if result.stderr:
-                self._log(result.stderr.strip())
-        return result
+        output_lines: list[str] = []
+        try:
+            if proc.stdout:
+                for line in proc.stdout:
+                    stripped = line.rstrip("\n")
+                    output_lines.append(stripped)
+                    if log_output and stripped:
+                        self._log(stripped)
+        finally:
+            proc.wait()
+        if check and proc.returncode != 0:
+            raise subprocess.CalledProcessError(proc.returncode, cmd, "\n".join(output_lines))
+        return subprocess.CompletedProcess(cmd, proc.returncode, "\n".join(output_lines), "")
 
     # -------------------------------------------------------------------- stages
     def run(self) -> None:
@@ -296,6 +314,13 @@ class CloneSmokeHarness:
 
     def _clone_repo(self) -> None:
         self._log("Cloning stelae repo...")
+        if self.clone_dir.exists():
+            if self.reuse_workspace:
+                self._log(f"Clone already exists at {self.clone_dir}; skipping git clone due to --reuse-workspace")
+                return
+            raise SystemExit(
+                f"{self.clone_dir} already exists. Use --force-workspace to recreate the sandbox or --reuse-workspace to skip cloning."
+            )
         self._run(
             ["git", "clone", "--filter=blob:none", str(self.source_repo), str(self.clone_dir)],
         )
@@ -305,6 +330,13 @@ class CloneSmokeHarness:
         dest = self.apps_dir / "mcp-proxy"
         dest.parent.mkdir(parents=True, exist_ok=True)
         self._log(f"Cloning mcp-proxy ({source})...")
+        if dest.exists():
+            if self.reuse_workspace:
+                self._log(f"Proxy clone already exists at {dest}; skipping due to --reuse-workspace")
+                return
+            raise SystemExit(
+                f"{dest} already exists. Use --force-workspace to recreate the sandbox or --reuse-workspace to skip cloning."
+            )
         self._run(["git", "clone", "--depth", "1", source, str(dest)])
 
     def _prepare_env_file(self) -> None:
@@ -361,13 +393,14 @@ class CloneSmokeHarness:
         self._env["CODEX_WRAPPER_CONFIG"] = str(config_path)
 
     def _install_starter_bundle(self) -> None:
-        self._log("Installing starter bundle inside sandbox…")
+        self._log("Installing starter bundle inside sandbox (should finish in <60s; long stalls mean env/IO issues)…")
         self._run(
             [
                 sys.executable,
                 "scripts/install_stelae_bundle.py",
                 "--bundle",
                 "config/bundles/starter_bundle.json",
+                "--no-restart",
             ],
             cwd=self.clone_dir,
         )
@@ -385,7 +418,7 @@ class CloneSmokeHarness:
             "--no-bridge",
             "--no-cloudflared",
         ]
-        self._log("Restarting stack inside sandbox…")
+        self._log("Restarting stack inside sandbox (expected <60s; investigate logs instead of extending timeouts)…")
         self._run(args, cwd=self.clone_dir)
 
     def _run_pytest(self, args: List[str], *, label: str) -> None:
