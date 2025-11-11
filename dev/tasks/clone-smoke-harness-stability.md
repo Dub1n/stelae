@@ -144,6 +144,12 @@ Documenting these probes here keeps the workbook synchronized with the expectati
 - `harness.log` ends with pm2 streaming downstream server registrations (`<mem> Handling requests at /mem/`) but never reaches the `==> Local probe: HEAD …` / `Syncing tool overrides…` lines that run after `wait_port`. That implies the script was still inside `run_restart_stelae.sh` when `timeout` fired—most likely waiting for its readiness probes or schema sync to finish—rather than stalling on pm2.
 - I ran `PM2_HOME=/tmp/stelae-smoke-workspace-pxvtbyhd/.pm2 pm2 kill` after the timeout to avoid leaving a stray stack online.
 
+### Stage 9 – Twenty-minute bounding experiment (still timing out)
+
+- `timeout 1200s python3 scripts/run_e2e_clone_smoke_test.py --wrapper-release ~/dev/codex-mcp-wrapper/dist/releases/0.1.0 --manual-stage install` (workspace `/tmp/stelae-smoke-workspace-o6vco44r`) also hit the wall clock. Restart again succeeded on `:21050` (`jq '.mcpProxy.addr' → ":21050"`), every downstream MCP registered, and pm2 showed `mcp-proxy`, `watchdog`, and `cloudflared` online for almost 20 minutes until the supervising `timeout` killed the harness.
+- As with the previous runs, `harness.log` never emits readiness probes (`Local probe: HEAD …`, `Syncing tool overrides…`) or the “Manual stage instructions written” message. The process remains inside `run_restart_stelae.sh`, tailing pm2 output long after the proxy is up, until `timeout` terminates the entire harness.
+- Post-timeout cleanup: `PM2_HOME=/tmp/stelae-smoke-workspace-o6vco44r/.pm2 pm2 kill`.
+
 ## Checklist (Copy into PR or issue if needed)
 
 - [ ] Code/tests updated
