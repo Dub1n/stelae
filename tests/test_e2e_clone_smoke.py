@@ -1,6 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sys
+
+# Ensure the repo root is importable when pytest runs inside the venv.
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+import scripts.run_e2e_clone_smoke_test as smoke_script
 
 from stelae_lib.smoke_harness import (
     ManualContext,
@@ -68,3 +76,24 @@ def test_render_manual_playbook_mentions_manual_paths(tmp_path: Path) -> None:
     assert str(ctx.manual_result) in text
     assert "codex-mcp-wrapper" in text
     assert "manage_stelae" in text
+
+
+def test_mark_and_cleanup_workspace(tmp_path: Path) -> None:
+    workspace = tmp_path / "stelae-smoke-workspace-demo"
+    workspace.mkdir()
+    smoke_script.mark_workspace(workspace)
+    assert smoke_script.is_smoke_workspace(workspace)
+    assert smoke_script.cleanup_workspace_path(workspace)
+    assert not workspace.exists()
+
+
+def test_discover_smoke_workspaces_respects_prefix(tmp_path: Path) -> None:
+    managed = tmp_path / f"{smoke_script.WORKSPACE_PREFIX}demo"
+    managed.mkdir()
+    smoke_script.mark_workspace(managed)
+    unmanaged = tmp_path / "random-dir"
+    unmanaged.mkdir()
+    (unmanaged / smoke_script.WORKSPACE_MARKER).write_text("orphan", encoding="utf-8")
+    found = smoke_script.discover_smoke_workspaces(tmp_path)
+    assert managed in found
+    assert unmanaged not in found

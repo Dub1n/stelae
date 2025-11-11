@@ -30,10 +30,11 @@ Tags: `#infra`, `#tests`
 
 ## Outcome
 
-- Added `scripts/run_e2e_clone_smoke_test.py`, which clones Stelae + `mcp-proxy` into a disposable workspace, writes a sandboxed `.env`/`${STELAE_CONFIG_HOME}`, copies an optional Codex wrapper release, runs `make render-proxy` + `scripts/run_restart_stelae.sh`, and exercises `manage_stelae` (install/remove) via the integrator CLI. The harness writes `manual_playbook.md` and `manual_result.json`, then waits for the human-in-the-loop Codex phase before validating/cleaning up.
-- Added helper utilities (`stelae_lib/smoke_harness.py`) and a Codex mission stub (`dev/tasks/missions/e2e_clone_smoke.json`) for the manual runbook.
-- Documented the workflow in `README.md`, `AGENTS.md`, `docs/ARCHITECTURE.md`, and the dedicated guide `docs/e2e_clone_smoke_test.md`.
-- Added unit coverage for the helper functions (see `tests/test_e2e_clone_smoke.py`).
+- Extended `scripts/run_e2e_clone_smoke_test.py` so the harness installs the starter bundle, seeds a disposable Codex client repo, mirrors `~/.codex` (override via `--codex-home`), auto-cleans stale `stelae-smoke-workspace-*` sandboxes, and drives `codex exec --json --full-auto` through bundle verification plus `manage_stelae` install/remove cycles. Automatic runs now parse the JSONL stream, assert the expected MCP calls fired (`workspace_fs_read`, `grep`, `doc_fetch_suite`, and the `manage_stelae` install/remove payloads), and store transcripts under `<workspace>/codex-transcripts/<stage>.jsonl`.
+- Added CLI flags for Codex integration and workspace/manual control (`--codex-cli`, `--codex-home`, `--manual`, `--manual-stage`, `--force-workspace`, `--reuse-workspace`, `--cleanup-only`). Manual artifacts (`manual_playbook.md`, `manual_stage_<name>.md`, `manual_result.json`) are only created when requested; otherwise the harness stays fully automated but still supports stage-specific pause/resume.
+- Promoted clone hygiene: the harness now runs `pytest tests/test_repo_sanitized.py` immediately after render, executes the full pytest suite after the Codex phase, and finishes with `make verify-clean`, snapshotting `git status` after every managed install/remove.
+- Expanded `stelae_lib.smoke_harness` with Codex transcript helpers plus the accompanying unit test (`tests/test_codex_exec_transcript.py`). Updated existing tests (`tests/test_e2e_clone_smoke.py`) to cover the new utilities.
+- Refreshed `README.md`, `AGENTS.md`, `docs/ARCHITECTURE.md`, and `docs/e2e_clone_smoke_test.md` to describe the automatic Codex flow, transcript expectations, and the manual fallback flag. Updated `dev/tasks/missions/e2e_clone_smoke.json` to align with the new Qdrant install/remove scenario.
 
 ## Checklist (Copy into PR or issue if needed)
 

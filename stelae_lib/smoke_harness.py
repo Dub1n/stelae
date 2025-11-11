@@ -3,11 +3,12 @@
 
 from __future__ import annotations
 
+import json
 import random
 import textwrap
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, Mapping
+from typing import Any, Dict, Iterable, List, Mapping
 
 SMOKE_ENV_KEYS = (
     "STELAE_DIR",
@@ -174,13 +175,70 @@ def render_manual_playbook(ctx: ManualContext) -> str:
         1. Open a new terminal and `cd {ctx.clone_dir}`.
         2. Export `STELAE_CONFIG_HOME={ctx.config_home}` and `PM2_HOME={ctx.sandbox_root / '.pm2'}` so Codex reuses the sandbox.
         3. Start the Codex MCP wrapper using the sandbox `.env` (`source {ctx.env_file}` or pass `--env-file`).
-        4. Connect to the sandbox proxy: `{ctx.proxy_url}`. Verify `manage_stelae` appears via `tools/list`.
-        5. Call `manage_stelae` with `{{"operation":"install_server","params":{{"name":"docy_manager","target_name":"docy_manager_smoke"}}}}`.
-        6. Once the install completes, call `manage_stelae` again with `{{"operation":"remove_server","params":{{"name":"docy_manager_smoke"}}}}`.
-        7. Update `{ctx.manual_result}` with `status="passed"` (or `failed`) plus any notes and include the call IDs reported by Codex.
+        4. Connect to the sandbox proxy: `{ctx.proxy_url}`. Verify `workspace_fs_read`, `grep`, `doc_fetch_suite`, and `manage_stelae` appear via `tools/list`.
+        5. Call `workspace_fs_read` with `{{"operation":"read_file","path":"README.md"}}`, then call `grep` with `{{"pattern":"manage_stelae","paths":["README.md"],"recursive":false,"regexp":false}}`, and finally call `doc_fetch_suite` with `{{"operation":"list_documentation_sources_tool"}}`.
+        6. Install Qdrant under a throwaway alias by calling `manage_stelae` with `{{"operation":"install_server","params":{{"name":"qdrant","target_name":"qdrant_smoke","force":true}}}}` and wait for completion.
+        7. Remove the alias via `manage_stelae` `{{"operation":"remove_server","params":{{"name":"qdrant_smoke","force":true}}}}`.
+        8. Update `{ctx.manual_result}` with `status="passed"` (or `failed`) plus any notes and include the install/remove call IDs reported by Codex.
 
         {wrapper_hint}
 
         {mission_hint}
         """
     ).strip() + "\n"
+
+
+@dataclass(frozen=True)
+class MCPToolCall:
+    """Structured view of a Codex JSONL MCP tool call snapshot."""
+
+    id: str
+    server: str
+    tool: str
+    status: str
+    arguments: Any
+    result: Any
+    error: Any
+
+
+def parse_codex_jsonl(raw: Iterable[str] | str) -> List[Dict[str, Any]]:
+    """Parse a Codex `--json` stream (either text blob or line iterable)."""
+
+    if isinstance(raw, str):
+        lines = raw.splitlines()
+    else:
+        lines = list(raw)
+    events: List[Dict[str, Any]] = []
+    for line in lines:
+        text = line.strip()
+        if not text:
+            continue
+        try:
+            events.append(json.loads(text))
+        except json.JSONDecodeError as exc:  # pragma: no cover - defensive guard
+            raise ValueError(f"Invalid Codex JSON line: {text}") from exc
+    return events
+
+
+def summarize_tool_calls(events: Iterable[Dict[str, Any]]) -> List[MCPToolCall]:
+    """Collapse `item.{started,completed}` entries into final tool-call snapshots."""
+
+    latest: Dict[str, MCPToolCall] = {}
+    for payload in events:
+        item = payload.get("item")
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") not in {"mcp_tool_call", "tool_call"}:
+            continue
+        identifier = str(item.get("id") or item.get("call_id") or len(latest))
+        snapshot = MCPToolCall(
+            id=identifier,
+            server=str(item.get("server") or ""),
+            tool=str(item.get("tool") or item.get("name") or ""),
+            status=str(item.get("status") or payload.get("type") or ""),
+            arguments=item.get("arguments"),
+            result=item.get("result"),
+            error=item.get("error"),
+        )
+        latest[identifier] = snapshot
+    return list(latest.values())

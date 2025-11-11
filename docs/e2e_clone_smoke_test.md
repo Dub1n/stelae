@@ -1,72 +1,129 @@
 # Clone Smoke Test (Codex MCP)
 
-The clone smoke test proves that a fresh checkout can bootstrap the full stack, manage
-servers via `manage_stelae`, and execute the same install/remove cycle through the
-Codex MCP wrapper without touching your primary development environment.
+The clone smoke test proves that a fresh checkout can bootstrap the entire stack,
+install/remove managed servers, and survive a full Codex MCP session without touching
+an engineer's primary development environment. The harness now runs Codex in
+non-interactive mode via `codex exec --json`, records every MCP tool call, and fails if
+expected calls (starter bundle tools + `manage_stelae`) are missing.
 
 ## Prerequisites
 
-- Go toolchain (for `mcp-proxy`), `pm2`, and `python3` available on `PATH`.
-- Codex MCP wrapper release built via `~/dev/codex-mcp-wrapper/scripts/build_release.py`.
-  Pass the path to `dist/releases/<version>` when running the harness so it can be
-  mirrored into the sandbox (the folder must contain `venv/` and `wrapper.toml`).
-- Network access to clone `https://github.com/TBXark/mcp-proxy.git`.
+- Go toolchain (for `mcp-proxy`), `pm2`, and Python 3.11+ on `PATH`.
+- Codex CLI installed and logged in. The harness mirrors `~/.codex` into the sandbox
+  unless you override the path with `--codex-home`.
+- Optional: Codex MCP wrapper release (built via
+  `~/dev/codex-mcp-wrapper/scripts/build_release.py`). Pass
+  `--wrapper-release ~/dev/codex-mcp-wrapper/dist/releases/<version>` so the starter
+  bundle can copy the release in alongside the clone.
+- Network access to clone `https://github.com/TBXark/mcp-proxy.git` and fetch any MCP
+  servers Codex exercises.
 
 ## Automated harness
 
-Run the helper from the root of the primary repo. It clones Stelae + `mcp-proxy`
-into a temporary workspace, writes a sandboxed `.env`, renders + restarts the stack,
-and exercises the CLI side of `manage_stelae` (install/remove) while checking that
-`git status` stays clean.
+Run the helper from the repo root:
 
 ```bash
 python scripts/run_e2e_clone_smoke_test.py \
-  --wrapper-release ~/dev/codex-mcp-wrapper/dist/releases/0.1.0
+  --wrapper-release ~/dev/codex-mcp-wrapper/dist/releases/0.1.0 \
+  --codex-cli $(which codex)
 ```
 
-Key artifacts emitted inside the workspace:
+The harness will:
 
-| File | Purpose |
+1. Clone Stelae + `mcp-proxy` into a disposable workspace, create an isolated `.env`,
+   and install the entire starter bundle so filesystem/Docy/rg/Strata/etc. are
+   available before Codex connects.
+2. Seed a tiny "client" git repo next to the clone so `codex exec` can run inside a
+   clean working tree while MCP calls operate on the clone itself.
+3. Automatically delete any prior smoke workspaces it finds (directories that start
+   with `stelae-smoke-workspace-` and contain `.stelae_smoke_workspace`) before
+   provisioning a new one, and mirror `~/.codex` (or `--codex-home`) into
+   `${WORKSPACE}/codex-home` while exporting `CODEX_HOME`/`CODEX_API_KEY`.
+4. Run staged tests: `pytest tests/test_repo_sanitized.py` immediately after render,
+   then the full pytest suite + `make verify-clean` after the Codex cycle so the smoke
+   test doubles as the clone gate.
+5. Drive Codex through three JSONL stages (bundle tools, install Qdrant as
+   `qdrant_smoke`, remove it again). Each stage runs `codex exec --json --full-auto`
+   with scripted instructions and writes the transcript to
+   `${WORKSPACE}/codex-transcripts/<stage>.jsonl`. The harness parses the JSON lines
+   and fails if it cannot find the required `workspace_fs_read`, `grep`,
+   `doc_fetch_suite`, or `manage_stelae` calls.
+6. Assert `git status --porcelain` is empty after every major step (bundle install,
+   Codex install/remove, final tests).
+
+Key artifacts in the workspace:
+
+| Path | Purpose |
 | --- | --- |
-| `manual_playbook.md` | Human-readable instructions for the Codex phase. |
-| `manual_result.json` | Template the tester must update to `status: "passed"` + notes. |
-| `config-home/` | Disposable `${STELAE_CONFIG_HOME}` used by the sandbox. |
-| `.pm2/` | Isolated PM2 state so the restart flow never collides with live processes. |
+| `config-home/` | Disposable `${STELAE_CONFIG_HOME}` (env overlays, tool overrides, runtime caches). |
+| `.pm2/` | Isolated PM2 home so restarts do not collide with your main stack. |
+| `codex-home/` | Mirrored `CODEX_HOME` (config + auth). |
+| `client-repo/` | Minimal git repo used as the Codex working tree. |
+| `codex-transcripts/*.jsonl` | Raw `codex exec --json` streams per stage. |
+| `manual_playbook.md` / `manual_result.json` | Only created when `--manual` is set (see below). |
 
 Common options:
 
-- `--workspace /tmp/stelae-smoke` – reuse a specific directory (default is mktemp).
-- `--keep-workspace` – keep the sandbox after success for further inspection.
-- `--auto-only` – run the automated portion without waiting for the Codex phase.
+- `--workspace /tmp/stelae-smoke` – reuse a specific directory instead of `mkdtemp`.
+- `--keep-workspace` – keep artifacts after success.
+- `--codex-cli /path/to/codex` – pin a specific Codex binary (defaults to `shutil.which("codex")`).
+- `--codex-home /path/to/.codex` – mirror a custom Codex config/auth directory into the sandbox.
+- `--wrapper-release …` – copy a Codex MCP wrapper release into the sandbox so the starter bundle can expose it.
+- `--manual` – generate `manual_playbook.md` / `manual_result.json`, then exit immediately so you can follow the instructions manually.
+- `--manual-stage bundle-tools|install|remove` – stop right before a specific Codex stage, emit `manual_stage_<stage>.md`, and exit. After finishing those steps, rerun with `--workspace <path> --reuse-workspace` (and without that `--manual-stage`) to continue.
+- `--force-workspace` – overwrite the directory passed to `--workspace` even if it predates the harness marker or contains other files. Recommended when you want deterministic paths plus full logs (pair with `--keep-workspace`).
+- `--reuse-workspace` – reuse an existing smoke workspace (identified by `.stelae_smoke_workspace`) instead of deleting it. Required when resuming a manual stage; pair with `--workspace <path>`.
+- `--cleanup-only [--workspace /path]` – delete previously kept smoke workspaces (or a specific path) and exit without provisioning a new clone.
 
-## Manual Codex phase
+### Workspace cleanup
 
-With the harness paused, open `manual_playbook.md` inside the workspace. It walks
-through the following steps:
+- Every workspace created by the harness is marked with `.stelae_smoke_workspace` and
+  lives under a directory whose name starts with `stelae-smoke-workspace-<timestamp…>`.
+- On startup the harness removes any leftover directories that match the prefix +
+  marker in your system temp directory, so re-running the script after `--keep-workspace`
+  automatically tears down old sandboxes (unless you also pass `--reuse-workspace --workspace <path>` to protect a specific sandbox).
+- To delete a specific kept workspace later, run
+  `python scripts/run_e2e_clone_smoke_test.py --cleanup-only --workspace /path/to/workspace`.
+  Without `--workspace`, the command purges every detected smoke workspace and exits.
 
-1. `cd` into the sandbox clone and export `STELAE_CONFIG_HOME`/`PM2_HOME` pointing
-   at the workspace paths that the harness printed.
-2. Launch the Codex MCP wrapper using the copied release:
-   ```
-   ${STELAE_CONFIG_HOME}/codex-mcp-wrapper/releases/<ver>/venv/bin/codex-mcp-wrapper \
-     run-mission dev/tasks/missions/e2e_clone_smoke.json \
-     --workspace <sandbox> --config <wrapper.toml>
-   ```
-3. Inside Codex, call `manage_stelae` via the MCP catalog to install `docy_manager`
-   under the alias `docy_manager_smoke`, verify the tool works, then remove it.
-4. Record the call IDs and outcome in `manual_result.json` and set `"status": "passed"`.
+## Codex automation stages
 
-Alternatively, follow the same steps manually via `tools/list` / `tools/call` if the
-mission runner is unavailable. Either way, the harness will not continue until
-`manual_result.json` reports success.
+Each automatic run captures three transcripts:
+
+1. **`bundle-tools`** – Calls `workspace_fs_read` (`read_file`), `grep` (search for
+   `manage_stelae` in `README.md`), and `doc_fetch_suite`
+   (`list_documentation_sources_tool`). Fails fast if any call is missing.
+2. **`install`** – Calls `manage_stelae` with
+   `{"operation":"install_server","params":{"name":"qdrant","target_name":"qdrant_smoke","force":true}}`
+   and waits for completion, then issues a read-only verification call.
+3. **`remove`** – Calls `manage_stelae` to remove `qdrant_smoke` and verifies the
+   catalog is clean.
+
+The JSONL files prove exactly which MCP calls executed and are parsed by
+`stelae_lib.smoke_harness.summarize_tool_calls`. If a future change renames tools or
+alters the expected sequence, update the harness expectations and the accompanying
+unit tests (`tests/test_codex_exec_transcript.py`).
+
+## Manual fallback (optional)
+
+- `--manual` writes the full playbook/result scaffolding (mirroring the original
+  flow) and exits immediately so you can run the MCP steps manually via the Codex MCP
+  wrapper or another tooling path. Rerun the harness (without `--manual`) once the
+  manual steps succeed.
+- `--manual-stage bundle-tools|install|remove` converts individual stages into
+  resumable checkpoints. The harness stops right before the selected stage, writes
+  `manual_stage_<stage>.md` describing the required Codex prompt, and exits. After
+  completing the manual stage, rerun with `--workspace <path> --reuse-workspace` and
+  omit that `--manual-stage` so automation can continue with the remaining stages.
 
 ## Feedback + cleanup
 
-After the Codex run finishes, return to the harness prompt, press `ENTER`, and it will:
+After Codex (auto or manual) finishes, the harness:
 
-1. Validate `manual_result.json` (fails if the status is still `pending`).
-2. Kill the sandbox PM2 daemon.
-3. Delete the workspace (unless `--keep-workspace` was set).
+1. Runs the remaining pytest modules and `make verify-clean` from inside the clone.
+2. Captures any failures with full logs and leaves the workspace intact for triage. A
+   clean run deletes the workspace unless `--keep-workspace` is set.
+3. Stops the sandbox PM2 daemon so background processes do not linger.
 
-Rerun the script to repeat the cycle. Use `--keep-workspace` if you need to inspect
-the generated overlays or PM2 logs after the smoke test.
+Rerun the script whenever you need to validate that the repo can be cloned, booted,
+managed, and tested end-to-end without relying on a long-lived development machine.
