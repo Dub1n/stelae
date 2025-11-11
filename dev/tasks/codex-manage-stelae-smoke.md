@@ -71,10 +71,10 @@ Scenario: prove Codex CLI can run the full discovery → install flow using only
 - Every discovery result is still `transport: "metadata"` with neither `command` nor `url`, so step 2 (install by `name`) fails immediately with `"stdio descriptor missing command"`. We need either (a) richer descriptors from 1mcp, or (b) a follow-up step that hydrates the descriptor before calling `install_server`.
 - Because install/remove cannot proceed past the validation, the remainder of the golden path (dry-run diffs, restart orchestration, real install) is still blocked. Once a descriptor includes concrete transport details, re-run from step 2.
 
-### Follow-up plan (completed 2025-11-08)
+### Follow-up plan (completed 2025-11-10)
 
-- ✅ `discover_servers` now hydrates descriptors inline via the override catalog (`stelae_lib/integrator/catalog_overrides.py:5-43`) and writes placeholder env defaults so installs no longer fail validation.
-- ✅ The full smoke loop (discover → dry-run install → real install → reconciler/removal) was rerun successfully; see the detailed run immediately below plus regression coverage in `tests/test_stelae_integrator.py:147-214`.
+- [x] `discover_servers` now hydrates descriptors inline via the override catalog (`stelae_lib/integrator/catalog_overrides.py:5-43`) and writes placeholder env defaults so installs no longer fail validation.
+- [x] The full smoke loop (discover → dry-run install → real install → reconciler/removal) was rerun successfully; see the detailed run immediately below plus regression coverage in `tests/test_stelae_integrator.py:147-214`.
 
 ### 2025-11-08 Hydration + Smoke Upgrade
 

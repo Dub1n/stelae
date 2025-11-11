@@ -1,17 +1,24 @@
 {
   "mission_id": "e2e-clone-smoke",
   "workspace_root": "/tmp/replace-this-with-sandbox",
-  "notes": "Human-in-the-loop Codex mission that exercises manage_stelae inside a disposable clone.",
+  "notes": "Human-in-the-loop Codex mission that mirrors the automated clone smoke workflow (bundle tools + qdrant install/remove).",
   "tasks": [
     {
-      "prompt": "Using the sandbox proxy URL, run tools/list and confirm manage_stelae is published. Then call manage_stelae install_server targeting docy_manager (set target_name to docy_manager_smoke). Capture the JSON response and note the files_updated and commands_run entries.",
+      "prompt": "Use the sandbox MCP proxy to 1) run tools/list and confirm workspace_fs_read, grep, doc_fetch_suite, and manage_stelae are published, 2) call workspace_fs_read with {\"operation\":\"read_file\",\"path\":\"README.md\"}, 3) call grep with {\"pattern\":\"manage_stelae\",\"paths\":[\"README.md\"],\"recursive\":false,\"regexp\":false}, and 4) call doc_fetch_suite with {\"operation\":\"list_documentation_sources_tool\"}. Summarize what you learned and do not run shell commands.",
       "cwd": ".",
       "sandbox": "workspace-write",
       "approval_policy": "on-request",
       "timeout_sec": 900
     },
     {
-      "prompt": "Call manage_stelae remove_server for docy_manager_smoke. Verify that both templateChanged and overridesChanged flags are true and that commands_run shows render+restart. Update the manual_result.json file under the sandbox root with status='passed' (or 'failed'), the call IDs for install/remove, and any notes about the session.",
+      "prompt": "Install the qdrant MCP descriptor under the alias qdrant_smoke via manage_stelae. Call manage_stelae with {\"operation\":\"install_server\",\"params\":{\"name\":\"qdrant\",\"target_name\":\"qdrant_smoke\",\"force\":true}}, wait for completion, then issue a read-only verification call (e.g., list_discovered_servers). Capture the call IDs and note whether the restart completed cleanly.",
+      "cwd": ".",
+      "sandbox": "workspace-write",
+      "approval_policy": "on-request",
+      "timeout_sec": 900
+    },
+    {
+      "prompt": "Remove the qdrant_smoke alias via manage_stelae with {\"operation\":\"remove_server\",\"params\":{\"name\":\"qdrant_smoke\",\"force\":true}}. Confirm the server no longer appears in discovery, then update manual_result.json with status='passed', the install/remove call IDs, and any notes about the session.",
       "cwd": ".",
       "sandbox": "workspace-write",
       "approval_policy": "on-request",

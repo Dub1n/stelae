@@ -14,7 +14,6 @@
         "manage_stelae": {
           "enabled": true,
           "inputSchema": {
-            "type": "object",
             "properties": {
               "operation": {
                 "title": "Operation",
@@ -36,10 +35,10 @@
             },
             "required": [
               "operation"
-            ]
+            ],
+            "type": "object"
           },
           "outputSchema": {
-            "type": "object",
             "properties": {
               "result": {
                 "additionalProperties": true,
@@ -49,7 +48,8 @@
             },
             "required": [
               "result"
-            ]
+            ],
+            "type": "object"
           }
         }
       }
@@ -72,7 +72,6 @@
         "fetch_readme": {
           "enabled": false,
           "inputSchema": {
-            "type": "object",
             "properties": {
               "github_url": {
                 "title": "Github Url",
@@ -81,7 +80,8 @@
             },
             "required": [
               "github_url"
-            ]
+            ],
+            "type": "object"
           }
         },
         "file_system_config_setup": {
@@ -93,7 +93,6 @@
         "find_mcp_config_path_path": {
           "enabled": false,
           "inputSchema": {
-            "type": "object",
             "properties": {
               "application": {
                 "enum": [
@@ -115,13 +114,13 @@
             },
             "required": [
               "application"
-            ]
+            ],
+            "type": "object"
           }
         },
         "quick_search": {
           "enabled": false,
           "inputSchema": {
-            "type": "object",
             "properties": {
               "query": {
                 "title": "Query",
@@ -135,13 +134,13 @@
             },
             "required": [
               "query"
-            ]
+            ],
+            "type": "object"
           }
         },
         "validate_mcp_config_content": {
           "enabled": false,
           "inputSchema": {
-            "type": "object",
             "properties": {
               "mcp_config_content": {
                 "title": "Mcp Config Content",
@@ -150,13 +149,18 @@
             },
             "required": [
               "mcp_config_content"
-            ]
+            ],
+            "type": "object"
           }
         }
       }
     },
     "public_mcp_catalog": {
       "enabled": true,
+      "metadata": {
+        "description": "Remote 1mcp discovery endpoint exposed over HTTP/SSE.",
+        "source": "https://github.com/Dub1n/stelae-1mcpserver"
+      },
       "tools": {
         "deep_search": {
           "description": "Plan requirements and auto-select compatible MCP servers.",
@@ -166,859 +170,62 @@
           "description": "Return server descriptors and setup guidance.",
           "enabled": true
         }
-      },
-      "metadata": {
-        "description": "Remote 1mcp discovery endpoint exposed over HTTP/SSE.",
-        "source": "https://github.com/Dub1n/stelae-1mcpserver"
       }
     },
     "tool_aggregator": {
       "enabled": true,
       "tools": {
-        "workspace_fs_read": {
-          "enabled": true,
-          "description": "Read-only workspace filesystem helpers (listing, metadata, and search) behind a single entry point.",
-          "annotations": {
-            "title": "Workspace FS Read",
-            "readOnlyHint": true
-          },
-          "inputSchema": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "operation": {
-                "type": "string",
-                "enum": [
-                  "list_allowed_directories",
-                  "directory_tree",
-                  "list_directory",
-                  "list_directory_with_sizes",
-                  "calculate_directory_size",
-                  "get_file_info",
-                  "head_file",
-                  "read_file",
-                  "read_file_lines",
-                  "read_text_file",
-                  "read_media_file",
-                  "read_multiple_media_files",
-                  "read_multiple_text_files",
-                  "find_duplicate_files",
-                  "find_empty_directories",
-                  "search_files",
-                  "search_files_content"
-                ],
-                "description": "Operation backing this aggregated call."
-              },
-              "max_depth": {
-                "description": "Limits the depth of directory traversal",
-                "nullable": true,
-                "type": "integer"
-              },
-              "path": {
-                "description": "The root path of the directory tree to generate.",
-                "type": "string"
-              },
-              "output_format": {
-                "default": "human-readable",
-                "description": "Defines the output format, which can be either `human-readable` or `bytes`.",
-                "nullable": true,
-                "oneOf": [
-                  {
-                    "enum": [
-                      "human-readable"
-                    ]
-                  },
-                  {
-                    "enum": [
-                      "bytes"
-                    ]
-                  }
-                ]
-              },
-              "root_path": {
-                "description": "The root directory path to start the size calculation.",
-                "type": "string"
-              },
-              "lines": {
-                "description": "The number of lines to read from the beginning of the file.",
-                "type": "integer"
-              },
-              "as_json": {
-                "default": false,
-                "title": "As Json",
-                "type": "boolean"
-              },
-              "end_row": {
-                "default": null,
-                "title": "End Row",
-                "type": "integer"
-              },
-              "start_row": {
-                "default": null,
-                "title": "Start Row",
-                "type": "integer"
-              },
-              "limit": {
-                "description": "Optional maximum number of lines to read after the offset.",
-                "nullable": true,
-                "type": "integer"
-              },
-              "offset": {
-                "description": "Number of lines to skip from the start (0-based).",
-                "type": "integer"
-              },
-              "max_bytes": {
-                "description": "Maximum allowed file size (in bytes) to be read.",
-                "nullable": true,
-                "type": "integer"
-              },
-              "paths": {
-                "description": "The list of media file paths to read.",
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              "exclude_patterns": {
-                "description": "Optional list of glob patterns to exclude from the search. File matching these patterns will be ignored.",
-                "items": {
-                  "type": "string"
-                },
-                "nullable": true,
-                "type": "array"
-              },
-              "min_bytes": {
-                "default": "1",
-                "description": "Minimum file size (in bytes) to include in the search (default to 1).",
-                "nullable": true,
-                "type": "integer"
-              },
-              "pattern": {
-                "description": "Optional glob pattern can be used to match target files.",
-                "nullable": true,
-                "type": "string"
-              },
-              "excludePatterns": {
-                "description": "Optional list of patterns to exclude from the search.",
-                "items": {
-                  "type": "string"
-                },
-                "nullable": true,
-                "type": "array"
-              },
-              "is_regex": {
-                "description": "Whether the query is a regular expression. If false, the query as plain text. (Default : false)",
-                "nullable": true,
-                "type": "boolean"
-              },
-              "query": {
-                "description": "Text or regex pattern to find in file contents (e.g., 'TODO' or '^function\\\\s+').",
-                "type": "string"
-              }
-            },
-            "required": [
-              "operation"
-            ]
-          }
-        },
-        "workspace_fs_write": {
-          "enabled": true,
-          "description": "Workspace filesystem writers/editors (create/move/edit/compress) routed through one safe wrapper.",
-          "annotations": {
-            "title": "Workspace FS Write",
-            "destructiveHint": true
-          },
-          "inputSchema": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "operation": {
-                "type": "string",
-                "enum": [
-                  "create_directory",
-                  "move_file",
-                  "edit_file",
-                  "write_file",
-                  "delete_file_content",
-                  "insert_file_content",
-                  "update_file_content",
-                  "zip_directory",
-                  "zip_files",
-                  "unzip_file"
-                ],
-                "description": "Operation backing this aggregated call."
-              },
-              "path": {
-                "description": "The path where the directory will be created.",
-                "type": "string"
-              },
-              "destination": {
-                "description": "The destination path to move the file to.",
-                "type": "string"
-              },
-              "source": {
-                "description": "The source path of the file to move.",
-                "type": "string"
-              },
-              "dryRun": {
-                "description": "Preview changes using git-style diff format without applying them.",
-                "nullable": true,
-                "type": "boolean"
-              },
-              "edits": {
-                "description": "The list of edit operations to apply.",
-                "items": {
-                  "properties": {
-                    "newText": {
-                      "description": "Text to replace the matched text with.",
-                      "type": "string"
-                    },
-                    "oldText": {
-                      "description": "Text to search for - must match exactly.",
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "oldText",
-                    "newText"
-                  ],
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              "content": {
-                "title": "Content",
-                "type": "string"
-              },
-              "mode": {
-                "default": "overwrite",
-                "title": "Mode",
-                "type": "string"
-              },
-              "row": {
-                "default": null,
-                "title": "Row",
-                "type": "integer"
-              },
-              "rows": {
-                "default": null,
-                "items": {},
-                "title": "Rows",
-                "type": "array"
-              },
-              "substring": {
-                "default": null,
-                "title": "Substring",
-                "type": "string"
-              },
-              "input_directory": {
-                "description": "Path to the directory to zip",
-                "type": "string"
-              },
-              "pattern": {
-                "description": "A optional glob pattern to match files and subdirectories to zip, defaults to **/*\"",
-                "nullable": true,
-                "type": "string"
-              },
-              "target_zip_file": {
-                "description": "Path to save the resulting ZIP file, including filename and .zip extension",
-                "type": "string"
-              },
-              "input_files": {
-                "description": "The list of files to include in the ZIP archive.",
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              "target_path": {
-                "description": "Path to the target directory where the contents of the ZIP file will be extracted.",
-                "type": "string"
-              },
-              "zip_file": {
-                "description": "A filesystem path to an existing ZIP file to be extracted.",
-                "type": "string"
-              }
-            },
-            "required": [
-              "operation"
-            ]
-          }
-        },
-        "workspace_shell_control": {
-          "enabled": true,
-          "description": "Terminal controller commands (exec + cwd state) exposed as one utility tool.",
-          "annotations": {
-            "title": "Terminal Control",
-            "destructiveHint": true
-          },
-          "inputSchema": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "operation": {
-                "type": "string",
-                "enum": [
-                  "execute_command",
-                  "change_directory",
-                  "get_current_directory",
-                  "get_command_history"
-                ],
-                "description": "Operation backing this aggregated call."
-              },
-              "command": {
-                "title": "Command",
-                "type": "string"
-              },
-              "timeout": {
-                "default": 30,
-                "title": "Timeout",
-                "type": "integer"
-              },
-              "path": {
-                "title": "Path",
-                "type": "string"
-              },
-              "count": {
-                "default": 10,
-                "title": "Count",
-                "type": "integer"
-              }
-            },
-            "required": [
-              "operation"
-            ]
-          }
-        },
-        "memory_suite": {
-          "enabled": true,
-          "description": "Basic Memory project operations (notes, search, projects) aggregated for simpler manifests.",
-          "annotations": {
-            "title": "Basic Memory Suite",
-            "openWorldHint": false
-          },
-          "inputSchema": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "operation": {
-                "type": "string",
-                "enum": [
-                  "build_context",
-                  "canvas",
-                  "create_memory_project",
-                  "delete_note",
-                  "delete_project",
-                  "edit_note",
-                  "get_current_project",
-                  "list_memory_projects",
-                  "move_note",
-                  "read_content",
-                  "read_note",
-                  "recent_activity",
-                  "search_notes",
-                  "set_default_project",
-                  "switch_project",
-                  "sync_status",
-                  "view_note",
-                  "write_note"
-                ],
-                "description": "Operation backing this aggregated call."
-              },
-              "depth": {
-                "anyOf": [
-                  {
-                    "$ref": "#/$defs/StringOrInt"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": 1,
-                "title": "Depth"
-              },
-              "max_related": {
-                "default": 10,
-                "title": "Max Related",
-                "type": "integer"
-              },
-              "page": {
-                "default": 1,
-                "title": "Page",
-                "type": "integer"
-              },
-              "page_size": {
-                "default": 10,
-                "title": "Page Size",
-                "type": "integer"
-              },
-              "project": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Project"
-              },
-              "timeframe": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": "7d",
-                "title": "Timeframe"
-              },
-              "url": {
-                "maxLength": 2028,
-                "minLength": 1,
-                "title": "Url",
-                "type": "string"
-              },
-              "edges": {
-                "items": {
-                  "additionalProperties": true,
-                  "type": "object"
-                },
-                "title": "Edges",
-                "type": "array"
-              },
-              "folder": {
-                "title": "Folder",
-                "type": "string"
-              },
-              "nodes": {
-                "items": {
-                  "additionalProperties": true,
-                  "type": "object"
-                },
-                "title": "Nodes",
-                "type": "array"
-              },
-              "title": {
-                "title": "Title",
-                "type": "string"
-              },
-              "project_name": {
-                "title": "Project Name",
-                "type": "string"
-              },
-              "project_path": {
-                "title": "Project Path",
-                "type": "string"
-              },
-              "set_default": {
-                "default": false,
-                "title": "Set Default",
-                "type": "boolean"
-              },
-              "identifier": {
-                "title": "Identifier",
-                "type": "string"
-              },
-              "content": {
-                "title": "Content",
-                "type": "string"
-              },
-              "expected_replacements": {
-                "default": 1,
-                "title": "Expected Replacements",
-                "type": "integer"
-              },
-              "find_text": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Find Text"
-              },
-              "section": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Section"
-              },
-              "_compatibility": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Compatibility"
-              },
-              "destination_path": {
-                "title": "Destination Path",
-                "type": "string"
-              },
-              "path": {
-                "title": "Path",
-                "type": "string"
-              },
-              "type": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "items": {
-                      "type": "string"
-                    },
-                    "type": "array"
-                  }
-                ],
-                "default": "",
-                "title": "Type"
-              },
-              "after_date": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "After Date"
-              },
-              "entity_types": {
-                "anyOf": [
-                  {
-                    "items": {
-                      "type": "string"
-                    },
-                    "type": "array"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Entity Types"
-              },
-              "query": {
-                "title": "Query",
-                "type": "string"
-              },
-              "search_type": {
-                "default": "text",
-                "title": "Search Type",
-                "type": "string"
-              },
-              "types": {
-                "anyOf": [
-                  {
-                    "items": {
-                      "type": "string"
-                    },
-                    "type": "array"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Types"
-              },
-              "entity_type": {
-                "default": "note",
-                "title": "Entity Type",
-                "type": "string"
-              },
-              "tags": {
-                "default": null,
-                "title": "Tags"
-              }
-            },
-            "required": [
-              "operation"
-            ],
-            "$defs": {
-              "StringOrInt": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "integer"
-                  }
-                ]
-              }
-            }
-          }
-        },
         "doc_fetch_suite": {
-          "enabled": true,
-          "description": "Docy fetch helpers (links, full pages, and source listings) via one consistent surface.",
           "annotations": {
             "title": "Doc Fetch",
             "readOnlyHint": true
           },
+          "description": "Docy fetch helpers (links, full pages, and source listings) via one consistent surface.",
+          "enabled": true,
           "inputSchema": {
-            "type": "object",
             "additionalProperties": false,
             "properties": {
               "operation": {
-                "type": "string",
+                "description": "Operation backing this aggregated call.",
                 "enum": [
                   "fetch_document_links",
                   "fetch_documentation_page",
                   "list_documentation_sources_tool"
                 ],
-                "description": "Operation backing this aggregated call."
+                "type": "string"
               },
               "url": {
                 "title": "Url",
                 "type": "string"
-              }
-            },
-            "required": [
-              "operation"
-            ]
-          }
-        },
-        "scrapling_fetch_suite": {
-          "enabled": true,
-          "description": "Scrapling page/pattern fetch entry point with unified schema metadata.",
-          "annotations": {
-            "title": "Scrapling Fetch",
-            "openWorldHint": true
-          },
-          "inputSchema": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "operation": {
-                "type": "string",
-                "enum": [
-                  "s_fetch_page",
-                  "s_fetch_pattern"
-                ],
-                "description": "Operation backing this aggregated call."
-              },
-              "format": {
-                "default": "markdown",
-                "title": "Format",
-                "type": "string"
-              },
-              "max_length": {
-                "default": 5000,
-                "title": "Max Length",
-                "type": "integer"
-              },
-              "mode": {
-                "default": "basic",
-                "title": "Mode",
-                "type": "string"
-              },
-              "start_index": {
-                "default": 0,
-                "title": "Start Index",
-                "type": "integer"
-              },
-              "url": {
-                "title": "Url",
-                "type": "string"
-              },
-              "context_chars": {
-                "default": 200,
-                "title": "Context Chars",
-                "type": "integer"
-              },
-              "search_pattern": {
-                "title": "Search Pattern",
-                "type": "string"
-              }
-            },
-            "required": [
-              "operation"
-            ]
-          }
-        },
-        "strata_ops_suite": {
-          "enabled": true,
-          "description": "Strata discovery/execution helpers consolidated for easier automation.",
-          "annotations": {
-            "title": "Strata Ops",
-            "openWorldHint": true
-          },
-          "inputSchema": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "operation": {
-                "type": "string",
-                "enum": [
-                  "discover_server_actions",
-                  "execute_action",
-                  "get_action_details",
-                  "handle_auth_failure",
-                  "search_documentation"
-                ],
-                "description": "Operation backing this aggregated call."
-              },
-              "server_names": {
-                "description": "List of server names to discover actions from.",
-                "items": {
-                  "enum": [],
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              "user_query": {
-                "description": "Natural language user query to filter results.",
-                "type": "string"
-              },
-              "action_name": {
-                "description": "The name of the action/operation to execute",
-                "type": "string"
-              },
-              "body_schema": {
-                "default": "{}",
-                "description": "JSON string containing request body",
-                "type": "string"
-              },
-              "path_params": {
-                "description": "JSON string containing path parameters",
-                "type": "string"
-              },
-              "query_params": {
-                "description": "JSON string containing query parameters",
-                "type": "string"
-              },
-              "server_name": {
-                "description": "The name of the server",
-                "enum": [],
-                "type": "string"
-              },
-              "auth_data": {
-                "description": "Authentication data when saving",
-                "type": "object"
-              },
-              "intention": {
-                "description": "Action to take for authentication",
-                "enum": [
-                  "get_auth_url",
-                  "save_auth_data"
-                ],
-                "type": "string"
-              },
-              "max_results": {
-                "default": 10,
-                "description": "Number of results to return. Default: 10",
-                "maximum": 50,
-                "minimum": 1,
-                "type": "integer"
-              },
-              "query": {
-                "description": "Search keywords",
-                "type": "string"
-              }
-            },
-            "required": [
-              "operation"
-            ]
-          }
-        },
-        "manage_docy_sources": {
-          "enabled": true,
-          "description": "Manage Docy documentation sources (list, add, remove, sync, import) through a single aggregated tool.",
-          "annotations": {
-            "title": "Docy Catalog Aggregate",
-            "destructiveHint": true,
-            "openWorldHint": true
-          },
-          "inputSchema": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "operation": {
-                "type": "string",
-                "enum": [
-                  "list_sources",
-                  "add_source",
-                  "remove_source",
-                  "sync_catalog",
-                  "import_from_manifest"
-                ],
-                "description": "Docy manager operation to run."
-              },
-              "url": {
-                "type": "string",
-                "format": "uri-reference",
-                "description": "HTTP URL for add/remove operations."
-              },
-              "id": {
-                "type": "string",
-                "description": "Source identifier for remove operations."
-              },
-              "title": {
-                "type": "string",
-                "description": "Optional short title stored with the source."
-              },
-              "tags": {
-                "type": "array",
-                "description": "Tags applied when adding or importing sources.",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "notes": {
-                "type": "string",
-                "description": "Long-form notes stored alongside the source."
-              },
-              "enabled": {
-                "type": "boolean",
-                "description": "Whether the Docy entry should be enabled after creation/import."
-              },
-              "allow_update": {
-                "type": "boolean",
-                "description": "Allow updating existing entries during import/add operations."
-              },
-              "refresh_hours": {
-                "type": "integer",
-                "minimum": 0,
-                "description": "Refresh cadence (in hours) to persist on the Docy source."
-              },
-              "dry_run": {
-                "type": "boolean",
-                "description": "Set to true to skip persistence and only report the planned work."
-              },
-              "manifest_path": {
-                "type": "string",
-                "description": "Local JSON/manifest path to hydrate Docy from (import operation)."
-              },
-              "manifest_url": {
-                "type": "string",
-                "format": "uri",
-                "description": "Remote manifest URL to hydrate Docy from (import operation)."
               }
             },
             "required": [
               "operation"
             ],
+            "type": "object"
+          },
+          "outputSchema": {
+            "properties": {
+              "result": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "result"
+            ],
+            "type": "object"
+          }
+        },
+        "manage_docy_sources": {
+          "annotations": {
+            "title": "Docy Catalog Aggregate",
+            "destructiveHint": true,
+            "openWorldHint": true
+          },
+          "description": "Manage Docy documentation sources (list, add, remove, sync, import) through a single aggregated tool.",
+          "enabled": true,
+          "inputSchema": {
+            "additionalProperties": false,
             "allOf": [
               {
                 "if": {
@@ -1080,19 +287,823 @@
                   ]
                 }
               }
-            ]
+            ],
+            "properties": {
+              "allow_update": {
+                "description": "Allow updating existing entries during import/add operations.",
+                "type": "boolean"
+              },
+              "dry_run": {
+                "description": "Set to true to skip persistence and only report the planned work.",
+                "type": "boolean"
+              },
+              "enabled": {
+                "description": "Whether the Docy entry should be enabled after creation/import.",
+                "type": "boolean"
+              },
+              "id": {
+                "description": "Source identifier for remove operations.",
+                "type": "string"
+              },
+              "manifest_path": {
+                "description": "Local JSON/manifest path to hydrate Docy from (import operation).",
+                "type": "string"
+              },
+              "manifest_url": {
+                "description": "Remote manifest URL to hydrate Docy from (import operation).",
+                "format": "uri",
+                "type": "string"
+              },
+              "notes": {
+                "description": "Long-form notes stored alongside the source.",
+                "type": "string"
+              },
+              "operation": {
+                "description": "Docy manager operation to run.",
+                "enum": [
+                  "list_sources",
+                  "add_source",
+                  "remove_source",
+                  "sync_catalog",
+                  "import_from_manifest"
+                ],
+                "type": "string"
+              },
+              "refresh_hours": {
+                "description": "Refresh cadence (in hours) to persist on the Docy source.",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "tags": {
+                "description": "Tags applied when adding or importing sources.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "title": {
+                "description": "Optional short title stored with the source.",
+                "type": "string"
+              },
+              "url": {
+                "description": "HTTP URL for add/remove operations.",
+                "format": "uri-reference",
+                "type": "string"
+              }
+            },
+            "required": [
+              "operation"
+            ],
+            "type": "object"
           },
           "outputSchema": {
-            "type": "object",
             "properties": {
               "result": {
-                "type": "object",
-                "additionalProperties": true
+                "additionalProperties": true,
+                "type": "object"
               }
             },
             "required": [
               "result"
-            ]
+            ],
+            "type": "object"
+          }
+        },
+        "memory_suite": {
+          "annotations": {
+            "title": "Basic Memory Suite",
+            "openWorldHint": false
+          },
+          "description": "Basic Memory project operations (notes, search, projects) aggregated for simpler manifests.",
+          "enabled": true,
+          "inputSchema": {
+            "$defs": {
+              "StringOrInt": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "_compatibility": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Compatibility"
+              },
+              "after_date": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "After Date"
+              },
+              "content": {
+                "title": "Content",
+                "type": "string"
+              },
+              "depth": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/StringOrInt"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": 1,
+                "title": "Depth"
+              },
+              "destination_path": {
+                "title": "Destination Path",
+                "type": "string"
+              },
+              "edges": {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "title": "Edges",
+                "type": "array"
+              },
+              "entity_type": {
+                "default": "note",
+                "title": "Entity Type",
+                "type": "string"
+              },
+              "entity_types": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Entity Types"
+              },
+              "expected_replacements": {
+                "default": 1,
+                "title": "Expected Replacements",
+                "type": "integer"
+              },
+              "find_text": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Find Text"
+              },
+              "folder": {
+                "title": "Folder",
+                "type": "string"
+              },
+              "identifier": {
+                "title": "Identifier",
+                "type": "string"
+              },
+              "max_related": {
+                "default": 10,
+                "title": "Max Related",
+                "type": "integer"
+              },
+              "nodes": {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "title": "Nodes",
+                "type": "array"
+              },
+              "operation": {
+                "description": "Operation backing this aggregated call.",
+                "enum": [
+                  "build_context",
+                  "canvas",
+                  "create_memory_project",
+                  "delete_note",
+                  "delete_project",
+                  "edit_note",
+                  "get_current_project",
+                  "list_memory_projects",
+                  "move_note",
+                  "read_content",
+                  "read_note",
+                  "recent_activity",
+                  "search_notes",
+                  "set_default_project",
+                  "switch_project",
+                  "sync_status",
+                  "view_note",
+                  "write_note"
+                ],
+                "type": "string"
+              },
+              "page": {
+                "default": 1,
+                "title": "Page",
+                "type": "integer"
+              },
+              "page_size": {
+                "default": 10,
+                "title": "Page Size",
+                "type": "integer"
+              },
+              "path": {
+                "title": "Path",
+                "type": "string"
+              },
+              "project": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Project"
+              },
+              "project_name": {
+                "title": "Project Name",
+                "type": "string"
+              },
+              "project_path": {
+                "title": "Project Path",
+                "type": "string"
+              },
+              "query": {
+                "title": "Query",
+                "type": "string"
+              },
+              "search_type": {
+                "default": "text",
+                "title": "Search Type",
+                "type": "string"
+              },
+              "section": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Section"
+              },
+              "set_default": {
+                "default": false,
+                "title": "Set Default",
+                "type": "boolean"
+              },
+              "tags": {
+                "default": null,
+                "title": "Tags"
+              },
+              "timeframe": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": "7d",
+                "title": "Timeframe"
+              },
+              "title": {
+                "title": "Title",
+                "type": "string"
+              },
+              "type": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                ],
+                "default": "",
+                "title": "Type"
+              },
+              "types": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Types"
+              },
+              "url": {
+                "maxLength": 2028,
+                "minLength": 1,
+                "title": "Url",
+                "type": "string"
+              }
+            },
+            "required": [
+              "operation"
+            ],
+            "type": "object"
+          }
+        },
+        "scrapling_fetch_suite": {
+          "annotations": {
+            "title": "Scrapling Fetch",
+            "openWorldHint": true
+          },
+          "description": "Scrapling page/pattern fetch entry point with unified schema metadata.",
+          "enabled": true,
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "context_chars": {
+                "default": 200,
+                "title": "Context Chars",
+                "type": "integer"
+              },
+              "format": {
+                "default": "markdown",
+                "title": "Format",
+                "type": "string"
+              },
+              "max_length": {
+                "default": 5000,
+                "title": "Max Length",
+                "type": "integer"
+              },
+              "mode": {
+                "default": "basic",
+                "title": "Mode",
+                "type": "string"
+              },
+              "operation": {
+                "description": "Operation backing this aggregated call.",
+                "enum": [
+                  "s_fetch_page",
+                  "s_fetch_pattern"
+                ],
+                "type": "string"
+              },
+              "search_pattern": {
+                "title": "Search Pattern",
+                "type": "string"
+              },
+              "start_index": {
+                "default": 0,
+                "title": "Start Index",
+                "type": "integer"
+              },
+              "url": {
+                "title": "Url",
+                "type": "string"
+              }
+            },
+            "required": [
+              "operation"
+            ],
+            "type": "object"
+          }
+        },
+        "strata_ops_suite": {
+          "annotations": {
+            "title": "Strata Ops",
+            "openWorldHint": true
+          },
+          "description": "Strata discovery/execution helpers consolidated for easier automation.",
+          "enabled": true,
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "action_name": {
+                "description": "The name of the action/operation to execute",
+                "type": "string"
+              },
+              "auth_data": {
+                "description": "Authentication data when saving",
+                "type": "object"
+              },
+              "body_schema": {
+                "default": "{}",
+                "description": "JSON string containing request body",
+                "type": "string"
+              },
+              "intention": {
+                "description": "Action to take for authentication",
+                "enum": [
+                  "get_auth_url",
+                  "save_auth_data"
+                ],
+                "type": "string"
+              },
+              "max_results": {
+                "default": 10,
+                "description": "Number of results to return. Default: 10",
+                "maximum": 50,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "operation": {
+                "description": "Operation backing this aggregated call.",
+                "enum": [
+                  "discover_server_actions",
+                  "execute_action",
+                  "get_action_details",
+                  "handle_auth_failure",
+                  "search_documentation"
+                ],
+                "type": "string"
+              },
+              "path_params": {
+                "description": "JSON string containing path parameters",
+                "type": "string"
+              },
+              "query": {
+                "description": "Search keywords",
+                "type": "string"
+              },
+              "query_params": {
+                "description": "JSON string containing query parameters",
+                "type": "string"
+              },
+              "server_name": {
+                "description": "The name of the server",
+                "enum": [],
+                "type": "string"
+              },
+              "server_names": {
+                "description": "List of server names to discover actions from.",
+                "items": {
+                  "enum": [],
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "user_query": {
+                "description": "Natural language user query to filter results.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "operation"
+            ],
+            "type": "object"
+          }
+        },
+        "workspace_fs_read": {
+          "annotations": {
+            "title": "Workspace FS Read",
+            "readOnlyHint": true
+          },
+          "description": "Read-only workspace filesystem helpers (listing, metadata, and search) behind a single entry point.",
+          "enabled": true,
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "as_json": {
+                "default": false,
+                "title": "As Json",
+                "type": "boolean"
+              },
+              "end_row": {
+                "default": null,
+                "title": "End Row",
+                "type": "integer"
+              },
+              "excludePatterns": {
+                "description": "Optional list of patterns to exclude from the search.",
+                "items": {
+                  "type": "string"
+                },
+                "nullable": true,
+                "type": "array"
+              },
+              "exclude_patterns": {
+                "description": "Optional list of glob patterns to exclude from the search. File matching these patterns will be ignored.",
+                "items": {
+                  "type": "string"
+                },
+                "nullable": true,
+                "type": "array"
+              },
+              "is_regex": {
+                "description": "Whether the query is a regular expression. If false, the query as plain text. (Default : false)",
+                "nullable": true,
+                "type": "boolean"
+              },
+              "limit": {
+                "description": "Optional maximum number of lines to read after the offset.",
+                "nullable": true,
+                "type": "integer"
+              },
+              "lines": {
+                "description": "The number of lines to read from the beginning of the file.",
+                "type": "integer"
+              },
+              "max_bytes": {
+                "description": "Maximum allowed file size (in bytes) to be read.",
+                "nullable": true,
+                "type": "integer"
+              },
+              "max_depth": {
+                "description": "Limits the depth of directory traversal",
+                "nullable": true,
+                "type": "integer"
+              },
+              "min_bytes": {
+                "default": "1",
+                "description": "Minimum file size (in bytes) to include in the search (default to 1).",
+                "nullable": true,
+                "type": "integer"
+              },
+              "offset": {
+                "description": "Number of lines to skip from the start (0-based).",
+                "type": "integer"
+              },
+              "operation": {
+                "description": "Operation backing this aggregated call.",
+                "enum": [
+                  "list_allowed_directories",
+                  "directory_tree",
+                  "list_directory",
+                  "list_directory_with_sizes",
+                  "calculate_directory_size",
+                  "get_file_info",
+                  "head_file",
+                  "read_file",
+                  "read_file_lines",
+                  "read_text_file",
+                  "read_media_file",
+                  "read_multiple_media_files",
+                  "read_multiple_text_files",
+                  "find_duplicate_files",
+                  "find_empty_directories",
+                  "search_files",
+                  "search_files_content"
+                ],
+                "type": "string"
+              },
+              "output_format": {
+                "default": "human-readable",
+                "description": "Defines the output format, which can be either `human-readable` or `bytes`.",
+                "nullable": true,
+                "oneOf": [
+                  {
+                    "enum": [
+                      "human-readable"
+                    ]
+                  },
+                  {
+                    "enum": [
+                      "bytes"
+                    ]
+                  }
+                ]
+              },
+              "path": {
+                "description": "The root path of the directory tree to generate.",
+                "type": "string"
+              },
+              "paths": {
+                "description": "The list of media file paths to read.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "pattern": {
+                "description": "Optional glob pattern can be used to match target files.",
+                "nullable": true,
+                "type": "string"
+              },
+              "query": {
+                "description": "Text or regex pattern to find in file contents (e.g., 'TODO' or '^function\\\\s+').",
+                "type": "string"
+              },
+              "root_path": {
+                "description": "The root directory path to start the size calculation.",
+                "type": "string"
+              },
+              "start_row": {
+                "default": null,
+                "title": "Start Row",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "operation"
+            ],
+            "type": "object"
+          }
+        },
+        "workspace_fs_write": {
+          "annotations": {
+            "title": "Workspace FS Write",
+            "destructiveHint": true
+          },
+          "description": "Workspace filesystem writers/editors (create/move/edit/compress) routed through one safe wrapper.",
+          "enabled": true,
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "content": {
+                "title": "Content",
+                "type": "string"
+              },
+              "destination": {
+                "description": "The destination path to move the file to.",
+                "type": "string"
+              },
+              "dryRun": {
+                "description": "Preview changes using git-style diff format without applying them.",
+                "nullable": true,
+                "type": "boolean"
+              },
+              "edits": {
+                "description": "The list of edit operations to apply.",
+                "items": {
+                  "properties": {
+                    "newText": {
+                      "description": "Text to replace the matched text with.",
+                      "type": "string"
+                    },
+                    "oldText": {
+                      "description": "Text to search for - must match exactly.",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "oldText",
+                    "newText"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "input_directory": {
+                "description": "Path to the directory to zip",
+                "type": "string"
+              },
+              "input_files": {
+                "description": "The list of files to include in the ZIP archive.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "mode": {
+                "default": "overwrite",
+                "title": "Mode",
+                "type": "string"
+              },
+              "operation": {
+                "description": "Operation backing this aggregated call.",
+                "enum": [
+                  "create_directory",
+                  "move_file",
+                  "edit_file",
+                  "write_file",
+                  "delete_file_content",
+                  "insert_file_content",
+                  "update_file_content",
+                  "zip_directory",
+                  "zip_files",
+                  "unzip_file"
+                ],
+                "type": "string"
+              },
+              "path": {
+                "description": "The path where the directory will be created.",
+                "type": "string"
+              },
+              "pattern": {
+                "description": "A optional glob pattern to match files and subdirectories to zip, defaults to **/*\"",
+                "nullable": true,
+                "type": "string"
+              },
+              "row": {
+                "default": null,
+                "title": "Row",
+                "type": "integer"
+              },
+              "rows": {
+                "default": null,
+                "items": {},
+                "title": "Rows",
+                "type": "array"
+              },
+              "source": {
+                "description": "The source path of the file to move.",
+                "type": "string"
+              },
+              "substring": {
+                "default": null,
+                "title": "Substring",
+                "type": "string"
+              },
+              "target_path": {
+                "description": "Path to the target directory where the contents of the ZIP file will be extracted.",
+                "type": "string"
+              },
+              "target_zip_file": {
+                "description": "Path to save the resulting ZIP file, including filename and .zip extension",
+                "type": "string"
+              },
+              "zip_file": {
+                "description": "A filesystem path to an existing ZIP file to be extracted.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "operation"
+            ],
+            "type": "object"
+          }
+        },
+        "workspace_shell_control": {
+          "annotations": {
+            "title": "Terminal Control",
+            "destructiveHint": true
+          },
+          "description": "Terminal controller commands (exec + cwd state) exposed as one utility tool.",
+          "enabled": true,
+          "inputSchema": {
+            "additionalProperties": false,
+            "properties": {
+              "command": {
+                "title": "Command",
+                "type": "string"
+              },
+              "count": {
+                "default": 10,
+                "title": "Count",
+                "type": "integer"
+              },
+              "operation": {
+                "description": "Operation backing this aggregated call.",
+                "enum": [
+                  "execute_command",
+                  "change_directory",
+                  "get_current_directory",
+                  "get_command_history"
+                ],
+                "type": "string"
+              },
+              "path": {
+                "title": "Path",
+                "type": "string"
+              },
+              "timeout": {
+                "default": 30,
+                "title": "Timeout",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "operation"
+            ],
+            "type": "object"
           }
         }
       }
