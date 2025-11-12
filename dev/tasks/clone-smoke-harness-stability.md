@@ -200,6 +200,36 @@ Documenting these probes here keeps the workbook synchronized with the expectati
 2. ✅ (2025-11-12) Skip-bootstrap harness run (`timeout 120s python3 scripts/run_e2e_clone_smoke_test.py ... --skip-bootstrap --workspace /tmp/stelae-smoke-workspace-dev --reuse-workspace --keep-workspace`) restarted the stack on `:20759`; `wait_port` + `HEAD /mcp` succeeded before the run exited (~50s). Logs + workspace retained for reference.
 3. ✅ (2025-11-12) `/mcp` now returns HTTP 200 under the forked proxy, and `local_tool_count()` gracefully handles transient JSON failures. Remaining harness failures stem from missing `pytest` inside the sandbox, not the restart loop.
 
+## 2025-11-12 Session – Pytest bootstrap + manual install checkpoint
+
+### Code updates
+
+- `scripts/run_e2e_clone_smoke_test.py` now provisions an isolated `python-site/` inside each smoke workspace, installs `pytest>=8.2,<9.0` there via `pip --target`, and temporarily forces `PIP_REQUIRE_VIRTUALENV=0` so contributors who export that guardrail can still install sandbox-only deps. The helper inserts the site dir at the front of `PYTHONPATH`, so both structural and full-suite pytest invocations succeed without touching the host interpreter.
+- README + `docs/e2e_clone_smoke_test.md` document the new pytest bootstrap so operators know the harness handles this dependency automatically.
+
+### Runs (all from `/home/gabri/dev/stelae`)
+
+1. `timeout 120s python3 scripts/run_e2e_clone_smoke_test.py --wrapper-release ~/dev/codex-mcp-wrapper/dist/releases/0.1.0 --manual-stage install --bootstrap-only --workspace /tmp/stelae-smoke-workspace-dev3 --force-workspace`  
+   - Result: warmed a fresh workspace in ~6 s (starter bundle installed, pm2 home seeded, workspace kept for reuse).
+2. `timeout 120s python3 scripts/run_e2e_clone_smoke_test.py --wrapper-release … --manual-stage install --skip-bootstrap --workspace /tmp/stelae-smoke-workspace-dev3 --reuse-workspace --keep-workspace` *(before piping `PIP_REQUIRE_VIRTUALENV=0`)*  
+   - Result: restart succeeded and `/mcp` probe stayed green, but the structural pytest step failed because pip refused to install outside a venv. Added the env override + `pip --target` install path as noted above.
+3. **Post-fix validation** `timeout 120s python3 scripts/run_e2e_clone_smoke_test.py --wrapper-release … --manual-stage install --skip-bootstrap --workspace /tmp/stelae-smoke-workspace-dev3 --reuse-workspace --keep-workspace`  
+   - Result: restart finished in ~14 s, `pytest tests/test_repo_sanitized.py` passed using the sandboxed install, and the harness wrote `manual_playbook.md`/`manual_result.json` before kicking off the `bundle-tools` Codex stage. The outer `timeout 120s` expired while `codex exec --json … bundle-tools` was still running, so no transcript was captured (workspace retained for follow-up).
+4. **Extended timeout probe** `timeout 300s python3 scripts/run_e2e_clone_smoke_test.py --wrapper-release … --manual-stage install --skip-bootstrap --workspace /tmp/stelae-smoke-workspace-dev3 --reuse-workspace --keep-workspace`  
+   - Result: identical behavior—structural pytest reused the cached install and manual assets regenerated successfully, but Codex automation was still running `bundle-tools` when the 5 min timeout fired. No tool-call transcript yet; need to profile the Codex CLI stage itself to understand the stall.
+
+Artifacts of interest: `/tmp/stelae-smoke-workspace-dev3/harness.log` (captures all four runs) plus the sandboxed `python-site/` and manual playbook files generated after each skip-bootstrap attempt.
+
+### Follow-ups
+
+- Investigate why `codex exec --json … bundle-tools` does not finish within 5 min during `--manual-stage install` runs (capture raw JSONL output or test `codex exec` outside the harness to see whether it blocks on startup).
+- Once Codex stage timing is understood, rerun the skip-bootstrap flow without hitting the timeout so we have a full `bundle-tools` transcript and can confirm the harness exits cleanly at the manual `install` checkpoint.
+
+### Prompt/catalog alignment checklist
+
+- [x] Update the bundle-stage prompt so Codex calls `workspace_fs_read`, `grep`, and `doc_fetch_suite` directly even when `tools/list` omits them (2025-11-12).
+- [ ] Ensure the Stelae MCP catalog consistently publishes those tools for Codex clients; expand this item into its own task file when work begins so the fix can be tracked independently. Note that seeing the tools via `/mcp` in the TUI or in raw `codex mcp` listings does **not** guarantee the agent’s working “catalog” contains them—Codex still defaults to whatever manifest it already trusts unless the proxy advertises the entries at connect time. Even if the harness can manually invoke the tools, we need a real fix (in the main repo) plus a harness regression so the full clone smoke test verifies that agents can discover and call the published tools end-to-end.
+
 ## Checklist (Copy into PR or issue if needed)
 
 - [ ] Code/tests updated

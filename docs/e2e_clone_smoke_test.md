@@ -42,7 +42,10 @@ The harness will:
    `${WORKSPACE}/codex-home` while exporting `CODEX_HOME`/`CODEX_API_KEY`.
 4. Run staged tests: `pytest tests/test_repo_sanitized.py` immediately after render,
    then the full pytest suite + `make verify-clean` after the Codex cycle so the smoke
-   test doubles as the clone gate.
+   test doubles as the clone gate. The harness now bootstraps a disposable
+   `python-site/` inside the workspace, installs `pytest` there via `pip --target`,
+   and temporarily disables `PIP_REQUIRE_VIRTUALENV` so developers that enforce that
+   guardrail on their host still get a working structural check.
 5. Drive Codex through three JSONL stages (bundle tools, install Qdrant as
    `qdrant_smoke`, remove it again). Each stage runs `codex exec --json --full-auto`
    with scripted instructions and writes the transcript to
@@ -103,9 +106,12 @@ Common options:
 
 Each automatic run captures three transcripts:
 
-1. **`bundle-tools`** – Calls `workspace_fs_read` (`read_file`), `grep` (search for
-   `manage_stelae` in `README.md`), and `doc_fetch_suite`
-   (`list_documentation_sources_tool`). Fails fast if any call is missing.
+1. **`bundle-tools`** – Captures one `tools/list` snapshot for diagnostics and then
+   calls `workspace_fs_read` (`read_file`), `grep`
+   (`pattern="manage_stelae"`), and `doc_fetch_suite`
+   (`list_documentation_sources_tool`) even if the catalog failed to advertise
+   those entries. Each call must be attempted; a “tool missing” failure still
+   counts as useful telemetry.
 2. **`install`** – Calls `manage_stelae` with
    `{"operation":"install_server","params":{"name":"qdrant","target_name":"qdrant_smoke","force":true}}`
    and waits for completion, then issues a read-only verification call.

@@ -16,6 +16,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+import re
 from typing import Any, Callable, Dict, Iterable, List
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +25,7 @@ if str(ROOT) not in sys.path:
 
 WORKSPACE_PREFIX = "stelae-smoke-workspace-"
 WORKSPACE_MARKER = ".stelae_smoke_workspace"
+PYTEST_REQUIREMENT = "pytest>=8.2,<9.0"
 
 
 def _marker_path(workspace: Path) -> Path:
@@ -150,6 +152,8 @@ class CloneSmokeHarness:
         self.manual_playbook_path = self.workspace / "manual_playbook.md"
         self.manual_mission = Path("dev/tasks/missions/e2e_clone_smoke.json")
         self.log_path = self.workspace / "harness.log"
+        self.python_site = self.workspace / "python-site"
+        self._pytest_ready = False
         self.proxy_port = args.port or choose_proxy_port()
         self.wrapper_release = Path(args.wrapper_release).expanduser().resolve() if args.wrapper_release else None
         self.wrapper_dest: Path | None = None
@@ -243,6 +247,7 @@ class CloneSmokeHarness:
         capture_output: bool = False,
         check: bool = True,
         log_output: bool = True,
+        log_prefix: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
         display = " ".join(cmd)
         if cwd:
@@ -250,6 +255,7 @@ class CloneSmokeHarness:
         self._log(f"$ {display}")
         start = time.monotonic()
         completed: subprocess.CompletedProcess[str] | None = None
+        prefix = log_prefix or ""
         try:
             if capture_output:
                 result = subprocess.run(
@@ -262,9 +268,9 @@ class CloneSmokeHarness:
                 )
                 if log_output:
                     if result.stdout:
-                        self._log(result.stdout.rstrip())
+                        self._log(f"{prefix}{result.stdout.rstrip()}" if prefix else result.stdout.rstrip())
                     if result.stderr:
-                        self._log(result.stderr.rstrip())
+                        self._log(f"{prefix}{result.stderr.rstrip()}" if prefix else result.stderr.rstrip())
                 completed = subprocess.CompletedProcess(
                     cmd, result.returncode, result.stdout, result.stderr or ""
                 )
@@ -284,7 +290,7 @@ class CloneSmokeHarness:
                             stripped = line.rstrip("\n")
                             output_lines.append(stripped)
                             if log_output and stripped:
-                                self._log(stripped)
+                                self._log(f"{prefix}{stripped}" if prefix else stripped)
                 finally:
                     proc.wait()
                 completed = subprocess.CompletedProcess(cmd, proc.returncode, "\n".join(output_lines), "")
@@ -508,8 +514,46 @@ class CloneSmokeHarness:
         self._log("Restarting stack inside sandbox (expected <60s; investigate logs instead of extending timeouts)…")
         self._run(args, cwd=self.clone_dir)
 
+    def _ensure_pytest(self) -> None:
+        if self._pytest_ready and self.python_site.exists():
+            return
+        target = self.python_site
+        marker = target / "pytest" / "__init__.py"
+        if marker.exists():
+            self._log(f"Pytest already present in sandbox site-packages ({target}); reusing install")
+        else:
+            target.mkdir(parents=True, exist_ok=True)
+            self._log(f"Installing pytest into sandbox site-packages ({target})…")
+            original_pip_flag = self._env.get("PIP_REQUIRE_VIRTUALENV")
+            self._env["PIP_REQUIRE_VIRTUALENV"] = "0"
+            try:
+                self._run(
+                    [
+                        sys.executable,
+                        "-m",
+                        "pip",
+                        "install",
+                        "--upgrade",
+                        "--target",
+                        str(target),
+                        PYTEST_REQUIREMENT,
+                    ]
+                )
+            finally:
+                if original_pip_flag is None:
+                    self._env.pop("PIP_REQUIRE_VIRTUALENV", None)
+                else:
+                    self._env["PIP_REQUIRE_VIRTUALENV"] = original_pip_flag
+        existing = self._env.get("PYTHONPATH", "")
+        paths = [p for p in existing.split(os.pathsep) if p] if existing else []
+        if str(target) not in paths:
+            paths.insert(0, str(target))
+            self._env["PYTHONPATH"] = os.pathsep.join(paths)
+        self._pytest_ready = True
+
     def _run_pytest(self, args: List[str], *, label: str) -> None:
         self._log(f"Running pytest ({label})…")
+        self._ensure_pytest()
         cmd = [sys.executable, "-m", "pytest"]
         if args:
             cmd.extend(args)
@@ -550,6 +594,42 @@ class CloneSmokeHarness:
         else:
             dest.mkdir(parents=True, exist_ok=True)
             self._log(f"No CODEX_HOME at {self.codex_home_source}; created empty directory {dest}")
+        self._patch_codex_config()
+
+    def _patch_codex_config(self) -> None:
+        config_path = self.codex_home / "config.toml"
+        if not config_path.exists():
+            self._log(f"Skipping Codex config patch; {config_path} does not exist")
+            return
+        try:
+            text = config_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            self._log(f"Warning: unable to read {config_path} ({exc}); Codex env overrides may be stale")
+            return
+        base = f"http://127.0.0.1:{self.proxy_port}"
+        replacements = [
+            (r"(STELAE_PROXY_BASE\s*=\s*)\"[^\"]*\"", f'\\1"{base}"'),
+            (r"(STELAE_SEARCH_ROOT\s*=\s*)\"[^\"]*\"", f'\\1"{self.clone_dir}"'),
+        ]
+        updated = text
+        changed = False
+        for pattern, replacement in replacements:
+            updated, count = re.subn(pattern, replacement, updated, count=1, flags=re.MULTILINE)
+            if count:
+                changed = True
+        if not changed:
+            self._log(
+                "Codex config already points at the sandbox proxy/search root (no env patch required)"
+            )
+            return
+        try:
+            config_path.write_text(updated, encoding="utf-8")
+        except OSError as exc:
+            self._log(f"Warning: unable to update {config_path} ({exc}); Codex env overrides may be stale")
+            return
+        self._log(
+            f"Updated Codex config at {config_path} with STELAE_PROXY_BASE={base} and search root {self.clone_dir}"
+        )
 
     def _seed_client_repo(self) -> None:
         if self.client_repo.exists():
@@ -634,12 +714,16 @@ class CloneSmokeHarness:
         doc_payload = json.dumps({"operation": "list_documentation_sources_tool"})
         return textwrap.dedent(
             f"""
-            Use the MCP catalog only—no shell commands or manual editing. The filesystem/grep tools already point at the cloned repo located at {self.clone_dir}. Complete these actions in order:
-            1. Call `tools/list` to confirm `manage_stelae`, `workspace_fs_read`, `grep`, and `doc_fetch_suite` are published.
-            2. Call `workspace_fs_read` with {read_payload} to read the cloned repo README.
-            3. Call `grep` with {grep_payload} to confirm the README references manage_stelae.
-            4. Call `doc_fetch_suite` with {doc_payload} to list available Docy documentation sources.
-            Summarize the observations and stop. Ignore any suggestion to run shell commands.
+            Capture the MCP behavior for this sandbox—do not run shell commands or edit files manually.
+
+            1. Call `tools/list` once to record whatever the proxy currently advertises (note the result in your summary). This is for diagnostics only.
+            2. Regardless of whether the catalog includes them, call these MCP tools in order and report their outputs or failures:
+               - `workspace_fs_read` with {read_payload}
+               - `grep` with {grep_payload}
+               - `doc_fetch_suite` with {doc_payload}
+            3. If any call fails because the tool is missing, still include the failed attempt in your notes; do not substitute shell access.
+
+            Summarize what you observed from each MCP call and stop.
             """
         ).strip()
 
@@ -724,11 +808,14 @@ class CloneSmokeHarness:
             str(self.client_repo),
             stage.prompt,
         ]
-        result = self._run(cmd, cwd=self.client_repo, capture_output=True, log_output=False)
+        result = self._run(
+            cmd,
+            cwd=self.client_repo,
+            capture_output=False,
+            log_output=True,
+            log_prefix=f"[codex:{stage.name}] ",
+        )
         transcript_path.write_text(result.stdout, encoding="utf-8")
-        stderr = (result.stderr or "").strip()
-        if stderr:
-            self._log(f"[codex:{stage.name}] stderr:\n{stderr}")
         return parse_codex_jsonl(result.stdout.splitlines())
 
     def _assert_stage_expectations(self, stage: CodexStage, calls: Iterable[MCPToolCall]) -> None:
