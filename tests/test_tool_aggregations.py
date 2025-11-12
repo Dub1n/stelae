@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+from stelae_lib.config_overlays import overlay_path_for
 from stelae_lib.integrator.tool_aggregations import (
     AggregatedToolRunner,
     ToolAggregationConfig,
@@ -12,6 +13,7 @@ from stelae_lib.integrator.tool_aggregations import (
     load_tool_aggregation_config,
 )
 from stelae_lib.integrator.tool_overrides import ToolOverridesStore
+from tests._tool_override_test_helpers import build_sample_runtime
 
 
 @pytest.fixture()
@@ -159,3 +161,81 @@ def test_require_any_of_enforced() -> None:
     runner = AggregatedToolRunner(aggregation, fake_call)
     with pytest.raises(ToolAggregationError):
         asyncio.run(runner.dispatch({"operation": "import"}))
+
+
+def test_aggregation_runtime_dedupes_and_hides(tmp_path: Path) -> None:
+    fixture = build_sample_runtime(tmp_path)
+    servers = fixture.runtime_payload["servers"]
+    aggregated = servers["tool_aggregator"]["tools"]["doc_fetch_suite"]
+
+    required_fields = aggregated["inputSchema"]["required"]
+    assert required_fields == ["operation"]
+
+    enum_values = aggregated["inputSchema"]["properties"]["operation"]["enum"]
+    assert enum_values == ["fetch_document_links", "fetch_documentation_page"]
+
+    docs_tools = servers["docs"]["tools"]
+    assert all(entry["enabled"] is False for entry in docs_tools.values())
+
+
+def test_overlay_only_excludes_defaults(monkeypatch, tmp_path: Path) -> None:
+    base_path = tmp_path / "tool_aggregations.json"
+    base_data = {
+        "schemaVersion": 1,
+        "defaults": {"selectorField": "operation", "serverName": "tool_aggregator"},
+        "hiddenTools": [
+            {"server": "docs", "tool": "fetch_document_links", "reason": "Wrapped"}
+        ],
+        "aggregations": [
+            {
+                "name": "doc_fetch_suite",
+                "description": "Docs",
+                "inputSchema": {"type": "object"},
+                "operations": [
+                    {"value": "fetch_document_links", "downstreamTool": "fetch_document_links"}
+                ],
+            }
+        ],
+    }
+    base_path.write_text(json.dumps(base_data), encoding="utf-8")
+
+    config_home = tmp_path / "config_home"
+    monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_home))
+    overlay_path = overlay_path_for(base_path)
+    overlay_path.parent.mkdir(parents=True, exist_ok=True)
+    overlay_data = {
+        "hiddenTools": [
+            {"server": "docs", "tool": "fetch_document_links", "reason": "Wrapped"},
+            {"server": "mem", "tool": "legacy", "reason": "Custom"},
+        ],
+        "aggregations": [
+            {
+                "name": "doc_fetch_suite",
+                "description": "Docs",
+                "inputSchema": {"type": "object"},
+                "operations": [
+                    {"value": "fetch_document_links", "downstreamTool": "fetch_document_links"}
+                ],
+            },
+            {
+                "name": "custom_suite",
+                "description": "Custom",
+                "inputSchema": {"type": "object"},
+                "operations": [
+                    {"value": "ping", "downstreamTool": "custom_tool"},
+                ],
+            },
+        ],
+    }
+    overlay_path.write_text(json.dumps(overlay_data), encoding="utf-8")
+
+    config = load_tool_aggregation_config(
+        base_path,
+        schema_path=Path("config/tool_aggregations.schema.json"),
+        overlay_only=True,
+    )
+    names = [agg.name for agg in config.aggregations]
+    assert names == ["custom_suite"]
+    hidden = config.hidden_tools
+    assert len(hidden) == 1
+    assert hidden[0].server == "mem"

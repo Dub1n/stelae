@@ -48,26 +48,42 @@ def main() -> None:
         help="Merged overrides destination (defaults to ${TOOL_OVERRIDES_PATH} or ~/.config/stelae/tool_overrides.json)",
     )
     parser.add_argument(
-        "--persist-overlay",
-        action="store_true",
-        help="Write aggregation results into the overlay file (used when refreshing tracked data)",
+        "--scope",
+        choices=("local", "default"),
+        default="local",
+        help="Which aggregation layer to process (local overlays or tracked defaults)",
     )
     args = parser.parse_args()
 
-    config = load_tool_aggregation_config(args.config, schema_path=args.schema)
+    overlay_path = overlay_path_for(args.overrides)
+    runtime_default = args.output or os.getenv("TOOL_OVERRIDES_PATH") or (config_home() / "tool_overrides.json")
+
+    if args.scope == "default":
+        config = load_tool_aggregation_config(
+            args.config,
+            schema_path=args.schema,
+            include_overlay=False,
+        )
+        target = "base"
+    else:
+        config = load_tool_aggregation_config(
+            args.config,
+            schema_path=args.schema,
+            overlay_only=True,
+        )
+        target = "overlay"
+
     if args.check_only:
         print(
             f"Validated {args.config} with {len(config.aggregations)} aggregations and {len(config.all_hidden_tools())} hidden tools."
         )
         return
 
-    runtime_default = args.output or os.getenv("TOOL_OVERRIDES_PATH") or (config_home() / "tool_overrides.json")
-    target_mode = "overlay" if args.persist_overlay else "runtime"
     store = ToolOverridesStore(
         args.overrides,
-        overlay_path=overlay_path_for(args.overrides),
+        overlay_path=overlay_path,
         runtime_path=Path(runtime_default),
-        target=target_mode,
+        target=target,
     )
     changed = config.apply_overrides(store)
     if changed:
@@ -77,6 +93,8 @@ def main() -> None:
         )
     else:
         print("Aggregation overrides already up to date.")
+        if target != "runtime":
+            store.export_runtime()
 
 
 if __name__ == "__main__":

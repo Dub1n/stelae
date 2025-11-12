@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, Iterable
+from typing import Any, Dict, Iterable, Sequence
 
 from stelae_lib.config_overlays import deep_merge
 from stelae_lib.fileio import atomic_write
@@ -302,10 +302,44 @@ class ToolOverridesStore:
 
     def _merged_payload(self) -> Dict[str, Any]:
         merged = deep_merge(self._base_data, self._overlay_data)
-        return json.loads(json.dumps(merged, ensure_ascii=False))
+        sanitized = _dedupe_schema_arrays(merged)
+        return json.loads(json.dumps(sanitized, ensure_ascii=False))
 
     def snapshot(self) -> Dict[str, Any]:
         return json.loads(json.dumps(self._data, ensure_ascii=False))
 
     def merged_snapshot(self) -> Dict[str, Any]:
         return self._merged_payload()
+
+
+def _dedupe_schema_arrays(payload: Dict[str, Any]) -> Dict[str, Any]:
+    def _walk(node: Any, parent_key: str | None = None) -> Any:
+        if isinstance(node, dict):
+            return {key: _walk(value, key) for key, value in node.items()}
+        if isinstance(node, list):
+            cleaned = [_walk(item, None) for item in node]
+            if parent_key in {"enum", "required"}:
+                cleaned = _dedupe_list(cleaned)
+            return cleaned
+        return node
+
+    return _walk(payload)
+
+
+def _dedupe_list(items: Sequence[Any]) -> list[Any]:
+    deduped: list[Any] = []
+    seen: set[str] = set()
+    for item in items:
+        marker = _stable_marker(item)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        deduped.append(item)
+    return deduped
+
+
+def _stable_marker(value: Any) -> str:
+    try:
+        return json.dumps(value, sort_keys=True, ensure_ascii=False)
+    except TypeError:
+        return repr(value)

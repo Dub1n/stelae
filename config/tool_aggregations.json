@@ -1,6 +1,5 @@
 {
   "schemaVersion": 1,
-  "proxyURL": "http://127.0.0.1:9090",
   "defaults": {
     "selectorField": "operation",
     "caseInsensitiveSelector": true,
@@ -9,10 +8,365 @@
   },
   "hiddenTools": [
     {
+      "server": "one_mcp",
+      "tool": "configure_mcp_plan",
+      "reason": "Use manage_stelae integrator instead"
+    },
+    {
+      "server": "one_mcp",
+      "tool": "deep_search_planning",
+      "reason": "Use manage_stelae integrator instead"
+    },
+    {
+      "server": "one_mcp",
+      "tool": "fetch_readme",
+      "reason": "Use manage_stelae integrator instead"
+    },
+    {
+      "server": "one_mcp",
+      "tool": "file_system_config_setup",
+      "reason": "Use manage_stelae integrator instead"
+    },
+    {
+      "server": "one_mcp",
+      "tool": "find_mcp_config_path_path",
+      "reason": "Use manage_stelae integrator instead"
+    },
+    {
+      "server": "one_mcp",
+      "tool": "quick_search",
+      "reason": "Use manage_stelae integrator instead"
+    },
+    {
+      "server": "one_mcp",
+      "tool": "validate_mcp_config_content",
+      "reason": "Use manage_stelae integrator instead"
+    },
+    {
       "server": "facade",
       "tool": "search",
       "reason": "Placeholder verification tool no longer needed in manifests"
     }
   ],
-  "aggregations": []
+  "aggregations": [
+    {
+      "name": "manage_docy_sources",
+      "description": "Manage Docy documentation sources (list, add, remove, sync, import) through a single aggregated tool.",
+      "annotations": {
+        "title": "Docy Catalog Aggregate",
+        "destructiveHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "type": "string",
+            "enum": [
+              "list_sources",
+              "add_source",
+              "remove_source",
+              "sync_catalog",
+              "import_from_manifest"
+            ],
+            "description": "Docy manager operation to run."
+          },
+          "url": {
+            "type": "string",
+            "format": "uri-reference",
+            "description": "HTTP URL for add/remove operations."
+          },
+          "id": {
+            "type": "string",
+            "description": "Source identifier for remove operations."
+          },
+          "title": {
+            "type": "string",
+            "description": "Optional short title stored with the source."
+          },
+          "tags": {
+            "type": "array",
+            "description": "Tags applied when adding or importing sources.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "notes": {
+            "type": "string",
+            "description": "Long-form notes stored alongside the source."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the Docy entry should be enabled after creation/import."
+          },
+          "allow_update": {
+            "type": "boolean",
+            "description": "Allow updating existing entries during import/add operations."
+          },
+          "refresh_hours": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Refresh cadence (in hours) to persist on the Docy source."
+          },
+          "dry_run": {
+            "type": "boolean",
+            "description": "Set to true to skip persistence and only report the planned work."
+          },
+          "manifest_path": {
+            "type": "string",
+            "description": "Local JSON/manifest path to hydrate Docy from (import operation)."
+          },
+          "manifest_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Remote manifest URL to hydrate Docy from (import operation)."
+          }
+        },
+        "required": [
+          "operation"
+        ],
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "operation": {
+                  "const": "add_source"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "url"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "operation": {
+                  "const": "remove_source"
+                }
+              }
+            },
+            "then": {
+              "anyOf": [
+                {
+                  "required": [
+                    "url"
+                  ]
+                },
+                {
+                  "required": [
+                    "id"
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "operation": {
+                  "const": "import_from_manifest"
+                }
+              }
+            },
+            "then": {
+              "anyOf": [
+                {
+                  "required": [
+                    "manifest_path"
+                  ]
+                },
+                {
+                  "required": [
+                    "manifest_url"
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "result": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "operations": [
+        {
+          "value": "list_sources",
+          "downstreamTool": "manage_docy",
+          "description": "Return the Docy catalog summary and source list.",
+          "argumentMappings": [
+            {
+              "target": "operation",
+              "value": "list_sources"
+            }
+          ]
+        },
+        {
+          "value": "add_source",
+          "downstreamTool": "manage_docy",
+          "description": "Add a Docy source and optionally persist immediately.",
+          "argumentMappings": [
+            {
+              "target": "operation",
+              "value": "add_source"
+            },
+            {
+              "target": "params.url",
+              "from": "url",
+              "required": true
+            },
+            {
+              "target": "params.title",
+              "from": "title",
+              "stripIfNull": true
+            },
+            {
+              "target": "params.id",
+              "from": "id",
+              "stripIfNull": true
+            },
+            {
+              "target": "params.tags",
+              "from": "tags",
+              "stripIfNull": true
+            },
+            {
+              "target": "params.notes",
+              "from": "notes",
+              "stripIfNull": true
+            },
+            {
+              "target": "params.enabled",
+              "from": "enabled",
+              "stripIfNull": true
+            },
+            {
+              "target": "params.refresh_hours",
+              "from": "refresh_hours",
+              "stripIfNull": true
+            },
+            {
+              "target": "params.allow_update",
+              "from": "allow_update",
+              "stripIfNull": true
+            },
+            {
+              "target": "params.dry_run",
+              "from": "dry_run",
+              "stripIfNull": true
+            }
+          ]
+        },
+        {
+          "value": "remove_source",
+          "downstreamTool": "manage_docy",
+          "description": "Remove a Docy source by url or identifier.",
+          "argumentMappings": [
+            {
+              "target": "operation",
+              "value": "remove_source"
+            },
+            {
+              "target": "params.url",
+              "from": "url",
+              "stripIfNull": true
+            },
+            {
+              "target": "params.id",
+              "from": "id",
+              "stripIfNull": true
+            },
+            {
+              "target": "params.dry_run",
+              "from": "dry_run",
+              "stripIfNull": true
+            }
+          ]
+        },
+        {
+          "value": "sync_catalog",
+          "downstreamTool": "manage_docy",
+          "description": "Render the Docy URL file without mutating entries.",
+          "argumentMappings": [
+            {
+              "target": "operation",
+              "value": "sync_catalog"
+            }
+          ]
+        },
+        {
+          "value": "import_from_manifest",
+          "downstreamTool": "manage_docy",
+          "description": "Hydrate Docy sources from a discovery manifest (file or URL).",
+          "argumentMappings": [
+            {
+              "target": "operation",
+              "value": "import_from_manifest"
+            },
+            {
+              "target": "params.manifest_path",
+              "from": "manifest_path",
+              "stripIfNull": true
+            },
+            {
+              "target": "params.manifest_url",
+              "from": "manifest_url",
+              "stripIfNull": true
+            },
+            {
+              "target": "params.tags",
+              "from": "tags",
+              "stripIfNull": true
+            },
+            {
+              "target": "params.enabled",
+              "from": "enabled",
+              "stripIfNull": true
+            },
+            {
+              "target": "params.refresh_hours",
+              "from": "refresh_hours",
+              "stripIfNull": true
+            },
+            {
+              "target": "params.allow_update",
+              "from": "allow_update",
+              "stripIfNull": true
+            },
+            {
+              "target": "params.dry_run",
+              "from": "dry_run",
+              "stripIfNull": true
+            }
+          ],
+          "requireAnyOf": [
+            [
+              "manifest_path",
+              "manifest_url"
+            ]
+          ]
+        }
+      ],
+      "hideTools": [
+        {
+          "server": "docy_manager",
+          "tool": "manage_docy",
+          "reason": "Wrapped by manage_docy_sources"
+        }
+      ]
+    }
+  ],
+  "proxyURL": "http://127.0.0.1:9090"
 }

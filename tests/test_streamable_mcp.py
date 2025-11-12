@@ -6,6 +6,7 @@ import pytest
 from mcp import types
 
 import scripts.stelae_streamable_mcp as hub
+from tests._tool_override_test_helpers import build_sample_runtime
 
 
 @pytest.mark.anyio("asyncio")
@@ -225,3 +226,21 @@ async def test_proxy_mode_exposes_remote_catalog(monkeypatch):
     content_blocks, structured = call_result
     assert structured == {"result": "ok"}
     assert content_blocks[0].type == "text"
+
+
+def test_rendered_manifest_contains_only_aggregates(tmp_path: Path) -> None:
+    fixture = build_sample_runtime(tmp_path)
+    servers = fixture.runtime_payload["servers"]
+
+    enabled = [
+        (server, tool)
+        for server, data in servers.items()
+        for tool, descriptor in data["tools"].items()
+        if descriptor.get("enabled", True)
+    ]
+    assert enabled == [("tool_aggregator", "doc_fetch_suite")]
+
+    schema = servers["tool_aggregator"]["tools"]["doc_fetch_suite"]["inputSchema"]
+    assert len(schema["required"]) == len(set(schema["required"]))
+    enum_values = schema["properties"]["operation"]["enum"]
+    assert len(enum_values) == len(set(enum_values))

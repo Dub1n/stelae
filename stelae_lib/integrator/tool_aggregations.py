@@ -343,15 +343,13 @@ class ToolAggregationConfig:
             or defaults.proxy_url
         )
         aggregations_payload = payload.get("aggregations")
-        if not isinstance(aggregations_payload, list) or not aggregations_payload:
+        if not isinstance(aggregations_payload, list):
             raise ToolAggregationError("config requires at least one aggregation entry")
         aggregations: list[AggregatedToolDefinition] = []
         for item in aggregations_payload:
             if not isinstance(item, Mapping):
                 continue
             aggregations.append(AggregatedToolDefinition.from_data(item, defaults))
-        if not aggregations:
-            raise ToolAggregationError("no valid aggregations found in config")
         hidden_tools = tuple(
             HiddenTool.from_data(item)
             for item in payload.get("hiddenTools", [])
@@ -431,11 +429,18 @@ def load_tool_aggregation_config(
     path: Path,
     *,
     schema_path: Path | None = None,
+    include_overlay: bool = True,
+    overlay_only: bool = False,
 ) -> ToolAggregationConfig:
     base_data = json.loads(path.read_text(encoding="utf-8"))
+    overlay_data: dict[str, Any] | None = None
     overlay_path = overlay_path_for(path)
     if overlay_path.exists():
         overlay_data = json.loads(overlay_path.read_text(encoding="utf-8"))
+
+    if overlay_only:
+        data = _overlay_delta(base_data, overlay_data)
+    elif include_overlay and overlay_data:
         data = _merge_aggregation_payload(base_data, overlay_data)
     else:
         data = base_data
@@ -486,6 +491,78 @@ def _merge_named_list(base_list: Sequence[Mapping[str, Any]], overlay_list: Sequ
     _ingest(base_list)
     _ingest(overlay_list)
     return [merged[key] for key in order]
+
+
+def _overlay_delta(base: Mapping[str, Any], overlay: Mapping[str, Any] | None) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "schemaVersion": base.get("schemaVersion", 1),
+        "defaults": base.get("defaults", {}),
+        "aggregations": [],
+        "hiddenTools": [],
+    }
+    base_proxy = base.get("proxyURL") or base.get("proxyUrl")
+    if base_proxy:
+        result["proxyURL"] = base_proxy
+    if not overlay:
+        return result
+
+    result["schemaVersion"] = overlay.get("schemaVersion", result["schemaVersion"])
+    overlay_defaults = overlay.get("defaults")
+    if isinstance(overlay_defaults, Mapping):
+        result["defaults"] = deep_merge(result["defaults"], overlay_defaults)
+    overlay_proxy = overlay.get("proxyURL") or overlay.get("proxyUrl")
+    if overlay_proxy:
+        result["proxyURL"] = overlay_proxy
+
+    base_hidden: dict[str, Any] = {}
+    for entry in base.get("hiddenTools", []) or []:
+        if isinstance(entry, Mapping):
+            key = _hidden_key(entry)
+            if key:
+                base_hidden[key] = entry
+    diff_hidden: list[dict[str, Any]] = []
+    for entry in overlay.get("hiddenTools", []) or []:
+        if not isinstance(entry, Mapping):
+            continue
+        key = _hidden_key(entry)
+        if not key:
+            continue
+        base_entry = base_hidden.get(key)
+        if base_entry is None or _canonical(entry) != _canonical(base_entry):
+            diff_hidden.append(json.loads(json.dumps(entry)))
+    result["hiddenTools"] = diff_hidden
+
+    base_aggs: dict[str, Any] = {}
+    for entry in base.get("aggregations", []) or []:
+        if isinstance(entry, Mapping):
+            name = str(entry.get("name") or "").strip()
+            if name:
+                base_aggs[name] = entry
+
+    diff_aggs: list[dict[str, Any]] = []
+    for entry in overlay.get("aggregations", []) or []:
+        if not isinstance(entry, Mapping):
+            continue
+        name = str(entry.get("name") or "").strip()
+        if not name:
+            continue
+        base_entry = base_aggs.get(name)
+        if base_entry is None or _canonical(entry) != _canonical(base_entry):
+            diff_aggs.append(json.loads(json.dumps(entry)))
+    result["aggregations"] = diff_aggs
+    return result
+
+
+def _hidden_key(entry: Mapping[str, Any]) -> str | None:
+    server = str(entry.get("server") or "").strip()
+    tool = str(entry.get("tool") or "").strip()
+    if not server or not tool:
+        return None
+    return f"{server}::{tool}"
+
+
+def _canonical(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, ensure_ascii=False)
 
 
 def _lookup_path(data: Mapping[str, Any], path: str) -> Any:

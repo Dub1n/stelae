@@ -41,8 +41,18 @@ def test_proxy_template_only_lists_core_servers() -> None:
     assert set(data["mcpServers"].keys()) == core
 
 
-def test_tool_aggregations_template_is_empty_stub() -> None:
+def test_tool_aggregations_template_contains_defaults() -> None:
     data = json.loads(_read("config/tool_aggregations.json"))
-    assert data["aggregations"] == []
+    names = {entry["name"] for entry in data.get("aggregations", [])}
+    assert names == {"manage_docy_sources"}
     hidden_servers = {item["server"] for item in data.get("hiddenTools", [])}
-    assert hidden_servers <= {"facade"}
+    assert "facade" in hidden_servers
+
+
+def test_tool_overrides_only_core_servers() -> None:
+    data = json.loads(_read("config/tool_overrides.json"))
+    servers = set(data.get("servers", {}).keys())
+    expected = {"integrator", "one_mcp", "public_mcp_catalog", "tool_aggregator", "facade", "docy_manager"}
+    assert servers == expected
+    agg_tools = set(data["servers"]["tool_aggregator"]["tools"].keys())
+    assert agg_tools == {"manage_docy_sources"}

@@ -212,7 +212,7 @@ prepare_tool_aggregations() {
     fi
   fi
   local output
-  if output=$(PYTHONPATH="$STELAE_DIR" "$python_exec" "$script" --persist-overlay 2>&1); then
+  if output=$(PYTHONPATH="$STELAE_DIR" "$python_exec" "$script" --scope local 2>&1); then
     local summary
     summary=$(echo "$output" | tail -1)
     log "Tool aggregations prepared (${summary:-ok})"
