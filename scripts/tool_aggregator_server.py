@@ -13,6 +13,7 @@ from typing import Any, Dict
 
 import httpx
 from mcp.server import FastMCP
+from mcp.server.fastmcp.utilities.func_metadata import FuncMetadata
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -45,6 +46,24 @@ _SCHEMA_PATH = Path(
 )
 _PROXY_BASE_ENV = os.getenv("STELAE_PROXY_BASE")
 _DEFAULT_PROXY = "http://127.0.0.1:9090"
+
+
+class PassthroughFuncMetadata(FuncMetadata):
+    async def call_fn_with_arg_validation(
+        self,
+        fn,
+        fn_is_async: bool,
+        arguments_to_validate: Dict[str, Any],
+        arguments_to_pass_directly: Dict[str, Any] | None,
+    ) -> Any:
+        """Skip validation and forward arguments as-is."""
+
+        payload = dict(arguments_to_validate)
+        if arguments_to_pass_directly:
+            payload |= arguments_to_pass_directly
+        if fn_is_async:
+            return await fn(**payload)
+        return fn(**payload)
 
 
 class ProxyCaller:
@@ -113,8 +132,17 @@ def _register_aggregations(config: ToolAggregationConfig) -> None:
         )
 
         @app.tool(name=aggregation.name, description=aggregation.description)
-        async def handler(arguments: Dict[str, Any] | None = None, runner=runner):  # type: ignore[misc]
-            return await runner.dispatch(arguments or {})
+        async def handler(runner=runner, **payload):  # type: ignore[misc]
+            return await runner.dispatch(dict(payload))
+
+        tool = app._tool_manager.get_tool(aggregation.name)
+        if tool:
+            tool.fn_metadata = PassthroughFuncMetadata(
+                arg_model=tool.fn_metadata.arg_model,
+                output_schema=tool.fn_metadata.output_schema,
+                output_model=tool.fn_metadata.output_model,
+                wrap_output=tool.fn_metadata.wrap_output,
+            )
 
         LOGGER.info(
             "Aggregated tool '%s' → %s (operations=%s)",
