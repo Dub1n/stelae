@@ -108,12 +108,6 @@ ensure_pm2_app() {
     pm2 start "$ECOSYSTEM" --only "$app"
     return
   fi
-  if [ "$KEEP_PM2" -eq 1 ]; then
-    log "pm2 ensure ${app}: status=online but KEEP_PM2=1 -> delete+start for fresh env"
-    pm2 delete "$app" >/dev/null 2>&1 || true
-    pm2 start "$ECOSYSTEM" --only "$app"
-    return
-  fi
   log "pm2 ensure ${app}: status=online -> restart"
   pm2 restart "$app" --update-env
 }

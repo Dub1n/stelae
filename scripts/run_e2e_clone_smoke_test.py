@@ -491,7 +491,6 @@ class CloneSmokeHarness:
         restart_script = self.clone_dir / "scripts" / "run_restart_stelae.sh"
         args = [
             str(restart_script),
-            "--keep-pm2",
             "--no-bridge",
             "--no-cloudflared",
         ]

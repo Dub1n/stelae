@@ -150,6 +150,41 @@ Documenting these probes here keeps the workbook synchronized with the expectati
 - As with the previous runs, `harness.log` never emits readiness probes (`Local probe: HEAD …`, `Syncing tool overrides…`) or the “Manual stage instructions written” message. The process remains inside `run_restart_stelae.sh`, tailing pm2 output long after the proxy is up, until `timeout` terminates the entire harness.
 - Post-timeout cleanup: `PM2_HOME=/tmp/stelae-smoke-workspace-o6vco44r/.pm2 pm2 kill`.
 
+## 2025-11-12 Session – Instrumentation + skip-bootstrap scaffolding
+
+### Code/logging updates
+
+- `scripts/run_e2e_clone_smoke_test.py` now timestamps every log entry, reports per-command durations, and adds two flags:
+  - `--bootstrap-only` to run clone + bundle + env prep once.
+  - `--skip-bootstrap --reuse-workspace` to reuse a marked sandbox without repeating the heavy setup steps.
+- `scripts/restart_stelae.sh` timestamps every log, exports `PROXY_CONFIG` before touching pm2, times the Go build, and emits incremental readiness logs so we can see exactly where the restart spends time.
+- Docs (`docs/e2e_clone_smoke_test.md`) now mention the new bootstrap/resume flags and the recommended workflow (warm workspace once, then iterate on restart/install with `--skip-bootstrap`).
+
+### Targeted runs (bounded timeouts)
+
+1. `timeout 120s python3 scripts/run_e2e_clone_smoke_test.py --wrapper-release … --manual-stage install --bootstrap-only --workspace /tmp/stelae-smoke-workspace-dev --force-workspace`
+   - Goal: prime a disposable workspace with the starter bundle + cloned `mcp-proxy` while keeping the command under the 120 s cap.
+   - Result: completed in ~6 s; pm2 home seeded and immediately torn down so later runs inherit warm caches.
+2. `timeout 180s python3 scripts/run_e2e_clone_smoke_test.py --wrapper-release … --manual-stage install --skip-bootstrap --workspace /tmp/stelae-smoke-workspace-dev --reuse-workspace --keep-workspace`
+   - Goal: exercise `make render-proxy` + restart using the warmed workspace.
+   - Result: `run_restart_stelae.sh` now logs `mcp-proxy is listening on :18362 (attempt 1/60)`, proving pm2 adopted the sandbox port instead of the developer’s `:9090`. Remaining timeouts stem from downstream steps (`populate_tool_overrides` hitting `/mcp` → 404 and the structural pytest that follows), not from the restart loop.
+
+### Outstanding follow-ups
+
+- `/mcp` still returns `404` (plain text) even after the proxy binds, so `populate_tool_overrides.py` can’t refresh schemas. Need to confirm whether the streamable HTTP server should expose a union endpoint at `/mcp` or if the clients should be hitting per-server routes (e.g., `/tool_aggregator/`).
+- `wait_tools_ready` spews `[: 0 0: integer expression expected]` whenever the catalog call returns non-numeric output (like the 404 HTML). Sanitizing `local_tool_count` to coerce errors → `0` would keep the logs readable.
+- Once the `/mcp` story is resolved, re-run the skip-bootstrap flow with a longer timeout (≥5 min) to let the manual-stage checkpoint complete and capture “Manual stage instructions written…” in `harness.log`.
+- **New (2025‑11‑12 @ 01:10Z):** Even though the renderer writes the randomized port into `config-home/proxy.json`, PM2 is launching `mcp-proxy` with `--config <workspace>/stelae/config/proxy.json` (the tracked file that still hardcodes `:9090`). When the developer’s long-lived stack already occupies 9090, the sandbox proxy fails to bind and the harness sits in the `wait_port` loop forever. The root issue: the `ecosystem.config.js` entry defaults to `${STELAE_DIR}/config/proxy.json`, so the harness’ `export PROXY_CONFIG=...` only takes effect if pm2 is spawned during the restart script. If a daemon persists from a prior run, it never sees the new env.
+  - Short-term mitigation: ensure the restart script owns the PM2 daemon (drop `--keep-pm2` or run `PM2_HOME=… pm2 kill` before each harness iteration). That guarantees the fresh daemon inherits `PROXY_CONFIG=/tmp/.../config-home/proxy.json` and uses the sandbox port.
+  - Longer-term fix: update `ecosystem.config.js` so `PROXY_CONFIG` defaults to `${STELAE_CONFIG_HOME}/proxy.json` whenever it isn’t explicitly set. That way, even if pm2 is already running (or someone forgets to kill it), it still points at the sandbox config instead of the repo copy.
+  - Alternate workaround (not recommended as a real fix): temporarily stop the developer’s `:9090` stack before running the harness. This clears the bind error but doesn’t address the underlying “two different configs” drift, so the proxy would keep bouncing between random port vs. 9090 whenever a stale daemon is reused.
+
+**Next steps**
+
+1. Patch `ecosystem.config.js` so the `PROXY_CONFIG` default pulls from `STELAE_CONFIG_HOME` (falling back to `${HOME}/.config/stelae`), eliminating the reliance on ephemeral env state.
+2. Re-run the skip-bootstrap harness after that change to confirm `pm2 describe mcp-proxy` shows the sandbox `config-home` path and the `wait_port` loop no longer stalls when the long-lived stack is up.
+3. Once the configuration path is stable, revisit the `/mcp` 404 + readiness warnings noted above.
+
 ## Checklist (Copy into PR or issue if needed)
 
 - [ ] Code/tests updated
