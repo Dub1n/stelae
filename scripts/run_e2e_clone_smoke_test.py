@@ -674,6 +674,12 @@ class CloneSmokeHarness:
                 and call.arguments.get("pattern") == "manage_stelae",
             ),
             ToolExpectation(
+                tool="manage_docy_sources",
+                description="List Docy sources before fetching docs",
+                predicate=lambda call: isinstance(call.arguments, dict)
+                and call.arguments.get("operation") == "list_sources",
+            ),
+            ToolExpectation(
                 tool="doc_fetch_suite",
                 description="List documentation sources via docy",
                 predicate=lambda call: isinstance(call.arguments, dict)
@@ -711,6 +717,7 @@ class CloneSmokeHarness:
                 "line_number": True,
             }
         )
+        docy_manage_payload = json.dumps({"operation": "list_sources"})
         doc_payload = json.dumps({"operation": "list_documentation_sources_tool"})
         return textwrap.dedent(
             f"""
@@ -720,6 +727,7 @@ class CloneSmokeHarness:
             2. Regardless of whether the catalog includes them, call these MCP tools in order and report their outputs or failures:
                - `workspace_fs_read` with {read_payload}
                - `grep` with {grep_payload}
+               - `manage_docy_sources` with {docy_manage_payload}
                - `doc_fetch_suite` with {doc_payload}
             3. If any call fails because the tool is missing, still include the failed attempt in your notes; do not substitute shell access.
 

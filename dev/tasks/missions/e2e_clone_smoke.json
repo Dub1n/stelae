@@ -4,7 +4,7 @@
   "notes": "Human-in-the-loop Codex mission that mirrors the automated clone smoke workflow (bundle tools + qdrant install/remove).",
   "tasks": [
     {
-      "prompt": "Use the sandbox MCP proxy to 1) run tools/list and confirm workspace_fs_read, grep, doc_fetch_suite, and manage_stelae are published, 2) call workspace_fs_read with {\"operation\":\"read_file\",\"path\":\"README.md\"}, 3) call grep with {\"pattern\":\"manage_stelae\",\"paths\":[\"README.md\"],\"recursive\":false,\"regexp\":false}, and 4) call doc_fetch_suite with {\"operation\":\"list_documentation_sources_tool\"}. Summarize what you learned and do not run shell commands.",
+      "prompt": "Use the sandbox MCP proxy to 1) run tools/list and confirm workspace_fs_read, grep, manage_docy_sources, doc_fetch_suite, and manage_stelae are published, 2) call workspace_fs_read with {\"operation\":\"read_file\",\"path\":\"README.md\"}, 3) call grep with {\"pattern\":\"manage_stelae\",\"paths\":[\"README.md\"],\"recursive\":false,\"regexp\":false}, 4) call manage_docy_sources with {\"operation\":\"list_sources\"} to hydrate Docy metadata, and 5) call doc_fetch_suite with {\"operation\":\"list_documentation_sources_tool\"}. Summarize what you learned and do not run shell commands.",
       "cwd": ".",
       "sandbox": "workspace-write",
       "approval_policy": "on-request",

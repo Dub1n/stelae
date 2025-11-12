@@ -108,10 +108,11 @@ Each automatic run captures three transcripts:
 
 1. **`bundle-tools`** – Captures one `tools/list` snapshot for diagnostics and then
    calls `workspace_fs_read` (`read_file`), `grep`
-   (`pattern="manage_stelae"`), and `doc_fetch_suite`
-   (`list_documentation_sources_tool`) even if the catalog failed to advertise
-   those entries. Each call must be attempted; a “tool missing” failure still
-   counts as useful telemetry.
+   (`pattern="manage_stelae"`), **`manage_docy_sources`
+   (`list_sources`) to hydrate Docy metadata**, and finally
+   `doc_fetch_suite` (`list_documentation_sources_tool`) even if the catalog
+   failed to advertise those entries. Each call must be attempted in that order;
+   a “tool missing” failure still counts as useful telemetry.
 2. **`install`** – Calls `manage_stelae` with
    `{"operation":"install_server","params":{"name":"qdrant","target_name":"qdrant_smoke","force":true}}`
    and waits for completion, then issues a read-only verification call.

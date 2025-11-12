@@ -1,0 +1,14 @@
+{
+  "mission_id": "stelae-catalog-orchestrator",
+  "workspace_root": "/home/gabri/dev/stelae",
+  "notes": "Codex MCP Wrapper mission used as the orchestrator for catalog checks. Stay inside the `stelae` MCP server—no pm2 or local shell usage.",
+  "tasks": [
+    {
+      "prompt": "Use the `stelae` MCP server only (no shell commands) to confirm the key aggregated tools are callable:\n1. Call `workspace_fs_read` with {\"operation\":\"read_file\",\"path\":\"README.md\"} and summarize the first paragraph.\n2. Call `manage_docy_sources` with {\"operation\":\"list_sources\"} and note how many sources are available.\n3. Call `doc_fetch_suite` with {\"operation\":\"list_documentation_sources_tool\"} and report the returned list (it may be empty if nothing was synced yet).\n4. Call `manage_stelae` with {\"operation\":\"list_discovered_servers\"} and highlight any servers that look out of date. Do not run shell commands—stay inside MCP.",
+      "cwd": ".",
+      "sandbox": "read-only",
+      "approval_policy": "never",
+      "timeout_sec": 900
+    }
+  ]
+}
