@@ -1,6 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_START=$(date +%s)
+
+timestamp() {
+  date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+log()  { printf '\033[1;34m==>\033[0m [%s] %s\n' "$(timestamp)" "$*"; }
+warn() { printf '\033[1;33m!!\033[0m [%s] %s\n' "$(timestamp)" "$*"; }
+err()  { printf '\033[1;31mxx\033[0m [%s] %s\n' "$(timestamp)" "$*" >&2; }
+require() { command -v "$1" >/dev/null 2>&1 || { err "missing command: $1"; exit 1; }; }
+
+on_exit() {
+  local status=$?
+  local end
+  end=$(date +%s)
+  local elapsed=$((end - SCRIPT_START))
+  if [ $status -eq 0 ]; then
+    log "Restart script completed in ${elapsed}s."
+  else
+    err "Restart script exited with status $status after ${elapsed}s."
+  fi
+}
+trap on_exit EXIT
+
 # --- paths & config -----------------------------------------------------------
 HOME_DIR="${HOME}"
 STELAE_DIR="${STELAE_DIR:-$HOME_DIR/dev/stelae}"
@@ -15,6 +39,7 @@ ECOSYSTEM="${STELAE_DIR}/ecosystem.config.js"
 PYTHON_BIN="${PYTHON:-$HOME_DIR/.venvs/stelae-bridge/bin/python}"
 
 PROXY_PORT="${PROXY_PORT:-9090}"                   # proxy listens here
+export PROXY_CONFIG="$PROXY_JSON"
 
 # cloudflared (named tunnel w/ config)
 CLOUDFLARED_BIN="${CLOUDFLARED:-$HOME_DIR/.nvm/versions/node/v22.19.0/bin/cloudflared}"
@@ -67,10 +92,6 @@ EOF
 done
 
 # helpers ----------------------------------------------------------------------
-log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
-warn() { printf '\033[1;33m!!\033[0m %s\n' "$*"; }
-err()  { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; }
-require() { command -v "$1" >/dev/null 2>&1 || { err "missing command: $1"; exit 1; }; }
 
 ensure_pm2_app() {
   local app="$1"
@@ -87,19 +108,31 @@ ensure_pm2_app() {
     pm2 start "$ECOSYSTEM" --only "$app"
     return
   fi
+  if [ "$KEEP_PM2" -eq 1 ]; then
+    log "pm2 ensure ${app}: status=online but KEEP_PM2=1 -> delete+start for fresh env"
+    pm2 delete "$app" >/dev/null 2>&1 || true
+    pm2 start "$ECOSYSTEM" --only "$app"
+    return
+  fi
   log "pm2 ensure ${app}: status=online -> restart"
   pm2 restart "$app" --update-env
 }
 
 wait_port() {
-  local port="$1" label="$2" tries=60
-  for _ in $(seq 1 $tries); do
+  local port="$1" label="$2" tries=60 interval=0.25 attempt timeout
+  timeout=$(awk -v t="$tries" -v i="$interval" 'BEGIN{printf "%.1f", t*i}')
+  log "Waiting for $label to listen on :$port (timeout ~${timeout}s)…"
+  for attempt in $(seq 1 $tries); do
     if ss -ltn "( sport = :$port )" | grep -q ":$port"; then
-      log "$label is listening on :$port"
+      log "$label is listening on :$port (attempt ${attempt}/${tries})"
       return 0
     fi
-    sleep 0.25
+    if (( attempt % 10 == 0 )); then
+      log "Still waiting for $label on :$port (attempt ${attempt}/${tries})"
+    fi
+    sleep "$interval"
   done
+  err "$label did not bind :$port after ${timeout}s."
   return 1
 }
 
@@ -111,8 +144,9 @@ local_tool_count() {
 
 wait_tools_ready() {
   log "Waiting for tools to register (target >= ${MIN_TOOL_COUNT}, timeout ${READY_TIMEOUT_SEC}s)…"
-  local start ts count=0
+  local start ts count=0 last_log
   start=$(date +%s)
+  last_log=$start
   while :; do
     count="$(local_tool_count)"
     if [ "${count:-0}" -ge "$MIN_TOOL_COUNT" ]; then
@@ -120,6 +154,10 @@ wait_tools_ready() {
       return 0
     fi
     ts=$(date +%s)
+    if [ $((ts - last_log)) -ge 5 ]; then
+      log "Still waiting for tools (current count=${count:-0})"
+      last_log=$ts
+    fi
     if [ $((ts - start)) -ge "$READY_TIMEOUT_SEC" ]; then
       warn "Timed out at ${count} tools; continuing (public may briefly see fewer tools)."
       return 0
@@ -133,7 +171,8 @@ populate_overrides_via_proxy() {
     warn "Skipping tool override population (--skip-populate-overrides)."
     return
   fi
-  local url="$1"
+  local url="$1" start elapsed
+  start=$(date +%s)
   if [ -z "$PYTHON_BIN" ] || [ ! -x "$PYTHON_BIN" ]; then
     warn "Skipping tool override population; PYTHON=$PYTHON_BIN not executable"
     return
@@ -145,9 +184,11 @@ populate_overrides_via_proxy() {
     if [ -z "$summary" ]; then
       summary="No schema updates required"
     fi
-    log "Tool overrides synced via proxy catalog (${summary})"
+    elapsed=$(( $(date +%s) - start ))
+    log "Tool overrides synced via proxy catalog (${summary}; ${elapsed}s)"
   else
-    warn "Tool override population failed via proxy"
+    elapsed=$(( $(date +%s) - start ))
+    warn "Tool override population failed via proxy (${elapsed}s)"
     printf '%s\n' "$output"
   fi
 }
@@ -260,24 +301,32 @@ prepare_tool_aggregations
 
 # build fresh proxy binary before restarting services
 log "Building mcp-proxy binary → $PROXY_BIN"
+build_start=$(date +%s)
 (
   cd "$PROXY_DIR"
   mkdir -p "$(dirname "$PROXY_BIN")"
   go build -o "$PROXY_BIN" ./...
 )
+log "mcp-proxy build completed in $(( $(date +%s) - build_start ))s"
 
 # stop / clean -----------------------------------------------------------------
 if [ "$KEEP_PM2" -eq 0 ]; then
   log "Killing pm2 (all processes)…"
   pm2 kill || true
   rm -f "$HOME_DIR/.pm2/pm2.pid" || true
+  log "pm2 kill completed"
 else
   warn "--keep-pm2 set: will not kill pm2, only restart known apps"
 fi
 
 log "Killing stray listeners on :$PROXY_PORT (if any)…"
 mapfile -t PIDS < <(ss -ltnp "( sport = :$PROXY_PORT )" | awk -F',' '/pid=/{print $2}' | sed 's/pid=//' | awk '{print $1}' | sort -u)
-if [ "${#PIDS[@]}" -gt 0 ]; then for pid in "${PIDS[@]}"; do kill -9 "$pid" 2>/dev/null || true; done; fi
+if [ "${#PIDS[@]}" -gt 0 ]; then
+  for pid in "${PIDS[@]}"; do kill -9 "$pid" 2>/dev/null || true; done
+  log "Killed ${#PIDS[@]} listener(s) on :$PROXY_PORT"
+else
+  log "No stray listeners detected on :$PROXY_PORT"
+fi
 
 # render proxy config ----------------------------------------------------------
 log "Rendering proxy config → $PROXY_JSON"
@@ -305,6 +354,7 @@ else
 fi
 
 pm2 save || true
+log "pm2 process list saved (core services)"
 
 wait_port "$PROXY_PORT" "mcp-proxy" || { err "proxy didn’t bind :$PROXY_PORT"; pm2 logs mcp-proxy --lines 120; exit 2; }
 
@@ -342,6 +392,7 @@ if [ "$START_CLOUDFLARED" -eq 1 ]; then
   log "Starting cloudflared via pm2"
   ensure_pm2_app cloudflared
   pm2 save || true
+  log "pm2 process list saved (cloudflared)"
 else
   warn "Skipping cloudflared (--no-cloudflared)."
 fi

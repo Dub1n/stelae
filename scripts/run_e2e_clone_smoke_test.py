@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import textwrap
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -169,16 +170,13 @@ class CloneSmokeHarness:
                 "APPS_DIR": str(self.apps_dir),
                 "STELAE_CONFIG_HOME": str(self.config_home),
                 "PM2_HOME": str(self.pm2_home),
-                "PROXY_PORT": str(self.proxy_port),
-                "STELAE_PROXY_BASE": f"http://127.0.0.1:{self.proxy_port}",
-                "PUBLIC_BASE_URL": f"http://127.0.0.1:{self.proxy_port}",
-                "PUBLIC_SSE_URL": f"http://127.0.0.1:{self.proxy_port}/mcp",
                 "GOMODCACHE": str(self.workspace / ".gomodcache"),
                 "GOCACHE": str(self.workspace / ".gocache"),
                 "PM2_HOME": str(self.pm2_home),
                 "CODEX_HOME": str(self.codex_home),
             }
         )
+        self._apply_proxy_port(self.proxy_port)
         self._env.setdefault("PYTHONUNBUFFERED", "1")
         if self.pm2_bin:
             pm2_dir = str(self.pm2_bin.parent)
@@ -221,10 +219,21 @@ class CloneSmokeHarness:
         return workspace
 
     def _log(self, message: str) -> None:
-        print(message)
+        timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        line = f"[{timestamp}] {message}"
+        print(line)
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         with self.log_path.open("a", encoding="utf-8") as handle:
-            handle.write(message + "\n")
+            handle.write(line + "\n")
+
+    def _apply_proxy_port(self, port: int) -> None:
+        base = f"http://127.0.0.1:{port}"
+        self.proxy_port = port
+        self._env["PROXY_PORT"] = str(port)
+        self._env["STELAE_PROXY_BASE"] = base
+        self._env["PUBLIC_BASE_URL"] = base
+        self._env["PUBLIC_SSE_URL"] = f"{base}/mcp"
+        self._env["PUBLIC_PORT"] = str(port)
 
     def _run(
         self,
@@ -239,53 +248,81 @@ class CloneSmokeHarness:
         if cwd:
             display = f"(cd {cwd} && {display})"
         self._log(f"$ {display}")
-        if capture_output:
-            result = subprocess.run(
-                cmd,
-                cwd=str(cwd) if cwd else None,
-                env=self._env,
-                text=True,
-                capture_output=True,
-                check=check,
-            )
-            if log_output:
-                if result.stdout:
-                    self._log(result.stdout.strip())
-                if result.stderr:
-                    self._log(result.stderr.strip())
-            return result
-        proc = subprocess.Popen(
-            cmd,
-            cwd=str(cwd) if cwd else None,
-            env=self._env,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        )
-        output_lines: list[str] = []
+        start = time.monotonic()
+        completed: subprocess.CompletedProcess[str] | None = None
         try:
-            if proc.stdout:
-                for line in proc.stdout:
-                    stripped = line.rstrip("\n")
-                    output_lines.append(stripped)
-                    if log_output and stripped:
-                        self._log(stripped)
+            if capture_output:
+                result = subprocess.run(
+                    cmd,
+                    cwd=str(cwd) if cwd else None,
+                    env=self._env,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                if log_output:
+                    if result.stdout:
+                        self._log(result.stdout.rstrip())
+                    if result.stderr:
+                        self._log(result.stderr.rstrip())
+                completed = subprocess.CompletedProcess(
+                    cmd, result.returncode, result.stdout, result.stderr or ""
+                )
+            else:
+                proc = subprocess.Popen(
+                    cmd,
+                    cwd=str(cwd) if cwd else None,
+                    env=self._env,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                )
+                output_lines: list[str] = []
+                try:
+                    if proc.stdout:
+                        for line in proc.stdout:
+                            stripped = line.rstrip("\n")
+                            output_lines.append(stripped)
+                            if log_output and stripped:
+                                self._log(stripped)
+                finally:
+                    proc.wait()
+                completed = subprocess.CompletedProcess(cmd, proc.returncode, "\n".join(output_lines), "")
+            if completed.returncode != 0 and check:
+                raise subprocess.CalledProcessError(
+                    completed.returncode, cmd, completed.stdout, completed.stderr
+                )
+            return completed
         finally:
-            proc.wait()
-        if check and proc.returncode != 0:
-            raise subprocess.CalledProcessError(proc.returncode, cmd, "\n".join(output_lines))
-        return subprocess.CompletedProcess(cmd, proc.returncode, "\n".join(output_lines), "")
+            duration = time.monotonic() - start
+            if completed is None:
+                status = "failed (no result)"
+            elif completed.returncode == 0:
+                status = f"ok (rc=0)"
+            else:
+                status = f"rc={completed.returncode}"
+            self._log(f"[cmd] {display} → {status} in {duration:.1f}s")
 
     # -------------------------------------------------------------------- stages
     def run(self) -> None:
         success = False
         try:
-            self._clone_repo()
-            self._clone_proxy_repo()
-            self._bootstrap_config_home()
-            self._copy_wrapper_release()
-            self._prepare_env_file()
-            self._install_starter_bundle()
+            if self.args.skip_bootstrap:
+                self._assert_bootstrap_ready()
+            else:
+                self._clone_repo()
+                self._clone_proxy_repo()
+                self._bootstrap_config_home()
+                self._copy_wrapper_release()
+                self._prepare_env_file()
+                self._install_starter_bundle()
+            if self.args.bootstrap_only:
+                self._log(
+                    f"Bootstrap-only flag set; workspace retained at {self.workspace} (rerun without --bootstrap-only to continue)."
+                )
+                self._ephemeral = False
+                success = True
+                return
             self._run_render_restart()
             self._assert_clean_repo("post-restart")
             self._run_pytest(["tests/test_repo_sanitized.py"], label="structural")
@@ -412,6 +449,38 @@ class CloneSmokeHarness:
             ],
             cwd=self.clone_dir,
         )
+
+    def _assert_bootstrap_ready(self) -> None:
+        self._log("Skipping bootstrap steps (--skip-bootstrap). Validating existing workspace artifacts…")
+        if not is_smoke_workspace(self.workspace):
+            raise SystemExit(
+                f"--skip-bootstrap requires an existing smoke workspace (marker missing at {self.workspace})."
+            )
+        required = [
+            (self.clone_dir, "cloned repo"),
+            (self.clone_dir / ".env", "sandbox .env"),
+            (self.apps_dir / "mcp-proxy", "mcp-proxy checkout"),
+        ]
+        missing = [f"{label} ({path})" for path, label in required if not path.exists()]
+        if missing:
+            joined = "\n  - ".join(missing)
+            raise SystemExit(f"--skip-bootstrap requested but required artifacts are missing:\n  - {joined}")
+        env_file = self.clone_dir / ".env"
+        env_data = env_file.read_text(encoding="utf-8").splitlines()
+        proxy_port_line = next(
+            (line for line in env_data if line.startswith("PROXY_PORT=") or line.startswith("PUBLIC_PORT=")),
+            None,
+        )
+        if not proxy_port_line:
+            raise SystemExit("--skip-bootstrap requested but PROXY_PORT/PUBLIC_PORT not found in sandbox .env")
+        _, value = proxy_port_line.split("=", 1)
+        try:
+            port_value = int(value.strip())
+        except ValueError as exc:
+            raise SystemExit(f"--skip-bootstrap requested but PROXY_PORT '{value}' is not an integer") from exc
+        self._apply_proxy_port(port_value)
+        self._bootstrap_config_home()
+        self._log(f"Workspace ready for --skip-bootstrap (PROXY_PORT={port_value})")
 
     def _bootstrap_config_home(self) -> None:
         (self.config_home / "logs").mkdir(parents=True, exist_ok=True)
@@ -765,6 +834,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--source", default=".", help="Path to the source stelae repo (default: current directory)")
     parser.add_argument("--workspace", help="Optional workspace directory to reuse/keep")
     parser.add_argument("--keep-workspace", action="store_true", help="Do not delete the workspace after success")
+    parser.add_argument(
+        "--bootstrap-only",
+        action="store_true",
+        help="Run bootstrap/setup steps (clone, bundle install) and exit before restarting the stack",
+    )
+    parser.add_argument(
+        "--skip-bootstrap",
+        action="store_true",
+        help="Reuse an existing workspace and skip bootstrap steps (requires --workspace and --reuse-workspace)",
+    )
     parser.add_argument("--proxy-source", help="Alternate git source for mcp-proxy")
     parser.add_argument("--wrapper-release", help="Path to a codex-mcp-wrapper release directory to copy into the sandbox")
     parser.add_argument("--port", type=int, help="Override the sandbox proxy port")
@@ -797,6 +876,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Reuse an existing smoke workspace (identified by the marker file) instead of deleting it",
     )
     args = parser.parse_args(argv)
+    if args.bootstrap_only and args.skip_bootstrap:
+        parser.error("--bootstrap-only and --skip-bootstrap cannot be used together")
+    if args.skip_bootstrap and not (args.workspace and args.reuse_workspace):
+        parser.error("--skip-bootstrap requires --workspace and --reuse-workspace")
+    if args.bootstrap_only and not args.keep_workspace:
+        args.keep_workspace = True
     if args.force_workspace and args.reuse_workspace:
         parser.error("--force-workspace and --reuse-workspace cannot be used together")
     return args
