@@ -2,7 +2,7 @@
 
 ## Overview
 
-Stelae combines a Go-based MCP aggregation proxy, a fleet of downstream MCP servers, a FastMCP bridge for stdio clients, and a Cloudflare tunnel for public access. Everything originates from the local WSL workspace while remaining consumable by remote ChatGPT Connectors.
+Stelae combines a Go-based MCP aggregation proxy, a fleet of downstream MCP servers, a FastMCP bridge for stdio clients, and a Cloudflare tunnel for public access. Everything originates from the local WSL workspace while remaining consumable by remote ChatGPT Connectors. The Go proxy currently comes from the [`Dub1n/mcp-proxy`](https://github.com/Dub1n/mcp-proxy) fork so we can expose a unified `/mcp` facade (HEAD/GET/POST) for readiness probes and streamable clients while upstreaming the feature.
 
 ### Config overlays
 
@@ -81,7 +81,7 @@ flowchart LR
 
 * Downstream MCP servers register their tool descriptors during startup (`collectTools`).
 * Overrides are merged in the following order:
-  1. `manifest.toolOverrides` from `config/proxy.json`.
+  1. `manifest.toolOverrides` from the rendered proxy config (`${PROXY_CONFIG}`, defaults to `${STELAE_CONFIG_HOME}/proxy.json`).
   2. The overrides template (`config/tool_overrides.json`, validated via `config/tool_overrides.schema.json`) + your `${STELAE_CONFIG_HOME}/config/tool_overrides.local.json`. Each tool override lives under its server while the `master.tools["*"]` wildcard provides shared defaults, and the merged runtime file at `${TOOL_OVERRIDES_PATH}` is what the proxy consumes.
   3. Master (`*`) overrides apply last.
 * Overrides can rewrite names, descriptions, annotations, and full `inputSchema`/`outputSchema` blocks. We use this to advertise the adapted contract the proxy enforces at call time.
@@ -255,7 +255,7 @@ flowchart TD
     D --▶|diagnostic probes| C
     D --▶|pm2 restart| C
 
-    Config["┌──────────────┐<br>config/proxy.json"] --> A
+    Config["┌──────────────┐<br>${PROXY_CONFIG}"] --> A
     Overrides["┌──────────────┐<br>${TOOL_OVERRIDES_PATH}"] --> A
 ```
 
@@ -274,7 +274,7 @@ flowchart TD
 
 ## Operational Notes
 
-1. `make render-proxy` regenerates `config/proxy.json`, preserving the override file path.
+1. `make render-proxy` regenerates `${PROXY_CONFIG}` (defaults to `${STELAE_CONFIG_HOME}/proxy.json`), preserving the override file path. The pm2 ecosystem file (`ecosystem.config.js`) now uses the same default, so even long-lived daemons pick up the rendered overlay unless you explicitly set `PROXY_CONFIG` to a different path.
 2. `bash scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --no-cloudflared` rebuilds the proxy, restarts PM2 processes, and validates the local JSON-RPC flow—this is the default path invoked by `manage_stelae`, keeping contributor laptops functional without requiring a tunnel. Append `--full` when you explicitly need to redeploy Cloudflare (manifest push + tunnel restart). The helper prints one-line `pm2 ensure <app>: status=<prev> -> <action>` entries so operators can see whether it started a missing process, deleted+started an unhealthy one, or simply refreshed an online entry.
 3. `scripts/watch_public_mcp.py` shares the same `pm2 ensure` logic; when the public JSON-RPC probes fail it can now recreate `cloudflared` (delete+start) instead of looping on `pm2 restart`.
 4. To temporarily hide a tool or server from clients, set `"enabled": false` via the overrides overlay (`${STELAE_CONFIG_HOME}/config/tool_overrides.local.json`) or template, rerun `make render-proxy`, then execute the restart script.

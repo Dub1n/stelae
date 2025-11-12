@@ -131,9 +131,20 @@ wait_port() {
 }
 
 local_tool_count() {
-  curl --max-time "$CURL_MAX_TIME" -s "http://127.0.0.1:${PROXY_PORT}/mcp" -H 'Content-Type: application/json' \
-    --data '{"jsonrpc":"2.0","id":"T","method":"tools/list"}' \
-  | jq -r 'try (.result.tools|length) // 0' 2>/dev/null || echo 0
+  local payload count
+  payload=$(curl --max-time "$CURL_MAX_TIME" -s "http://127.0.0.1:${PROXY_PORT}/mcp" \
+    -H 'Content-Type: application/json' \
+    --data '{"jsonrpc":"2.0","id":"T","method":"tools/list"}' 2>/dev/null || true)
+  if [ -z "$payload" ]; then
+    echo 0
+    return
+  fi
+  count=$(printf '%s' "$payload" | jq -r 'try (.result.tools|length) catch ""' 2>/dev/null || true)
+  if [[ "$count" =~ ^[0-9]+$ ]]; then
+    echo "$count"
+  else
+    echo 0
+  fi
 }
 
 wait_tools_ready() {

@@ -371,8 +371,19 @@ class CloneSmokeHarness:
             ["git", "clone", "--filter=blob:none", str(self.source_repo), str(self.clone_dir)],
         )
 
+    def _resolve_proxy_source(self) -> str:
+        if self.args.proxy_source:
+            return self.args.proxy_source
+        env_source = os.environ.get("STELAE_PROXY_SOURCE")
+        if env_source:
+            return env_source
+        local_clone = Path.home() / "apps" / "mcp-proxy"
+        if local_clone.exists():
+            return str(local_clone)
+        return "https://github.com/Dub1n/mcp-proxy.git"
+
     def _clone_proxy_repo(self) -> None:
-        source = self.args.proxy_source or "https://github.com/TBXark/mcp-proxy.git"
+        source = self._resolve_proxy_source()
         dest = self.apps_dir / "mcp-proxy"
         dest.parent.mkdir(parents=True, exist_ok=True)
         self._log(f"Cloning mcp-proxy ({source})...")

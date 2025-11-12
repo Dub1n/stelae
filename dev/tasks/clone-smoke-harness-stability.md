@@ -179,11 +179,26 @@ Documenting these probes here keeps the workbook synchronized with the expectati
   - Longer-term fix: update `ecosystem.config.js` so `PROXY_CONFIG` defaults to `${STELAE_CONFIG_HOME}/proxy.json` whenever it isn’t explicitly set. That way, even if pm2 is already running (or someone forgets to kill it), it still points at the sandbox config instead of the repo copy.
   - Alternate workaround (not recommended as a real fix): temporarily stop the developer’s `:9090` stack before running the harness. This clears the bind error but doesn’t address the underlying “two different configs” drift, so the proxy would keep bouncing between random port vs. 9090 whenever a stale daemon is reused.
 
+### Stage 10 – PROXY_CONFIG default fix + skip-bootstrap validation (2025-11-12)
+
+- Repo change: `ecosystem.config.js` now defines `STELAE_CONFIG_HOME=${HOME}/.config/stelae` (override-able) and points the default `PROXY_CONFIG` at `${STELAE_CONFIG_HOME}/proxy.json`, eliminating the fallback to `${STELAE_DIR}/config/proxy.json`.
+- Warmed workspace `/tmp/stelae-smoke-workspace-dev` with `timeout 120s python3 scripts/run_e2e_clone_smoke_test.py ... --manual-stage install --bootstrap-only --workspace ... --force-workspace` (completed in ~6s).
+- First `--skip-bootstrap` attempt reused the workspace but still saw pm2 pull the tracked config because the clone predated the new patch; copying `ecosystem.config.js` into the sandbox before the second run aligned the daemon with the fix.
+- Second `timeout 120s ... --skip-bootstrap --reuse-workspace --keep-workspace` run rebuilt the Go proxy, started pm2 on `:20759`, and hit readiness + `populate_tool_overrides.py` within ~50s. `wait_port` + the “Local probe: HEAD http://127.0.0.1:20759/mcp” log now fire immediately, confirming pm2 honors the randomized port without needing `PROXY_CONFIG` in-process env.
+- Remaining failure mode: the `/mcp` endpoint still returns 404, so `populate_tool_overrides.py` aborts and `wait_tools_ready` continues to spam `integer expression expected`. Harness log + retained workspace capture the call stack; fixing the FastMCP proxy route or adjusting the overrides script is now the gating issue.
+
+### Stage 11 – Root cause of `/mcp` 404 + log hygiene (2025-11-12)
+
+- **Repro analysis:** the smoke harness cloned `https://github.com/TBXark/mcp-proxy.git`, which does not yet include the streamable `/mcp` facade. Local development uses the `Dub1n/mcp-proxy` fork (commit `76777df`) where the facade lives, so production runs never hit 404. The fork delta never made it into the sandbox because the harness defaulted to upstream.
+- **Fix:** `scripts/run_e2e_clone_smoke_test.py` now resolves the proxy source in this order: CLI `--proxy-source`, `STELAE_PROXY_SOURCE`, a local `~/apps/mcp-proxy` checkout (handy when hacking on unpublished commits), and finally the public `https://github.com/Dub1n/mcp-proxy.git` fork. Fresh bootstraps therefore pick up the facade automatically without manual flags.
+- **Verification:** `timeout 120s python3 scripts/run_e2e_clone_smoke_test.py … --bootstrap-only --workspace /tmp/stelae-smoke-workspace-dev2 --force-workspace` followed by `timeout 120s python3 scripts/run_e2e_clone_smoke_test.py … --skip-bootstrap --workspace /tmp/stelae-smoke-workspace-dev2 --reuse-workspace --keep-workspace` now reaches `Local probe: HEAD http://127.0.0.1:18438/mcp` → HTTP 200 and `populate_tool_overrides.py` completes in ~3 s with `"Wrote updated overrides…"`.
+- **Noise cleanup:** `scripts/restart_stelae.sh`’s `local_tool_count()` no longer pipes raw 404 HTML into `jq`, so `wait_tools_ready` stops spamming `[: 0 0: integer expression expected]` even if the proxy momentarily returns an error.
+
 **Next steps**
 
-1. Patch `ecosystem.config.js` so the `PROXY_CONFIG` default pulls from `STELAE_CONFIG_HOME` (falling back to `${HOME}/.config/stelae`), eliminating the reliance on ephemeral env state.
-2. Re-run the skip-bootstrap harness after that change to confirm `pm2 describe mcp-proxy` shows the sandbox `config-home` path and the `wait_port` loop no longer stalls when the long-lived stack is up.
-3. Once the configuration path is stable, revisit the `/mcp` 404 + readiness warnings noted above.
+1. ✅ (2025-11-12) `ecosystem.config.js` now defaults `PROXY_CONFIG` to `${STELAE_CONFIG_HOME}/proxy.json` (falling back to `${HOME}/.config/stelae`), so pm2 no longer reads the tracked `config/proxy.json`.
+2. ✅ (2025-11-12) Skip-bootstrap harness run (`timeout 120s python3 scripts/run_e2e_clone_smoke_test.py ... --skip-bootstrap --workspace /tmp/stelae-smoke-workspace-dev --reuse-workspace --keep-workspace`) restarted the stack on `:20759`; `wait_port` + `HEAD /mcp` succeeded before the run exited (~50s). Logs + workspace retained for reference.
+3. ✅ (2025-11-12) `/mcp` now returns HTTP 200 under the forked proxy, and `local_tool_count()` gracefully handles transient JSON failures. Remaining harness failures stem from missing `pytest` inside the sandbox, not the restart loop.
 
 ## Checklist (Copy into PR or issue if needed)
 

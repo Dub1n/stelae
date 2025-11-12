@@ -70,6 +70,7 @@ Common options:
 - `--codex-cli /path/to/codex` – pin a specific Codex binary (defaults to `shutil.which("codex")`).
 - `--codex-home /path/to/.codex` – mirror a custom Codex config/auth directory into the sandbox.
 - `--wrapper-release …` – copy a Codex MCP wrapper release into the sandbox so the starter bundle can expose it.
+- `--proxy-source <git-or-path>` – override the mcp-proxy checkout source. When omitted the harness checks `STELAE_PROXY_SOURCE`, then falls back to a local `~/apps/mcp-proxy` clone (useful when hacking on the fork), and finally clones `https://github.com/Dub1n/mcp-proxy.git`, which contains the `/mcp` facade required for the readiness probes.
 - `--manual` – generate `manual_playbook.md` / `manual_result.json`, then exit immediately so you can follow the instructions manually. The harness still provisions the sandbox (clone, bundle install, restart) so the manual steps have a ready workspace; this flag simply skips the Codex automation that would normally follow.
 - `--manual-stage bundle-tools|install|remove` – stop right before a specific Codex stage, emit `manual_stage_<stage>.md`, and exit. After finishing those steps, rerun with `--workspace <path> --reuse-workspace` (and without that `--manual-stage`) to continue.
 - `--bootstrap-only` – run the clone/bundle/bootstrap steps once, keep the workspace, and exit before restarting the stack. Pair with `--workspace … --keep-workspace` (set automatically) so subsequent runs can reuse the warmed caches.
@@ -84,6 +85,7 @@ Common options:
 
 - Every workspace picks a randomized high `PROXY_PORT`/`PUBLIC_PORT` via `choose_proxy_port()` and exports the value through `.env`, `${STELAE_CONFIG_HOME}`, and the rendered `proxy.json`. This keeps disposable sandboxes from binding to the developer’s long-lived `:9090` proxy.
 - The renderer now substitutes `{{PROXY_PORT}}` inside `config/proxy.template.json`, so pm2 always starts `mcp-proxy` on the sandbox-specific port. Local `.env` files should keep `PROXY_PORT` and `PUBLIC_PORT` synchronized; in most setups both remain `9090`.
+- `ecosystem.config.js` defaults `PROXY_CONFIG` to `${STELAE_CONFIG_HOME}/proxy.json`, which is the same file the harness renders inside `config-home/`. This ensures pm2 restarts (even when the daemon survives across runs) keep honoring the sandbox port. When reusing a workspace created before this change, copy the updated `ecosystem.config.js` into the sandbox or rerun the bootstrap step so pm2 stops pointing at the tracked `config/proxy.json`.
 - Sending `Ctrl+C` (SIGINT) or SIGTERM to the harness triggers the new graceful shutdown handler: it kills the sandbox PM2 daemon (respecting `PM2_HOME`), cleans up the workspace when `--keep-workspace` is not set, and exits with status 130/143. This prevents stray processes from lingering if a run is aborted mid-restart.
 
 ### Workspace cleanup

@@ -24,6 +24,8 @@ A WSL-native deployment of [mcp-proxy](https://github.com/TBXark/mcp-proxy) that
 | 1mcp agent | stdio | `${ONE_MCP_BIN} --transport stdio` | Discovers nearby MCP servers and writes `${STELAE_DISCOVERY_PATH}` (defaults to `~/.config/stelae/discovered_servers.json`) for the integrator. |
 | Custom tools MCP | stdio | `${PYTHON} ${STELAE_DIR}/scripts/custom_tools_server.py` | Config-driven wrapper that exposes scripts listed in `config/custom_tools.json`. |
 
+> The Go proxy we ship and test against lives in the [`Dub1n/mcp-proxy`](https://github.com/Dub1n/mcp-proxy) fork, which adds the streamable `/mcp` facade (HEAD/GET/POST) used by the restart script and smoke harness. Set `STELAE_PROXY_SOURCE` or pass `--proxy-source` if you need to pin a different remote; otherwise automation clones that fork automatically.
+
 Path placeholders expand from `.env`; see setup below.
 
 ### Core vs Optional Stack
