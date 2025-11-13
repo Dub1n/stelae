@@ -2,13 +2,14 @@
 const HOME         = process.env.HOME;
 const STELAE_DIR   = process.env.STELAE_DIR   || `${HOME}/dev/stelae`;
 const STELAE_CONFIG_HOME = process.env.STELAE_CONFIG_HOME || `${HOME}/.config/stelae`;
+const STELAE_STATE_HOME = process.env.STELAE_STATE_HOME || `${STELAE_CONFIG_HOME}/.state`;
 const APPS_DIR     = process.env.APPS_DIR     || `${HOME}/apps`;
 const LOCAL_BIN    = `${HOME}/.local/bin`;
 const NVM_BIN      = process.env.NVM_BIN || `${HOME}/.nvm/versions/node/v22.19.0/bin`;
 const BRIDGE_PY    = process.env.BRIDGE_PY || `${HOME}/.venvs/stelae-bridge/bin/python`;
 
 const PROXY_BIN    = process.env.PROXY_BIN    || `${APPS_DIR}/mcp-proxy/build/mcp-proxy`;
-const PROXY_CONFIG = process.env.PROXY_CONFIG || `${STELAE_CONFIG_HOME}/proxy.json`;
+const PROXY_CONFIG = process.env.PROXY_CONFIG || `${STELAE_STATE_HOME}/proxy.json`;
 
 const PYTHON_BIN   = process.env.PYTHON || "python3";
 

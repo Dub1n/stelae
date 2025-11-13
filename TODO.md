@@ -56,11 +56,11 @@ Patch Docy’s readability path or pin its dependency so canonical (non-raw) fet
 
   - Maintain `config/proxy.template.json` with placeholders sourced from `.env`
   - Render concrete JSON via `make render-proxy`
-  - *Acceptance:* Generated `config/proxy.json` matches current environment values
+  - *Acceptance:* Generated `~/.config/stelae/.state/proxy.json` matches current environment values
 
 - [x] **First boot (manual)**
 
-  - `~/apps/mcp-proxy/build/mcp-proxy --config ~/dev/stelae/config/proxy.json`
+- `~/apps/mcp-proxy/build/mcp-proxy --config ~/.config/stelae/.state/proxy.json`
   - *Acceptance:* process starts; logs show connected clients; `curl localhost:9090/health` (if available) or observe startup log
 
 ---
@@ -90,7 +90,7 @@ Patch Docy’s readability path or pin its dependency so canonical (non-raw) fet
 
 - [x] **Wire proxy clients to essentials**
 
-  - Ensure each client stanza in `proxy.json` matches the binary name + args
+- Ensure each client stanza in `~/.config/stelae/.state/proxy.json` matches the binary name + args
   - *Acceptance:* Start proxy; logs show each client (minus deferred tasks MCP) initialized without error
 
 ---
@@ -140,7 +140,7 @@ Patch Docy’s readability path or pin its dependency so canonical (non-raw) fet
 
   - `config/proxy.template.json` adds a `one_mcp` stdio stanza using `uv --directory ... run server.py --local`
   - `ecosystem.config.js` now forwards `OPENAI_API_KEY`/`GITHUB_TOKEN` into `mcp-proxy` so the child can start
-  - *Acceptance:* `make render-proxy` surfaces `one_mcp` in `config/proxy.json`
+  - *Acceptance:* `make render-proxy` surfaces `one_mcp` in `~/.config/stelae/.state/proxy.json`
 
 ---
 

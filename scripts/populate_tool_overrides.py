@@ -18,7 +18,7 @@ from mcp.client.stdio import StdioServerParameters, stdio_client
 from stelae_lib.integrator.tool_overrides import ToolOverridesStore
 from stelae_lib.config_overlays import overlay_path_for, runtime_path
 
-DEFAULT_PROXY_PATH = Path("config/proxy.json")
+DEFAULT_PROXY_PATH = runtime_path("proxy.json")
 DEFAULT_OVERRIDES_PATH = Path("config/tool_overrides.json")
 DEFAULT_PROXY_TIMEOUT = 15.0
 
@@ -155,7 +155,11 @@ async def populate_from_proxy_url(
 
 async def main() -> None:
     parser = argparse.ArgumentParser(description="Populate tool override schemas from downstream MCP servers.")
-    parser.add_argument("--proxy", default=str(DEFAULT_PROXY_PATH), help="Path to rendered config/proxy.json")
+    parser.add_argument(
+        "--proxy",
+        default=str(DEFAULT_PROXY_PATH),
+        help="Path to the rendered proxy config (defaults to ~/.config/stelae/.state/proxy.json)",
+    )
     parser.add_argument("--proxy-url", help="Optional MCP endpoint (e.g. http://127.0.0.1:9090/mcp) to reuse an existing tools/list result")
     parser.add_argument("--proxy-timeout", type=float, default=DEFAULT_PROXY_TIMEOUT, help="Timeout (seconds) for proxy HTTP requests")
     parser.add_argument("--overrides", default=str(DEFAULT_OVERRIDES_PATH), help="Path to config/tool_overrides.json")

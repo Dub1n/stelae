@@ -4,7 +4,7 @@
 #   make up               # render config + start services via pm2 + save
 #   make down             # stop/delete core services
 #   make restart-proxy    # restart mcp-proxy after config changes
-#   make render-proxy     # render config/proxy.json from template
+#   make render-proxy     # render proxy config (default ~/.config/stelae/.state/proxy.json)
 #   make logs             # tail logs
 #   make status           # pm2 table
 # ===============================================
