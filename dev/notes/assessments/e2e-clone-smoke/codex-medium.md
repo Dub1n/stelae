@@ -38,7 +38,7 @@
 ## Outstanding questions / dependencies
 
 1. Does Codex require a manifest reinitialize between harness stages, or can we reuse a session once the initial `tools/list` succeeds? Understanding this affects how we script `codex exec` prompts.
-2. Should we expose codex-wrapper as a first-class MCP server in discovery so testers can validate its install/remove cycle, or keep it out-of-band to reduce noise?
+2. Should we expose codex-wrapper as a first-class MCP server in discovery so testers can validate its install/remove cycle, or keep it out-of-band to reduce noise? *note: codex-wrapper-dev MCP server is used for this purpose and should be kept out of the stelae stack*
 3. When do we expect to rerun the Cloudflare worker/tunnel portion inside the harness (currently skipped with `--no-cloudflared`)? Clarifying this will prevent future regressions when remote manifest publication is required.
 
 ## Immediate next steps checklist

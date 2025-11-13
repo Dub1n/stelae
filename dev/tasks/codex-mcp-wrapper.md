@@ -32,7 +32,7 @@ Tags: `#infra`, `#tooling`
 - **Worker pool:** `dispatcher.WorkerPool` spins `fastmcp.Client` connections to stdio Codex MCP workers, enforces semaphore capacity per worker, routes replies using `conversationId`, and writes artifacts to `state/missions/<mission_id>/...`.
 - **Isolation:**
   - Dev install uses `~/dev/codex-mcp-wrapper/.venv`, port `4105`, label `codex-wrapper-dev`.
-  - Future release artifacts will land under `${STELAE_CONFIG_HOME}/codex-mcp-wrapper/` (port `4106`, label `codex-wrapper`). Both can coexist; Stelae chooses the target via its bundle/override config.
+  - Future release artifacts will land under `${STELAE_CONFIG_HOME}/codex-mcp-wrapper/` (port `4106`, label `codex-wrapper`). Both can coexist; Stelae chooses the target via its bundle/override config. *NOT TO BE IMPLEMENTED FOR NOW*
   - Each worker receives its own `$CODEX_HOME=<state_dir>/workers/<label>/codex-home` plus optional env overrides. Default sandbox is `read-only`, approval policy `never`.
 - **Install steps:**
   1. `python3 -m venv ~/dev/codex-mcp-wrapper/.venv && source ...`
@@ -53,7 +53,7 @@ Tags: `#infra`, `#tooling`
 - Research references integrated into the design: OpenAI Codex SDK → "Using Codex CLI programmatically" for non-interactive runs, and `openai/codex/docs/advanced.md#using-codex-as-an-mcp-server` for the MCP tool schema + `$CODEX_HOME` semantics.
 - Outstanding work before we can close the task entirely: **done**
   1. [x] P1 landed: worker health probes, persistent session metadata, structured artifact packaging (zip/tar) plus `scripts/build_release.py` to produce signed artifacts under `~/dev/codex-mcp-wrapper/dist/releases/<version>` (ready to publish/install).
-  2. [x] Starter bundle now includes the `codex-wrapper` server descriptor; `.env.example` exposes `CODEX_WRAPPER_BIN`/`CODEX_WRAPPER_CONFIG` so `manage_stelae` installs the release build automatically.
+  2. [x] Starter bundle now includes the `codex-wrapper` server descriptor; `.env.example` exposes `CODEX_WRAPPER_BIN`/`CODEX_WRAPPER_CONFIG` so `manage_stelae` installs the release build automatically. *NOTE: THIS HAS BEEN REVERSED IN ACCORDANCE WITH THE INTENDED BEHAVIOUR*
   3. [x] `tests/test_codex_wrapper_smoke.py` exercises the wrapper’s `batch` tool through the MCP interface (skips unless the binary/config env vars are set) to guard the integration end-to-end.
   4. [x] External repo updated with docs + release builder; commit message reserved for when we push that repo upstream.
 - `codex-mcp-design.md` no longer lives in `dev/notes/`; reference the new path above.
@@ -69,4 +69,4 @@ Tags: `#infra`, `#tooling`
 
 ## Follow-up work
 
-- _None_. Future iterations can layer on CLI telemetry/exporters as needed, but the P1 scope is complete.
+- *None*. Future iterations can layer on CLI telemetry/exporters as needed, but the P1 scope is complete.
