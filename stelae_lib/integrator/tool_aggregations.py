@@ -3,6 +3,9 @@ from __future__ import annotations
 import copy
 import json
 from dataclasses import dataclass, field
+from datetime import datetime
+import logging
+import os
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, Mapping, MutableMapping, Sequence
 
@@ -15,6 +18,49 @@ DEFAULT_SELECTOR_FIELD = "operation"
 DEFAULT_AGGREGATOR_SERVER = "tool_aggregator"
 DEFAULT_TIMEOUT = 45.0
 _SKIP = object()
+
+LOGGER = logging.getLogger("stelae.tool_aggregator")
+
+
+def _parse_debug_entries(raw: str | None) -> set[str]:
+    if not raw:
+        return set()
+    return {entry.strip() for entry in raw.split(",") if entry.strip()}
+
+
+_DEBUG_AGGREGATIONS = _parse_debug_entries(
+    os.getenv("STELAE_TOOL_AGGREGATOR_DEBUG_TOOLS")
+)
+_DEBUG_LIMIT = max(
+    0, int(os.getenv("STELAE_TOOL_AGGREGATOR_DEBUG_MAX_CHARS", "2048"))
+)
+_DEBUG_LOG_PATH_ENV = os.getenv("STELAE_TOOL_AGGREGATOR_DEBUG_LOG")
+_DEBUG_LOG_PATH = (
+    Path(_DEBUG_LOG_PATH_ENV).expanduser()
+    if _DEBUG_LOG_PATH_ENV
+    else None
+)
+
+
+def _debug_repr(payload: Any) -> str:
+    try:
+        serialized = json.dumps(payload, ensure_ascii=False)
+    except Exception:
+        serialized = repr(payload)
+    if _DEBUG_LIMIT and len(serialized) > _DEBUG_LIMIT:
+        return f"{serialized[:_DEBUG_LIMIT]}… (+{len(serialized) - _DEBUG_LIMIT} bytes)"
+    return serialized
+
+
+def _append_debug_log(line: str) -> None:
+    if not _DEBUG_LOG_PATH:
+        return
+    try:
+        _DEBUG_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with _DEBUG_LOG_PATH.open("a", encoding="utf-8") as handle:
+            handle.write(line + "\n")
+    except Exception:  # pragma: no cover - best-effort diagnostics
+        LOGGER.warning("Failed to append tool aggregator debug log")
 
 
 class ToolAggregationError(ValueError):
@@ -409,6 +455,21 @@ class AggregatedToolRunner:
             payload,
             label=f"{self.definition.name}:{operation.value}",
         )
+        debug_enabled = bool(
+            _DEBUG_AGGREGATIONS and self.definition.name in _DEBUG_AGGREGATIONS
+        )
+        if debug_enabled:
+            snapshot = _debug_repr(payload)
+            LOGGER.info(
+                "Debug aggregated tool %s operation=%s args=%s",
+                self.definition.name,
+                operation.value,
+                snapshot,
+            )
+            _append_debug_log(
+                f"{datetime.utcnow().isoformat()}Z tool={self.definition.name} "
+                f"operation={operation.value} args={snapshot}"
+            )
         request_args = _evaluate_rules(
             operation.argument_rules,
             payload,
@@ -417,10 +478,35 @@ class AggregatedToolRunner:
         timeout = operation.timeout_seconds or self.definition.timeout_seconds or self._fallback_timeout
         result = await self._proxy_call(operation.downstream_tool, request_args, timeout)
         if operation.response_rules:
-            return _evaluate_rules(
+            transformed = _evaluate_rules(
                 operation.response_rules,
                 result,
                 label=f"{self.definition.name}:{operation.value}:response",
+            )
+            if debug_enabled:
+                snapshot_result = _debug_repr(transformed)
+                LOGGER.info(
+                    "Debug aggregated tool %s operation=%s transformed=%s",
+                    self.definition.name,
+                    operation.value,
+                    snapshot_result,
+                )
+                _append_debug_log(
+                    f"{datetime.utcnow().isoformat()}Z tool={self.definition.name} "
+                    f"operation={operation.value} result={snapshot_result}"
+                )
+            return transformed
+        if debug_enabled:
+            snapshot_result = _debug_repr(result)
+            LOGGER.info(
+                "Debug aggregated tool %s operation=%s result=%s",
+                self.definition.name,
+                operation.value,
+                snapshot_result,
+            )
+            _append_debug_log(
+                f"{datetime.utcnow().isoformat()}Z tool={self.definition.name} "
+                f"operation={operation.value} result={snapshot_result}"
             )
         return result
 

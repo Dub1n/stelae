@@ -3,7 +3,7 @@ doc-type: progress
 name: stelae Progress Tracker
 tags: [project, progress]
 status: draft
-last_updated: 2025-11-10
+last_updated: 2025-11-12
 ---
 
 # Stelae Progress Tracker
@@ -11,7 +11,7 @@ last_updated: 2025-11-10
 Legend: `[x]` done · `[~]` in progress · `[ ]` not started · `[!]` broken · `[?]` verify · `[P]` pending investigation
 
 - [ ] [clone-smoke-harness-stability](./tasks/clone-smoke-harness-stability.md) Stabilize the Codex clone smoke harness (auto + manual-stage flows) so bundle install/render/restart finish with live output in <60 s and the full e2e run produces transcripts + clean git status in a fresh sandbox.
-- [~] [stelae-mcp-catalog-consistency](./tasks/stelae-mcp-catalog-consistency.md) Ensure the Stelae MCP proxy consistently advertises the curated tool suite and that Codex (CLI + wrapper) can discover/call those tools without manual fallbacks.
+- [~] [stelae-mcp-catalog-consistency](./tasks/stelae-mcp-catalog-consistency.md) Ensure the Stelae MCP proxy consistently advertises the curated tool suite and that Codex (CLI + wrapper) can discover/call those tools without manual fallbacks. *(2025-11-12: fresh `codex exec --json --full-auto` run in `logs/codex-catalog-orchestrator-latest.jsonl` shows `workspace_fs_read` succeeding again; need to wire the remaining tool calls + harness assertions.)*
 - [x] [stelae-tool-aggregation-visibility](./tasks/stelae-tool-aggregation-visibility.md) Keep the tool aggregation overrides/manifest deduped so only the aggregate entries appear in `tools/list` and their schemas remain valid for Codex registration.
 - [~] [override-expansion](./tasks/override-expansion.md) Support richer proxy tool overrides (descriptions, aliases) so agents see our tuned guidance during initialize/tools/list results.
 - [x] [user-config-overlays](./tasks/user-config-overlays.md) Split repo-shipped defaults from per-instance overlays (e.g. `~/.config/stelae`) so clones stay generic while local MCP customisations auto-load outside git.

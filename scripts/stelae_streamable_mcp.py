@@ -10,6 +10,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from types import MethodType
 from typing import Any, Dict, Iterable, List, Sequence
@@ -23,6 +24,9 @@ from mcp.server import FastMCP
 from stelae_lib.integrator.core import StelaeIntegratorService
 
 DEFAULT_PROXY_BASE = "http://localhost:9090"
+BASE_DIR = Path(__file__).resolve().parent.parent
+LOG_DIR = BASE_DIR / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_STREAMABLE_HOST = "0.0.0.0"
 DEFAULT_STREAMABLE_PORT = 9100
 DEFAULT_SEARCH_MAX_RESULTS = 50
@@ -56,6 +60,54 @@ PROXY_CALL_TIMEOUT = float(
 DEFAULT_SEARCH_PATHS: Sequence[str] = tuple(
     part.strip() for part in SEARCH_PATHS_ENV.split(",") if part.strip()
 ) or (str(SEARCH_ROOT),)
+
+def _parse_debug_list(raw: str | None) -> set[str]:
+    if not raw:
+        return set()
+    return {entry.strip() for entry in raw.split(",") if entry.strip()}
+
+
+DEBUG_TOOLS = _parse_debug_list(os.getenv("STELAE_STREAMABLE_DEBUG_TOOLS"))
+DEBUG_ALL_TOOLS = False
+if "*" in DEBUG_TOOLS:
+    DEBUG_ALL_TOOLS = True
+    DEBUG_TOOLS.discard("*")
+DEBUG_TOOL_PREVIEW = max(
+    0, int(os.getenv("STELAE_STREAMABLE_DEBUG_TOOL_PREVIEW", "2048"))
+)
+DEBUG_RPC_PREVIEW = max(
+    0, int(os.getenv("STELAE_STREAMABLE_DEBUG_RPC_PREVIEW", "2048"))
+)
+DEBUG_LOG_PATH = Path(
+    os.getenv("STELAE_STREAMABLE_DEBUG_LOG", LOG_DIR / "streamable_tool_debug.log")
+)
+
+
+def _debug_snapshot(payload: Any, *, limit: int) -> str:
+    try:
+        serialized = json.dumps(payload, ensure_ascii=False)
+    except Exception:
+        serialized = repr(payload)
+    if limit and len(serialized) > limit:
+        return f"{serialized[:limit]}… (+{len(serialized) - limit} bytes)"
+    return serialized
+
+
+def _append_debug_record(tool: str, arguments: Any, result: Any) -> None:
+    if not DEBUG_LOG_PATH:
+        return
+    message = (
+        f"{datetime.utcnow().isoformat()}Z name={tool} "
+        f"args={_debug_snapshot(arguments, limit=DEBUG_TOOL_PREVIEW)} "
+        f"result={_debug_snapshot(result, limit=DEBUG_TOOL_PREVIEW)}"
+    )
+    try:
+        DEBUG_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with DEBUG_LOG_PATH.open("a", encoding="utf-8") as handle:
+            handle.write(message + "\n")
+    except Exception as exc:  # pragma: no cover - diagnostics only
+        LOGGER.warning("Failed to write streamable debug record: %s", exc)
+
 
 TRANSPORT = os.getenv("STELAE_STREAMABLE_TRANSPORT", "streamable-http")
 MANAGE_TOOL_NAME = "manage_stelae"
@@ -137,6 +189,10 @@ def _configure_logger() -> logging.Logger:
 
 
 LOGGER = _configure_logger()
+if DEBUG_TOOLS:
+    LOGGER.info(
+        "Streamable debug enabled for tools: %s", ", ".join(sorted(DEBUG_TOOLS))
+    )
 
 app = FastMCP(
     name="stelae-hub",
@@ -308,7 +364,20 @@ def _proxy_jsonrpc_sync(
         with httpx.Client(timeout=timeout, follow_redirects=True) as client:
             response = client.post(f"{PROXY_BASE}/mcp", json=payload)
             response.raise_for_status()
-            return _extract_result(method, response.json())
+            try:
+                decoded = response.json()
+            except ValueError as exc:
+                preview = _debug_snapshot(response.text, limit=DEBUG_RPC_PREVIEW)
+                LOGGER.error(
+                    "Proxy %s returned non-JSON payload (%s). Preview: %s",
+                    method,
+                    exc,
+                    preview,
+                )
+                raise RuntimeError(
+                    f"Proxy {method} returned invalid JSON: {exc}"
+                ) from exc
+            return _extract_result(method, decoded)
     except (
         httpx.HTTPError
     ) as exc:  # pragma: no cover - network issues need runtime inspection
@@ -333,7 +402,20 @@ async def _proxy_jsonrpc(
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
             response = await client.post(f"{PROXY_BASE}/mcp", json=payload)
             response.raise_for_status()
-            return _extract_result(method, response.json())
+            try:
+                decoded = response.json()
+            except ValueError as exc:
+                preview = _debug_snapshot(response.text, limit=DEBUG_RPC_PREVIEW)
+                LOGGER.error(
+                    "Proxy %s returned non-JSON payload (%s). Preview: %s",
+                    method,
+                    exc,
+                    preview,
+                )
+                raise RuntimeError(
+                    f"Proxy {method} returned invalid JSON: {exc}"
+                ) from exc
+            return _extract_result(method, decoded)
     except httpx.HTTPError as exc:
         raise RuntimeError(f"Proxy {method} request failed: {exc}") from exc
 
@@ -528,6 +610,21 @@ async def _proxy_call_tool(
         return await _call_manage_tool(arguments or {})
     params = {"name": name, "arguments": arguments or {}}
     result = await _proxy_jsonrpc("tools/call", params, read_timeout=PROXY_CALL_TIMEOUT)
+    debug_hit = DEBUG_ALL_TOOLS
+    if not debug_hit and DEBUG_TOOLS:
+        normalized = name.split("__")[-1]
+        if name in DEBUG_TOOLS or normalized in DEBUG_TOOLS:
+            debug_hit = True
+    if debug_hit:
+        snapshot_args = _debug_snapshot(arguments, limit=DEBUG_TOOL_PREVIEW)
+        snapshot_result = _debug_snapshot(result, limit=DEBUG_TOOL_PREVIEW)
+        LOGGER.info(
+            "Debug tool call %s args=%s result=%s",
+            name,
+            snapshot_args,
+            snapshot_result,
+        )
+        _append_debug_record(name, arguments, result)
     raw_content = result.get("content")
     content_blocks: list[types.Content] = []
     if isinstance(raw_content, list):
