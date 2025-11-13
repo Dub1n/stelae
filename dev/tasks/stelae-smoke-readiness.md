@@ -58,6 +58,15 @@ Tags: `#infra`, `#tests`, `#docs`
   - Automation must archive `codex-transcripts/<stage>.jsonl` plus the mirrored debug logs for every CI/manual run so catalog regressions are obvious.
   - Once catalog hygiene stickiness is verified, add a nightly (or on-demand) harness run that uploads transcripts + `logs/streamable_tool_debug.log` as artifacts.
 
+### Automation guardrails
+
+- **Goals:** Bake the renderer/harness guardrails directly into automation so clone runs fail fast when manifests drift or restarts regress, and capture routine smoke artifacts without manual babysitting.
+- **Recommended order:** (1) land the manifest/backoff/heartbeat tests so failures show up locally, (2) add the recurring harness run + artifact upload to keep telemetry fresh.
+- **Planned work:**
+  - [ ] **Preread:** `README.md` (Troubleshooting), `docs/ARCHITECTURE.md` (Catalog Aggregation & Overrides), `tests/test_repo_sanitized.py`, and `docs/e2e_clone_smoke_test.md` (Validation + Feedback) to align test design with published expectations.
+  - [ ] Extend `tests/test_repo_sanitized.py` (or add a sibling test) to load a rendered manifest snapshot and assert aggregate names + schema dedupe, plus add unit coverage for `probe_jsonrpc_initialize`/heartbeat timeouts so restart regressions surface without running the full harness.
+  - [ ] Schedule (or at least document) a nightly/on-demand clone-harness run that archives `codex-transcripts` and `logs/streamable_tool_debug.log` artifacts, using the existing per-stage log mirroring to simplify uploads.
+
 ## Active checklist
 
 - [ ] Trials – Codex CLI wrappers + harness prove `workspace_fs_read`, `doc_fetch_suite`, and `manage_stelae` all register and complete without manual prompts. *(Appendix B documents the current blocker: Codex still reports `Expecting value` from `workspace_fs_read` even though HTTP probes pass.)*
@@ -126,4 +135,3 @@ Scenario: prove Codex CLI can drive `discover → install → remove` solely via
 ---
 
 For new work, update this file instead of reviving the archived task docs. Keep appendices chronological so future contributors can see exactly what was tried, what failed, and where to resume.
-

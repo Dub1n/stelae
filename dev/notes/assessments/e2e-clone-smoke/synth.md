@@ -57,9 +57,7 @@
 
 ### 4. Bake guardrails into automation
 
-- [ ] **Preread:** `README.md` (Troubleshooting), `docs/ARCHITECTURE.md` (Catalog Aggregation & Overrides), `tests/test_repo_sanitized.py`, and `docs/e2e_clone_smoke_test.md` (Validation + Feedback).
-- [ ] Extend `tests/test_repo_sanitized.py` (or add a sibling test) to load a rendered manifest sample and assert aggregate names + schema dedupe, preventing regressions before manual harness runs. _Not started; the new FastMCP round-trip test only covers `workspace_fs_read` serialization. The restart harness now enforces JSON-RPC backoff + port preflight, so a follow-on test should also cover the `probe_jsonrpc_initialize` path (e.g., simulate a failure and assert the structured error text) once manifests are exercised, and a watchdog-focused test should verify the heartbeat timeout emits SIGTERM as expected._
-- [ ] Consider adding a nightly clone-harness run (manual or shepherded by CI) that archives `codex-transcripts` and `logs/streamable_tool_debug.log` as artifacts, so regressions are caught before release crunches. _Still pending, though the per-stage log mirroring implemented above will make artifact capture trivial once scheduling begins._
+- [ ] Tracking moved to `dev/tasks/stelae-smoke-readiness.md#automation-guardrails`, which now houses the preread, manifest-test, and nightly harness checklist (ordered: land tests first, then schedule recurring runs). Update the workbook directly as progress is made.
 
 ## Key References
 
