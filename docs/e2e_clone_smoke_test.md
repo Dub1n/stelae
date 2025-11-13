@@ -71,6 +71,9 @@ When `--capture-debug-tools` is set the harness also writes `streamable_tool_deb
 `codex-transcripts/`, and mirrors each snapshot back to `dev/logs/harness/<timestamp>-<stage>-*.log` so the evidence
 survives even if the disposable workspace is deleted.
 
+For the active backlog, run logs, and troubleshooting playbooks see
+`dev/tasks/stelae-smoke-readiness.md`.
+
 Common options:
 
 - `--workspace /tmp/stelae-smoke` – reuse a specific directory instead of `mkdtemp`.
@@ -86,8 +89,11 @@ Common options:
   even when the disposable workspace is deleted.
 - `--bootstrap-only` – run the clone/bundle/bootstrap steps once, keep the workspace, and exit before restarting the stack. Pair with `--workspace … --keep-workspace` (set automatically) so subsequent runs can reuse the warmed caches.
 - `--skip-bootstrap --workspace <path> --reuse-workspace` – reuse a previously prepared smoke workspace without re-running clone/bundle setup. The harness validates that `.env`, the proxy checkout, and the workspace marker still exist, then keeps the previously assigned `PROXY_PORT` so reruns exercise the same install phase without repeating dependency downloads.
+- `--restart-timeout <seconds>` – bound each `run_restart_stelae.sh` invocation (default 90 s). When the timeout fires, the harness dumps `pm2 status`, tail snippets from `${PM2_HOME}/logs/*`, and retries up to `--restart-retries`.
+- `--restart-retries <count>` – number of additional restart attempts after a timeout (default 1). Each attempt restreams the helper logs so you can tell whether pm2 made progress.
+- `--heartbeat-timeout <seconds>` – abort the run if no log output arrives within the given window (default 240 s). Heartbeat exits collect the same diagnostics as restart timeouts so Codex sessions never sit silently for minutes.
 
-**Important:** The “install” phase (starter bundle + `make render-proxy` + restart script) consistently completes in under one minute on a clean sandbox. If you see the harness stuck on “Installing starter bundle…” or “Restarting stack…” for several minutes, the issue is almost certainly not a slow install—investigate I/O hangs, missing `STELAE_CONFIG_HOME`, or Codex/manual orchestration instead of raising the timeout.
+**Important:** The “install” phase (starter bundle + `make render-proxy` + restart script) consistently completes in under one minute on a clean sandbox. If you see the harness stuck on “Installing starter bundle…” or “Restarting stack…”, treat it as an orchestration failure—use `--restart-timeout`, `--restart-retries`, and `--heartbeat-timeout` to bail out quickly, capture the pm2/log snippets, and debug the blocked subprocess instead of raising the timeout ceiling.
 - `--force-workspace` – overwrite the directory passed to `--workspace` even if it predates the harness marker or contains other files. Recommended when you want deterministic paths plus full logs (pair with `--keep-workspace`).
 - `--reuse-workspace` – reuse an existing smoke workspace (identified by `.stelae_smoke_workspace`) instead of deleting it. Required when resuming a manual stage; pair with `--workspace <path>`.
 - `--cleanup-only [--workspace /path]` – delete previously kept smoke workspaces (or a specific path) and exit without provisioning a new clone.
@@ -95,10 +101,12 @@ Common options:
 ### Port selection & graceful shutdown
 
 - Every workspace picks a randomized high `PROXY_PORT`/`PUBLIC_PORT` via `choose_proxy_port()` and exports the value through `.env`, `${STELAE_CONFIG_HOME}`, and the rendered `proxy.json`. This keeps disposable sandboxes from binding to the developer’s long-lived `:9090` proxy.
+- Before the restart script runs, the harness preflights the chosen port: it inspects `ss`/`lsof`, sends `SIGTERM`/`SIGKILL` to any lingering listeners, and rechecks so pm2 never collides with a stale proxy. Expect to see `[port-preflight]` logs whenever an old process is cleaned up.
 - The renderer now substitutes `{{PROXY_PORT}}` inside `config/proxy.template.json`, so pm2 always starts `mcp-proxy` on the sandbox-specific port. Local `.env` files should keep `PROXY_PORT` and `PUBLIC_PORT` synchronized; in most setups both remain `9090`.
-- `ecosystem.config.js` defaults `PROXY_CONFIG` to `${STELAE_CONFIG_HOME}/proxy.json`, which is the same file the harness renders inside `config-home/`. This ensures pm2 restarts (even when the daemon survives across runs) keep honoring the sandbox port. When reusing a workspace created before this change, copy the updated `ecosystem.config.js` into the sandbox or rerun the bootstrap step so pm2 stops pointing at the tracked `config/proxy.json`.
+- `ecosystem.config.js` defaults `PROXY_CONFIG` to `${STELAE_STATE_HOME}/proxy.json` (and `${STELAE_STATE_HOME}` falls back to `${STELAE_CONFIG_HOME}/.state`), which is the same file the harness renders inside the config home. This ensures pm2 restarts (even when the daemon survives across runs) keep honoring the sandbox port. When reusing a workspace created before this change, copy the updated `ecosystem.config.js` into the sandbox or rerun the bootstrap step so pm2 stops falling back to the repo path.
 - `scripts/process_tool_aggregations.py --scope local` refreshes only the user-defined aggregates under `${STELAE_CONFIG_HOME}` before exporting `${TOOL_OVERRIDES_PATH}`, and the exporter deduplicates JSON Schema `enum`/`required` arrays. The tracked template carries only the in-repo suite (`manage_docy_sources`), so installing the starter bundle is what writes the workspace/memory/fetch/strata wrappers into your overlay. Re-run the script (it is part of `scripts/run_restart_stelae.sh`) if `tools/list` starts showing the raw Docy/FS tools or Codex complains about repeated `operation` fields—those symptoms mean the manifest is still reading a stale override file. When default aggregates change, run `python scripts/process_tool_aggregations.py --scope default` once, commit the updated `config/tool_overrides.json`, and let `make render-proxy` pick it up.
 - Sending `Ctrl+C` (SIGINT) or SIGTERM to the harness triggers the new graceful shutdown handler: it kills the sandbox PM2 daemon (respecting `PM2_HOME`), cleans up the workspace when `--keep-workspace` is not set, and exits with status 130/143. This prevents stray processes from lingering if a run is aborted mid-restart.
+- Restart/heartbeat timeouts automatically dump `pm2 status` plus tail snippets from `${PM2_HOME}/logs/*` so Codex transcripts always have the context needed to debug hanging restarts.
 
 ### Workspace cleanup
 

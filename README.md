@@ -34,6 +34,18 @@ Path placeholders expand from `.env`; see setup below.
 - **Starter bundle:** Docy + Docy manager, Basic Memory, Strata, Fetch, Scrapling, and the developer-quality-of-life servers (filesystem, ripgrep, terminal controller) live in `config/bundles/starter_bundle.json`. Install them (and their overrides/aggregations) with `python scripts/install_stelae_bundle.py` after cloning. Use `--server` to pick individual entries or `--dry-run` to preview without touching overlays. This pass is what writes the `workspace_fs_*`, `memory_suite`, `doc_fetch_suite`, `scrapling_fetch_suite`, and `strata_ops_suite` aggregations into `${STELAE_CONFIG_HOME}`, so run it whenever you want those high-level tools to appear.
 - **Overlays only:** the installer writes to `${STELAE_CONFIG_HOME}/*.local.json` (no nested subdirectories), so optional services never reappear in tracked templates. Delete a `.local` file to return to the lean core stack, or rerun the installer if you need to rehydrate the bundle later.
 
+### Overlay workflow & guardrails
+
+Whenever you modify tracked templates or add new aggregates, follow this loop so manifests stay deterministic and clone-safe:
+
+1. `python scripts/process_tool_aggregations.py --scope default` – refresh the tracked default aggregations before committing changes.
+2. `python scripts/process_tool_aggregations.py --scope local` – regenerate `${STELAE_CONFIG_HOME}/tool_aggregations.local.json` so local overlays match the new defaults.
+3. `make render-proxy` – re-render `${PROXY_CONFIG}` plus merged overrides inside `${STELAE_STATE_HOME}` (defaults to `${STELAE_CONFIG_HOME}/.state`).
+4. `pytest tests/test_repo_sanitized.py` – fails if renders leak host-specific paths or stop pointing runtime outputs at the config/state homes.
+5. `make verify-clean` (optional pre-commit step) – proves the render + restart helper leave `git status` empty.
+
+Keep hand-edited overlays (`*.local.json`, `.env.local`, discovery caches) in `${STELAE_CONFIG_HOME}` and let renderers write runtime JSON into `${STELAE_STATE_HOME}` so machines never drift apart. The consolidated smoke-readiness plan in `dev/tasks/stelae-smoke-readiness.md` depends on this workflow; update that doc when process changes.
+
 - Scrapling’s canonical schema lives in the overrides template (`config/tool_overrides.json`) under the `scrapling` server. Both `s_fetch_page` and `s_fetch_pattern` advertise `{metadata, content}` payloads in the merged runtime file `${TOOL_OVERRIDES_PATH}`, and the Go proxy’s call-path adapter keeps those overrides in sync whenever a server emits a new structure. If Scrapling’s upstream contract changes, update the template or your local overlay and rerun `make render-proxy` so manifests and tools/list remain truthful.
 
 ---
@@ -526,7 +538,7 @@ anyio.run(smoke_rg)
 | Quarterly | Audit filesystem roots, shell allowlist, Cloudflare credentials, and `.env` paths. |
 | As needed | Update `.env` when binaries move; rerun `make render-proxy`; `pm2 restart mcp-proxy --update-env`. |
 
-Keep a backup of `config/proxy.json` (or rely on git history) before large changes.
+Keep a backup of `~/.config/stelae/.state/proxy.json` (or rely on git history) before large changes.
 
 ---
 
@@ -542,7 +554,7 @@ Keep a backup of `config/proxy.json` (or rely on git history) before large chang
 
 ## Related Files
 
-- `config/proxy.template.json` — template rendered into `config/proxy.json`.
+- `config/proxy.template.json` — template rendered into `${STELAE_STATE_HOME}/proxy.json`.
 - `scripts/render_proxy_config.py` — templating helper.
 - `scripts/stelae_streamable_mcp.py` — FastMCP bridge that mirrors the proxy catalog for local clients.
 - `scripts/stelae_search_mcp.py` — Legacy search shim kept for historical reference.
