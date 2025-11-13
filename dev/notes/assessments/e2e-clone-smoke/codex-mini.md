@@ -3,7 +3,7 @@
 ## Context
 
 - The repo now relies on the Codex-driven e2e clone smoke test (see `docs/e2e_clone_smoke_test.md`) both as verification and as regression coverage for the self-managing stack. The harness clones into a disposable workspace, installs the starter bundle, re-renders configs, and drives codex exec stages that call `workspace_fs_read`, `doc_fetch_suite`, and the aggregate `manage_stelae` tool before cleaning up.
-- Tool aggregation is the mechanism that keeps the manifest clean: `config/tool_aggregations.json` tracks only the repo-owned wrappers while `${STELAE_CONFIG_HOME}/config/tool_aggregations.local.json` stores optional bundles, and `scripts/process_tool_aggregations.py --scope local` writes runtime overrides into `${TOOL_OVERRIDES_PATH}` so local-only tools show up as aggregates without contaminating tracked templates (`README.md:121`, `docs/ARCHITECTURE.md:91`).
+- Tool aggregation is the mechanism that keeps the manifest clean: `config/tool_aggregations.json` tracks only the repo-owned wrappers while `${STELAE_CONFIG_HOME}/tool_aggregations.local.json` stores optional bundles, and `scripts/process_tool_aggregations.py --scope local` writes runtime overrides into `${TOOL_OVERRIDES_PATH}` so local-only tools show up as aggregates without contaminating tracked templates (`README.md:121`, `docs/ARCHITECTURE.md:91`).
 
 ## Key Findings
 

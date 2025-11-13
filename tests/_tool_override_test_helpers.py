@@ -25,7 +25,7 @@ def build_sample_runtime(tmp_path: Path) -> AggregationFixture:
     aggregation_path.write_text(json.dumps(_aggregation_payload(), indent=2), encoding="utf-8")
 
     config_home = tmp_path / "config-home"
-    overlay_path = config_home / "config" / "tool_overrides.local.json"
+    overlay_path = config_home / "tool_overrides.local.json"
     runtime_path = config_home / "tool_overrides.json"
     overlay_path.parent.mkdir(parents=True, exist_ok=True)
 

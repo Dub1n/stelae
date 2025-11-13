@@ -69,7 +69,8 @@ def _sample_bundle() -> dict[str, Any]:
 def test_install_bundle_updates_overlays_and_runs_commands(tmp_path, monkeypatch):
     monkeypatch.setenv("STELAE_CONFIG_HOME", str(tmp_path / "config_home"))
     config_overlays.config_home.cache_clear()
-    assert config_overlays.config_home() == tmp_path / "config_home"
+    config_dir = config_overlays.config_home()
+    assert config_dir == tmp_path / "config_home"
     bundle = _sample_bundle()
     service = FakeService()
     runner = FakeRunner()
@@ -81,9 +82,8 @@ def test_install_bundle_updates_overlays_and_runs_commands(tmp_path, monkeypatch
     assert summary["errors"] == []
     assert summary["installed"] == ["docs", "fs"]
     assert len(summary["overlays"]) == 2
-    overlay_dir = tmp_path / "config_home" / "stelae" / "config"
-    overrides_overlay = overlay_dir / "tool_overrides.local.json"
-    aggregations_overlay = overlay_dir / "tool_aggregations.local.json"
+    overrides_overlay = config_dir / "tool_overrides.local.json"
+    aggregations_overlay = config_dir / "tool_aggregations.local.json"
     assert overrides_overlay.exists()
     assert aggregations_overlay.exists()
     data = json.loads(overrides_overlay.read_text())
@@ -94,7 +94,8 @@ def test_install_bundle_updates_overlays_and_runs_commands(tmp_path, monkeypatch
 def test_install_bundle_respects_filters_and_dry_run(tmp_path, monkeypatch):
     monkeypatch.setenv("STELAE_CONFIG_HOME", str(tmp_path / "config_home"))
     config_overlays.config_home.cache_clear()
-    assert config_overlays.config_home() == tmp_path / "config_home"
+    config_dir = config_overlays.config_home()
+    assert config_dir == tmp_path / "config_home"
     bundle = _sample_bundle()
     service = FakeService(unchanged={"docs"}, failures={"fs"})
     summary = bundles.install_bundle(
@@ -108,6 +109,5 @@ def test_install_bundle_respects_filters_and_dry_run(tmp_path, monkeypatch):
     assert summary["skipped"] == ["docs"]
     assert not summary["commands"]
     assert summary["errors"] == []
-    overlay_dir = tmp_path / "config_home" / "stelae" / "config"
-    overrides_overlay = overlay_dir / "tool_overrides.local.json"
+    overrides_overlay = config_dir / "tool_overrides.local.json"
     assert not overrides_overlay.exists()

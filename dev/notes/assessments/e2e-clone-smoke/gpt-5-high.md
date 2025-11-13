@@ -27,7 +27,7 @@ Read and analyzed:
 
 - Templates vs overlays: tracked configs under `config/` are rendered with `.env` + `${STELAE_CONFIG_HOME}/.env.local`. Runtime artifacts (proxy.json, tool_overrides.json, discovery cache, schema status, cloudflared config) live under `${STELAE_CONFIG_HOME}` and never in git.
 - Core vs optional: core templates declare only self-management servers (`custom`, `integrator`, `one_mcp`, `public_mcp_catalog`, `tool_aggregator`). Optional bundle lives in `config/bundles/starter_bundle.json` and installs into overlays only.
-- Aggregations: `config/tool_aggregations.json` holds only in-repo aggregation defaults (`manage_docy_sources`); optional/local aggregations go to `${STELAE_CONFIG_HOME}/config/tool_aggregations.local.json`. Exporter writes only the relevant layer (`--scope default` vs `--scope local`) and dedupes JSON Schema arrays before emitting runtime overrides.
+- Aggregations: `config/tool_aggregations.json` holds only in-repo aggregation defaults (`manage_docy_sources`); optional/local aggregations go to `${STELAE_CONFIG_HOME}/tool_aggregations.local.json`. Exporter writes only the relevant layer (`--scope default` vs `--scope local`) and dedupes JSON Schema arrays before emitting runtime overrides.
 - Streamable bridge: `scripts/stelae_streamable_mcp.py` exposes a connector-friendly MCP server. It proxies most tools to the Go proxy but directly dispatches `manage_stelae` to the local `StelaeIntegratorService`, making install/remove robust across proxy restarts.
 - Restart orchestration: `scripts/restart_stelae.sh` builds the Go proxy, ensures pm2 apps, waits on the randomized `PROXY_PORT`, probes readiness via HTTP JSON-RPC, populates overrides via the proxy catalog, and only then starts cloudflared.
 

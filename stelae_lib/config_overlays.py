@@ -49,9 +49,24 @@ def overlay_path_for(base_path: Path, *, root: Path | None = None) -> Path:
     except ValueError:
         relative = Path(absolute.name)
     overlay_name = _with_local_suffix(relative.name)
-    target_dir = config_home() / relative.parent
-    target_dir.mkdir(parents=True, exist_ok=True)
-    return target_dir / overlay_name
+    destination = config_home() / overlay_name
+
+    legacy_path: Path | None = None
+    if relative.parent != Path("."):
+        legacy_candidate = config_home() / relative.parent / overlay_name
+        if legacy_candidate != destination:
+            legacy_path = legacy_candidate
+    if legacy_path and legacy_path.exists() and not destination.exists():
+        ensure_parent(destination)
+        legacy_path.replace(destination)
+        try:
+            legacy_parent = legacy_path.parent
+            legacy_parent.rmdir()
+        except OSError:
+            pass
+
+    ensure_parent(destination)
+    return destination
 
 
 def ensure_parent(path: Path) -> None:

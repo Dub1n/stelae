@@ -26,7 +26,7 @@ Tags: `#infra`, `#tooling`
 
 ## Outcome
 
-- Validated the current overlays by diffing `~/.config/stelae/stelae/config/tool_aggregations.local.json` and the runtime manifest, confirming that Docy’s raw tools were still enabled and that `enum`/`required` arrays doubled up whenever overlays re-applied.
+- Validated the current overlays by diffing `~/.config/stelae/tool_aggregations.local.json` and the runtime manifest, confirming that Docy’s raw tools were still enabled and that `enum`/`required` arrays doubled up whenever overlays re-applied.
 - `scripts/process_tool_aggregations.py` now runs in `--scope local` by default so `${STELAE_CONFIG_HOME}` only receives user-defined aggregates before exporting `${TOOL_OVERRIDES_PATH}`, eliminating the race where runtime files were emitted from stale overlays.
 - `ToolOverridesStore` canonicalizes merged overrides by deduplicating JSON Schema `enum`/`required` values, so repeated renders or local overlay edits cannot corrupt the manifest.
 - Added regression tests: `tests/test_tool_aggregations.py::test_aggregation_runtime_dedupes_and_hides` validates the aggregation pipeline hides raw Docy tools and keeps schemas unique, while `tests/test_streamable_mcp.py::test_rendered_manifest_contains_only_aggregates` inspects a rendered manifest snapshot to ensure only aggregate tools remain enabled.

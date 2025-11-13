@@ -27,7 +27,7 @@ app = FastMCP(
 def _build_service() -> StelaeIntegratorService:
     discovery_path = Path(
         os.getenv("STELAE_DISCOVERY_PATH")
-        or (Path(os.getenv("STELAE_CONFIG_HOME", Path.home() / ".config" / "stelae")) / "discovered_servers.json")
+        or (Path(os.getenv("STELAE_CONFIG_HOME", Path.home() / ".config" / "stelae")) / "discovered_servers.local.json")
     )
     template_path = Path(os.getenv("STELAE_PROXY_TEMPLATE", ROOT / "config" / "proxy.template.json"))
     overrides_path = Path(os.getenv("STELAE_TOOL_OVERRIDES", ROOT / "config" / "tool_overrides.json"))
