@@ -66,6 +66,11 @@ Key artifacts in the workspace:
 | `codex-transcripts/*.jsonl` | Raw `codex exec --json` streams per stage. |
 | `manual_playbook.md` / `manual_result.json` | Only created when `--manual` is set (see below). |
 
+When `--capture-debug-tools` is set the harness also writes `streamable_tool_debug.log` and
+`tool_aggregator_debug.log` snapshots into `${WORKSPACE}/logs/` (named `<stage>-*.log`), copies the same files into
+`codex-transcripts/`, and mirrors each snapshot back to `dev/logs/harness/<timestamp>-<stage>-*.log` so the evidence
+survives even if the disposable workspace is deleted.
+
 Common options:
 
 - `--workspace /tmp/stelae-smoke` – reuse a specific directory instead of `mkdtemp`.
@@ -76,6 +81,9 @@ Common options:
 - `--proxy-source <git-or-path>` – override the mcp-proxy checkout source. When omitted the harness checks `STELAE_PROXY_SOURCE`, then falls back to a local `~/apps/mcp-proxy` clone (useful when hacking on the fork), and finally clones `https://github.com/Dub1n/mcp-proxy.git`, which contains the `/mcp` facade required for the readiness probes.
 - `--manual` – generate `manual_playbook.md` / `manual_result.json`, then exit immediately so you can follow the instructions manually. The harness still provisions the sandbox (clone, bundle install, restart) so the manual steps have a ready workspace; this flag simply skips the Codex automation that would normally follow.
 - `--manual-stage bundle-tools|install|remove` – stop right before a specific Codex stage, emit `manual_stage_<stage>.md`, and exit. After finishing those steps, rerun with `--workspace <path> --reuse-workspace` (and without that `--manual-stage`) to continue.
+- `--capture-debug-tools` – enable the FastMCP/tool-aggregator debug env vars, store their log files under `${WORKSPACE}/logs/`,
+  add a per-stage copy to `codex-transcripts/`, and mirror the same snapshots to `dev/logs/harness/` so the artifacts survive
+  even when the disposable workspace is deleted.
 - `--bootstrap-only` – run the clone/bundle/bootstrap steps once, keep the workspace, and exit before restarting the stack. Pair with `--workspace … --keep-workspace` (set automatically) so subsequent runs can reuse the warmed caches.
 - `--skip-bootstrap --workspace <path> --reuse-workspace` – reuse a previously prepared smoke workspace without re-running clone/bundle setup. The harness validates that `.env`, the proxy checkout, and the workspace marker still exist, then keeps the previously assigned `PROXY_PORT` so reruns exercise the same install phase without repeating dependency downloads.
 

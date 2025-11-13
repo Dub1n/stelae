@@ -227,6 +227,48 @@ async def test_proxy_mode_exposes_remote_catalog(monkeypatch):
     assert structured == {"result": "ok"}
     assert content_blocks[0].type == "text"
 
+@pytest.mark.anyio("asyncio")
+async def test_workspace_fs_read_roundtrip(monkeypatch):
+    payload = {
+        "operation": "read_file",
+        "path": "README.md",
+        "text": "Hello from stub",
+    }
+
+    async def fake_proxy_jsonrpc(method, params=None, *, read_timeout=None):
+        if method == "tools/call":
+            assert params["name"] == "workspace_fs_read"
+            args = params["arguments"]
+            assert args["operation"] == "read_file"
+            assert args["path"] == "README.md"
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(payload),
+                    }
+                ],
+                "structuredContent": {"result": payload},
+            }
+        if method == "tools/list":
+            return {"tools": []}
+        return {}
+
+    hub._activate_proxy_handlers()
+    hub.PROXY_MODE = True
+    monkeypatch.setattr(hub, "_proxy_jsonrpc", fake_proxy_jsonrpc)
+
+    contents, structured = await hub.app.call_tool(
+        "workspace_fs_read",
+        {"operation": "read_file", "path": "README.md"},
+    )
+
+    assert structured == {"result": payload}
+    text_blocks = [block for block in contents if isinstance(block, types.TextContent)]
+    assert text_blocks, "expected at least one text block"
+    decoded = json.loads(text_blocks[0].text)
+    assert decoded == payload
+
 
 def test_rendered_manifest_contains_only_aggregates(tmp_path: Path) -> None:
     fixture = build_sample_runtime(tmp_path)

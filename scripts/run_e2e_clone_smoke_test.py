@@ -154,6 +154,12 @@ class CloneSmokeHarness:
         self.log_path = self.workspace / "harness.log"
         self.python_site = self.workspace / "python-site"
         self._pytest_ready = False
+        self.run_label = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        self.capture_debug_tools = bool(args.capture_debug_tools)
+        self.debug_log_dir = self.workspace / "logs"
+        self.streamable_debug_log = self.debug_log_dir / "streamable_tool_debug.log"
+        self.aggregator_debug_log = self.debug_log_dir / "tool_aggregator_debug.log"
+        self.repo_debug_dir = self.source_repo / "dev" / "logs" / "harness"
         self.proxy_port = args.port or choose_proxy_port()
         self.wrapper_release = Path(args.wrapper_release).expanduser().resolve() if args.wrapper_release else None
         self.wrapper_dest: Path | None = None
@@ -191,6 +197,8 @@ class CloneSmokeHarness:
         self._env.setdefault("GIT_AUTHOR_EMAIL", "smoke-harness@example.com")
         self._env.setdefault("GIT_COMMITTER_NAME", self._env["GIT_AUTHOR_NAME"])
         self._env.setdefault("GIT_COMMITTER_EMAIL", self._env["GIT_AUTHOR_EMAIL"])
+        if self.capture_debug_tools:
+            self._configure_debug_env()
         self._shutdown_requested = False
         self._signal_exit = False
         self._original_signal_handlers: dict[int, signal.HandlersType | None] = {}
@@ -238,6 +246,14 @@ class CloneSmokeHarness:
         self._env["PUBLIC_BASE_URL"] = base
         self._env["PUBLIC_SSE_URL"] = f"{base}/mcp"
         self._env["PUBLIC_PORT"] = str(port)
+
+    def _configure_debug_env(self) -> None:
+        self.debug_log_dir.mkdir(parents=True, exist_ok=True)
+        self.repo_debug_dir.mkdir(parents=True, exist_ok=True)
+        self._env["STELAE_STREAMABLE_DEBUG_TOOLS"] = "workspace_fs_read,doc_fetch_suite"
+        self._env["STELAE_STREAMABLE_DEBUG_LOG"] = str(self.streamable_debug_log)
+        self._env["STELAE_TOOL_AGGREGATOR_DEBUG_TOOLS"] = "workspace_fs_read"
+        self._env["STELAE_TOOL_AGGREGATOR_DEBUG_LOG"] = str(self.aggregator_debug_log)
 
     def _run(
         self,
@@ -308,6 +324,32 @@ class CloneSmokeHarness:
             else:
                 status = f"rc={completed.returncode}"
             self._log(f"[cmd] {display} → {status} in {duration:.1f}s")
+
+    def _capture_debug_logs(self, stage_name: str) -> None:
+        if not self.capture_debug_tools:
+            return
+        stage_slug = stage_name.replace(" ", "_")
+        artifacts = (
+            (self.streamable_debug_log, "streamable_tool_debug.log"),
+            (self.aggregator_debug_log, "tool_aggregator_debug.log"),
+        )
+        self.debug_log_dir.mkdir(parents=True, exist_ok=True)
+        self.transcript_dir.mkdir(parents=True, exist_ok=True)
+        self.repo_debug_dir.mkdir(parents=True, exist_ok=True)
+        for source, base_name in artifacts:
+            if not source.exists():
+                continue
+            workspace_copy = self.debug_log_dir / f"{stage_slug}-{base_name}"
+            transcript_copy = self.transcript_dir / f"{stage_slug}-{base_name}"
+            repo_copy = self.repo_debug_dir / f"{self.run_label}-{stage_slug}-{base_name}"
+            shutil.copy2(source, workspace_copy)
+            shutil.copy2(source, transcript_copy)
+            shutil.copy2(source, repo_copy)
+            source.unlink(missing_ok=True)
+            self._log(
+                "Captured debug log %s for stage %s → %s (mirrored to %s and %s)"
+                % (base_name, stage_name, workspace_copy, transcript_copy, repo_copy)
+            )
 
     # -------------------------------------------------------------------- stages
     def run(self) -> None:
@@ -647,14 +689,17 @@ class CloneSmokeHarness:
             if stage.name in self.manual_stage_names:
                 self._emit_manual_stage(stage)
                 return True
-            events = self._execute_codex_stage(stage)
-            calls = summarize_tool_calls(events)
-            self._assert_stage_expectations(stage, calls)
-            self.codex_transcripts[stage.name] = calls
-            self._log(
-                f"Codex stage '{stage.name}' captured {len(calls)} tool calls: "
-                + ", ".join(sorted({call.tool for call in calls}))
-            )
+            try:
+                events = self._execute_codex_stage(stage)
+                calls = summarize_tool_calls(events)
+                self._assert_stage_expectations(stage, calls)
+                self.codex_transcripts[stage.name] = calls
+                self._log(
+                    f"Codex stage '{stage.name}' captured {len(calls)} tool calls: "
+                    + ", ".join(sorted({call.tool for call in calls}))
+                )
+            finally:
+                self._capture_debug_logs(stage.name)
             self._assert_clean_repo(f"after-{stage.name}")
         return False
 
@@ -965,6 +1010,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument("--codex-cli", help="Path to the codex CLI binary to run inside the sandbox")
     parser.add_argument("--codex-home", help="Optional path to mirror into CODEX_HOME inside the sandbox")
+    parser.add_argument(
+        "--capture-debug-tools",
+        action="store_true",
+        help="Enable FastMCP + tool_aggregator debug logs and persist per-stage snapshots alongside Codex transcripts",
+    )
     parser.add_argument(
         "--cleanup-only",
         action="store_true",
