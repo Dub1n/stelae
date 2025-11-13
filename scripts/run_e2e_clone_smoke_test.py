@@ -8,11 +8,13 @@ import json
 import os
 import shutil
 import signal
+import threading
 import subprocess
 import sys
 import tempfile
 import textwrap
 import time
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -156,6 +158,8 @@ class CloneSmokeHarness:
         self._pytest_ready = False
         self.run_label = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         self.capture_debug_tools = bool(args.capture_debug_tools)
+        self.restart_timeout = float(args.restart_timeout)
+        self.restart_retries = max(0, int(args.restart_retries))
         self.debug_log_dir = self.workspace / "logs"
         self.streamable_debug_log = self.debug_log_dir / "streamable_tool_debug.log"
         self.aggregator_debug_log = self.debug_log_dir / "tool_aggregator_debug.log"
@@ -199,10 +203,17 @@ class CloneSmokeHarness:
         self._env.setdefault("GIT_COMMITTER_EMAIL", self._env["GIT_AUTHOR_EMAIL"])
         if self.capture_debug_tools:
             self._configure_debug_env()
+        self.heartbeat_timeout = float(args.heartbeat_timeout)
+        self._last_heartbeat = time.monotonic()
+        self._heartbeat_stop = threading.Event()
+        self._heartbeat_thread: threading.Thread | None = None
+        self._heartbeat_triggered = False
         self._shutdown_requested = False
         self._signal_exit = False
         self._original_signal_handlers: dict[int, signal.HandlersType | None] = {}
         self._install_signal_handlers()
+        if self.heartbeat_timeout > 0:
+            self._start_heartbeat_monitor()
         self._log(f"Workspace: {self.workspace}")
 
     # --------------------------------------------------------------------- utils
@@ -237,6 +248,7 @@ class CloneSmokeHarness:
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         with self.log_path.open("a", encoding="utf-8") as handle:
             handle.write(line + "\n")
+        self._last_heartbeat = time.monotonic()
 
     def _apply_proxy_port(self, port: int) -> None:
         base = f"http://127.0.0.1:{port}"
@@ -255,6 +267,104 @@ class CloneSmokeHarness:
         self._env["STELAE_TOOL_AGGREGATOR_DEBUG_TOOLS"] = "workspace_fs_read"
         self._env["STELAE_TOOL_AGGREGATOR_DEBUG_LOG"] = str(self.aggregator_debug_log)
 
+    def _start_heartbeat_monitor(self) -> None:
+        if self._heartbeat_thread is not None:
+            return
+        self._heartbeat_thread = threading.Thread(target=self._heartbeat_loop, name="smoke-heartbeat", daemon=True)
+        self._heartbeat_thread.start()
+
+    def _stop_heartbeat_monitor(self) -> None:
+        if self._heartbeat_thread is None:
+            return
+        self._heartbeat_stop.set()
+        self._heartbeat_thread.join(timeout=2)
+        self._heartbeat_thread = None
+
+    def _heartbeat_loop(self) -> None:
+        while not self._heartbeat_stop.wait(timeout=1):
+            if self.heartbeat_timeout <= 0:
+                continue
+            if self._heartbeat_triggered:
+                return
+            if time.monotonic() - self._last_heartbeat > self.heartbeat_timeout:
+                self._heartbeat_triggered = True
+                self._log(
+                    f"Heartbeat timeout exceeded ({self.heartbeat_timeout}s without new log output); sending SIGTERM to self."
+                )
+                try:
+                    os.kill(os.getpid(), signal.SIGTERM)
+                except Exception:
+                    os._exit(1)
+                return
+
+    def _list_port_listeners(self, port: int) -> list[tuple[int, str]]:
+        listeners: list[tuple[int, str]] = []
+        seen: set[int] = set()
+        ss_bin = shutil.which("ss")
+        if ss_bin:
+            result = subprocess.run(
+                [ss_bin, "-ltnp", f"( sport = :{port} )"],
+                env=self._env,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            for line in result.stdout.splitlines():
+                for match in re.finditer(r"pid=(\d+)", line):
+                    pid = int(match.group(1))
+                    if pid in seen:
+                        continue
+                    seen.add(pid)
+                    listeners.append((pid, line.strip()))
+        if listeners:
+            return listeners
+        lsof_bin = shutil.which("lsof")
+        if not lsof_bin:
+            return []
+        result = subprocess.run(
+            [lsof_bin, "-ti", f"tcp:{port}"],
+            env=self._env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        for raw in result.stdout.splitlines():
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                pid = int(raw)
+            except ValueError:
+                continue
+            if pid in seen:
+                continue
+            seen.add(pid)
+            listeners.append((pid, f"{lsof_bin} tcp:{port}"))
+        return listeners
+
+    def _preflight_proxy_port(self) -> None:
+        listeners = self._list_port_listeners(self.proxy_port)
+        if not listeners:
+            self._log(f"Port preflight: :{self.proxy_port} already free.")
+            return
+        kill_signal = getattr(signal, "SIGKILL", signal.SIGTERM)
+        self._log(f"Port preflight: killing {len(listeners)} listener(s) on :{self.proxy_port} before restart.")
+        for pid, desc in listeners:
+            try:
+                os.kill(pid, kill_signal)
+                self._log(f"Port preflight: killed pid {pid} ({desc})")
+            except ProcessLookupError:
+                self._log(f"Port preflight: pid {pid} already exited")
+            except PermissionError as exc:
+                self._log(f"Port preflight: permission denied killing pid {pid}: {exc}")
+        remaining = self._list_port_listeners(self.proxy_port)
+        if remaining:
+            self._log(
+                f"Port preflight: listeners still present on :{self.proxy_port}; restart script will attempt a force kill."
+            )
+        else:
+            self._log(f"Port preflight: confirmed :{self.proxy_port} is clear before restart.")
+
     def _run(
         self,
         cmd: list[str],
@@ -264,6 +374,7 @@ class CloneSmokeHarness:
         check: bool = True,
         log_output: bool = True,
         log_prefix: str | None = None,
+        timeout: float | None = None,
     ) -> subprocess.CompletedProcess[str]:
         display = " ".join(cmd)
         if cwd:
@@ -274,14 +385,19 @@ class CloneSmokeHarness:
         prefix = log_prefix or ""
         try:
             if capture_output:
-                result = subprocess.run(
-                    cmd,
-                    cwd=str(cwd) if cwd else None,
-                    env=self._env,
-                    text=True,
-                    capture_output=True,
-                    check=False,
-                )
+                try:
+                    result = subprocess.run(
+                        cmd,
+                        cwd=str(cwd) if cwd else None,
+                        env=self._env,
+                        text=True,
+                        capture_output=True,
+                        check=False,
+                        timeout=timeout,
+                    )
+                except subprocess.TimeoutExpired as exc:
+                    self._log(f"Command timed out after {timeout}s: {display}")
+                    raise
                 if log_output:
                     if result.stdout:
                         self._log(f"{prefix}{result.stdout.rstrip()}" if prefix else result.stdout.rstrip())
@@ -300,6 +416,23 @@ class CloneSmokeHarness:
                     stderr=subprocess.STDOUT,
                 )
                 output_lines: list[str] = []
+                timeout_triggered = False
+                timer: threading.Timer | None = None
+                if timeout is not None:
+
+                    def _timeout_handler() -> None:
+                        nonlocal timeout_triggered
+                        if proc.poll() is not None:
+                            return
+                        timeout_triggered = True
+                        try:
+                            proc.terminate()
+                            proc.wait(5)
+                        except subprocess.TimeoutExpired:
+                            proc.kill()
+
+                    timer = threading.Timer(timeout, _timeout_handler)
+                    timer.start()
                 try:
                     if proc.stdout:
                         for line in proc.stdout:
@@ -308,8 +441,13 @@ class CloneSmokeHarness:
                             if log_output and stripped:
                                 self._log(f"{prefix}{stripped}" if prefix else stripped)
                 finally:
+                    if timer:
+                        timer.cancel()
                     proc.wait()
                 completed = subprocess.CompletedProcess(cmd, proc.returncode, "\n".join(output_lines), "")
+                if timeout_triggered:
+                    self._log(f"Command timed out after {timeout}s: {display}")
+                    raise subprocess.TimeoutExpired(cmd, timeout or 0, output=completed.stdout, stderr=completed.stderr)
             if completed.returncode != 0 and check:
                 raise subprocess.CalledProcessError(
                     completed.returncode, cmd, completed.stdout, completed.stderr
@@ -396,6 +534,7 @@ class CloneSmokeHarness:
             success = True
             self._log("Clone smoke harness completed")
         finally:
+            self._stop_heartbeat_monitor()
             self._teardown_processes()
             if success and not self.args.keep_workspace:
                 self._cleanup_workspace()
@@ -547,6 +686,7 @@ class CloneSmokeHarness:
     def _run_render_restart(self) -> None:
         self._log("Running make render-proxy…")
         self._run(["make", "render-proxy"], cwd=self.clone_dir)
+        self._preflight_proxy_port()
         restart_script = self.clone_dir / "scripts" / "run_restart_stelae.sh"
         args = [
             str(restart_script),
@@ -554,7 +694,58 @@ class CloneSmokeHarness:
             "--no-cloudflared",
         ]
         self._log("Restarting stack inside sandbox (expected <60s; investigate logs instead of extending timeouts)…")
-        self._run(args, cwd=self.clone_dir)
+        self._run_restart_with_retry(args)
+        self._log("Restart script finished successfully.")
+
+    def _run_restart_with_retry(self, args: list[str]) -> None:
+        attempts = max(1, self.restart_retries + 1)
+        for attempt in range(1, attempts + 1):
+            try:
+                self._log(f"Restart attempt {attempt}/{attempts} (timeout {self.restart_timeout}s)")
+                self._run(args, cwd=self.clone_dir, timeout=self.restart_timeout)
+                return
+            except subprocess.TimeoutExpired:
+                self._collect_restart_diagnostics(attempt)
+                if attempt >= attempts:
+                    raise
+                self._log(f"Retrying restart script ({attempt + 1}/{attempts}) after timeout…")
+
+    def _collect_restart_diagnostics(self, attempt: int) -> None:
+        self._log(
+            f"Restart attempt {attempt} exceeded {self.restart_timeout}s; collecting pm2 status and recent log snippets…"
+        )
+        if self.pm2_bin:
+            try:
+                self._run(["pm2", "status"], capture_output=True, check=False, log_prefix="[diag] ")
+            except Exception as exc:
+                self._log(f"[diag] pm2 status failed: {exc}")
+        else:
+            self._log("[diag] pm2 binary not found; skipping status dump")
+        log_dir = self.pm2_home / "logs"
+        targets = [
+            ("mcp-proxy-out", log_dir / "mcp-proxy-out.log", 80),
+            ("mcp-proxy-error", log_dir / "mcp-proxy-error.log", 80),
+            ("stelae-bridge-out", log_dir / "stelae-bridge-out.log", 60),
+            ("stelae-bridge-error", log_dir / "stelae-bridge-error.log", 60),
+        ]
+        for label, path, max_lines in targets:
+            if not path.exists():
+                continue
+            tail_lines: deque[str] = deque(maxlen=max_lines)
+            try:
+                with path.open("r", encoding="utf-8", errors="replace") as handle:
+                    for raw in handle:
+                        tail_lines.append(raw.rstrip("\n"))
+            except OSError as exc:
+                self._log(f"[diag] Unable to read {path}: {exc}")
+                continue
+            if not tail_lines:
+                continue
+            self._log(f"[diag] tail -n{max_lines} {path}")
+            for line in tail_lines:
+                if not line:
+                    continue
+                self._log(f"[diag] {label}: {line}")
 
     def _ensure_pytest(self) -> None:
         if self._pytest_ready and self.python_site.exists():
@@ -975,6 +1166,7 @@ class CloneSmokeHarness:
                 self._cleanup_workspace()
             except Exception as exc:  # pragma: no cover - best effort logging
                 self._log(f"Workspace cleanup after {sig_name} failed: {exc}")
+        self._stop_heartbeat_monitor()
         exit_code = 130 if signum == getattr(signal, "SIGINT", signum) else 143
         raise SystemExit(exit_code)
 
@@ -1016,6 +1208,24 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Enable FastMCP + tool_aggregator debug logs and persist per-stage snapshots alongside Codex transcripts",
     )
     parser.add_argument(
+        "--restart-timeout",
+        type=int,
+        default=90,
+        help="Seconds to wait for run_restart_stelae.sh before collecting diagnostics (default: 90)",
+    )
+    parser.add_argument(
+        "--restart-retries",
+        type=int,
+        default=1,
+        help="Number of additional restart attempts after a timeout (default: 1)",
+    )
+    parser.add_argument(
+        "--heartbeat-timeout",
+        type=int,
+        default=240,
+        help="Abort the harness if no log output is produced for N seconds (0 disables; default: 240)",
+    )
+    parser.add_argument(
         "--cleanup-only",
         action="store_true",
         help="Delete previously kept smoke workspaces (optionally the path from --workspace) and exit",
@@ -1039,6 +1249,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         args.keep_workspace = True
     if args.force_workspace and args.reuse_workspace:
         parser.error("--force-workspace and --reuse-workspace cannot be used together")
+    if args.restart_timeout <= 0:
+        parser.error("--restart-timeout must be greater than zero")
+    if args.restart_retries < 0:
+        parser.error("--restart-retries cannot be negative")
+    if args.heartbeat_timeout < 0:
+        parser.error("--heartbeat-timeout cannot be negative")
     return args
 
 

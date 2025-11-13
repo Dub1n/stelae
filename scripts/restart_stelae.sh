@@ -130,6 +130,46 @@ wait_port() {
   return 1
 }
 
+probe_jsonrpc_initialize() {
+  local url="http://127.0.0.1:${PROXY_PORT}/mcp"
+  local payload='{"jsonrpc":"2.0","id":"init","method":"initialize","params":{"protocolVersion":"2024-11-05"}}'
+  local waits=(0 0.5 1 2 4)
+  local attempt=0
+  local last_status=""
+  local last_body=""
+  log "Local probe: initialize (JSON-RPC with backoff)"
+  for delay in "${waits[@]}"; do
+    if (( attempt > 0 )); then
+      sleep "$delay"
+    fi
+    attempt=$((attempt + 1))
+    local hdr_file body_file status
+    hdr_file=$(mktemp)
+    body_file=$(mktemp)
+    if curl --max-time "$CURL_MAX_TIME" -sS -D "$hdr_file" -o "$body_file" \
+        -H 'Content-Type: application/json' --data "$payload" "$url"; then
+      if jq -e '.result' "$body_file" >/dev/null 2>&1; then
+        local summary
+        summary=$(jq -c '{server: (.result.serverInfo?.name // "unknown"), capabilities: (.result.capabilities? | keys)}' "$body_file" 2>/dev/null || true)
+        log "JSON-RPC initialize succeeded on attempt ${attempt}: ${summary:-ok}"
+        jq -C '.' "$body_file" || cat "$body_file"
+        rm -f "$hdr_file" "$body_file"
+        return 0
+      fi
+    fi
+    status=$(sed -n '1p' "$hdr_file" 2>/dev/null || true)
+    last_status="${status:-curl failed}"
+    last_body=$(head -c 400 "$body_file" 2>/dev/null | tr -d '\r')
+    rm -f "$hdr_file" "$body_file"
+  done
+  err "JSON-RPC probe failed for ${url} after ${attempt} attempt(s) (last status: ${last_status:-<none>})"
+  if [ -n "$last_body" ]; then
+    echo "--- last response body (truncated) ---"
+    printf '%s\n' "$last_body"
+  fi
+  return 1
+}
+
 local_tool_count() {
   local payload count
   payload=$(curl --max-time "$CURL_MAX_TIME" -s "http://127.0.0.1:${PROXY_PORT}/mcp" \
@@ -367,9 +407,7 @@ wait_port "$PROXY_PORT" "mcp-proxy" || { err "proxy didn’t bind :$PROXY_PORT";
 log "Local probe: HEAD http://127.0.0.1:${PROXY_PORT}/mcp"
 curl --max-time "$CURL_MAX_TIME" -sI "http://127.0.0.1:${PROXY_PORT}/mcp" | sed -n '1,10p' || true
 
-log "Local probe: initialize (JSON-RPC)"
-curl --max-time "$CURL_MAX_TIME" -s "http://127.0.0.1:${PROXY_PORT}/mcp" -H 'Content-Type: application/json' \
-  --data '{"jsonrpc":"2.0","id":"init","method":"initialize","params":{"protocolVersion":"2024-11-05"}}' | jq -C '.' || true
+probe_jsonrpc_initialize
 
 wait_tools_ready
 
