@@ -19,7 +19,7 @@ from .one_mcp import OneMCPDiscovery, OneMCPDiscoveryError
 from .proxy_template import ProxyTemplate
 from .runner import CommandFailed, CommandRunner
 from .tool_overrides import ToolOverridesStore
-from stelae_lib.config_overlays import config_home, overlay_path_for, parse_env_file
+from stelae_lib.config_overlays import config_home, overlay_path_for, parse_env_file, runtime_path
 
 ENV_PATTERN = re.compile(r"\{\{\s*([A-Z0-9_]+)\s*\}\}")
 
@@ -110,12 +110,12 @@ class StelaeIntegratorService:
         self._template_overlay_path = template_overlay_path
         tool_overrides_output = Path(
             self.env_values.get("TOOL_OVERRIDES_PATH")
-            or (self.config_home / "tool_overrides.json")
+            or runtime_path("tool_overrides.json")
         )
         self.env_values.setdefault("TOOL_OVERRIDES_PATH", str(tool_overrides_output))
         tool_schema_status_path = Path(
             self.env_values.get("TOOL_SCHEMA_STATUS_PATH")
-            or (self.config_home / "tool_schema_status.json")
+            or runtime_path("tool_schema_status.json")
         )
         self.env_values.setdefault("TOOL_SCHEMA_STATUS_PATH", str(tool_schema_status_path))
         self.overrides = ToolOverridesStore(

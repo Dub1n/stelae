@@ -29,6 +29,35 @@ def config_home() -> Path:
     return base
 
 
+@lru_cache(maxsize=1)
+def state_home() -> Path:
+    base = config_home() / ".state"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def runtime_path(filename: str) -> Path:
+    """Return the canonical path for runtime-generated files, migrating old copies."""
+    destination = state_home() / filename
+    legacy_candidates = [
+        config_home() / filename,
+        config_home() / "config" / filename,
+        config_home() / "stelae" / "config" / filename,
+    ]
+    for legacy in legacy_candidates:
+        if legacy == destination:
+            continue
+        if legacy.exists():
+            ensure_parent(destination)
+            if destination.exists():
+                legacy.unlink(missing_ok=True)
+            else:
+                legacy.replace(destination)
+            break
+    ensure_parent(destination)
+    return destination
+
+
 def _with_local_suffix(filename: str) -> str:
     if filename.startswith(".") and filename.count(".") == 1:
         return f"{filename}.local"

@@ -53,13 +53,13 @@ Path placeholders expand from `.env`; see setup below.
    - Project roots: `STELAE_DIR`, `APPS_DIR`, `PHOENIX_ROOT`, `SEARCH_ROOT`.
    - Binaries: `FILESYSTEM_BIN`, `RG_BIN`, `SHELL_BIN`, `DOCY_BIN`, `MEMORY_BIN`, `STRATA_BIN`, `ONE_MCP_BIN`, `LOCAL_BIN/mcp-server-fetch`.
    - Public URLs: `PUBLIC_BASE_URL=https://mcp.infotopology.xyz`, `PUBLIC_SSE_URL=${PUBLIC_BASE_URL}/stream`.
-   - Local overlay home: `STELAE_CONFIG_HOME=${HOME}/.config/stelae`. Automation writes `${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${STELAE_DISCOVERY_PATH}`, and `${TOOL_SCHEMA_STATUS_PATH}` into that directory so git never sees per-machine data. Additional values appended by the integrator land in `${STELAE_CONFIG_HOME}/.env.local`; keep the repo `.env` focused on human-edited keys.
+   - Local overlay home: `STELAE_CONFIG_HOME=${HOME}/.config/stelae`. User-editable overlays (`*.local.json`, `.env.local`, discovery caches) live here. Generated runtime artifacts (`${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${TOOL_SCHEMA_STATUS_PATH}`, etc.) now live under `STELAE_STATE_HOME=${STELAE_CONFIG_HOME}/.state`, keeping the repo and your overlays tidy—route any future runtime outputs there as well. Additional values appended by the integrator land in `${STELAE_CONFIG_HOME}/.env.local`; keep the repo `.env` focused on human-edited keys.
    - Ports: `PROXY_PORT` controls where `mcp-proxy` listens locally; `PUBLIC_PORT` defaults to the same value so tunnels/cloudflared point to the correct listener. The clone smoke harness randomizes `PROXY_PORT` per workspace to avoid colliding with your long-lived dev stack, so keep these fields in sync.
 2. Regenerate runtime config:
    \```bash
    make render-proxy
    \```
-   This renders `${PROXY_CONFIG}` (defaults to `~/.config/stelae/proxy.json`) from `config/proxy.template.json` plus `${STELAE_CONFIG_HOME}/proxy.template.local.json` if present. The renderer also merges `.env`, `.env.example`, and `${STELAE_CONFIG_HOME}/.env.local`, so placeholders such as `{{ PATH }}` resolve correctly without pulling in fragile shell state.
+   This renders `${PROXY_CONFIG}` (defaults to `~/.config/stelae/.state/proxy.json`) from `config/proxy.template.json` plus `${STELAE_CONFIG_HOME}/proxy.template.local.json` if present. The renderer also merges `.env`, `.env.example`, and `${STELAE_CONFIG_HOME}/.env.local`, so placeholders such as `{{ PATH }}` resolve correctly without pulling in fragile shell state.
 3. (Optional) Tailor tool metadata with the overrides template (`config/tool_overrides.json`). The file is validated against `config/tool_overrides.schema.json`, carries an explicit `schemaVersion`, and supports per-tool `description`, aliasing via `name`, richer annotation fields (including `title`), plus full `inputSchema`/`outputSchema` overrides so manifests always describe the wrapped payloads we return. The merged runtime file lives at `${TOOL_OVERRIDES_PATH}`; personal tweaks stay in `${STELAE_CONFIG_HOME}/tool_overrides.local.json`, so keep the template focused on defaults that should ship with the repo:
 
    ```json
@@ -197,7 +197,7 @@ Every config file tracked in this repo is a template. Any local edits made via `
 - `${STELAE_CONFIG_HOME}/.env.local` receives hydrated secrets and generated values so `.env` stays portable.
 - `${STELAE_CONFIG_HOME}/*.local.json` mirrors the repo files (e.g., `proxy.template.local.json`, `tool_overrides.local.json`, `tool_aggregations.local.json`) and contains only your deviations.
 - Renderers merge template → overlay → runtime (`${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${STELAE_CONFIG_HOME}/cloudflared.yml`, ...). Delete a `*.local.*` file and rerun the matching command to reset it.
-- Runtime caches such as `${STELAE_DISCOVERY_PATH}` and `${TOOL_SCHEMA_STATUS_PATH}` already sit under `${STELAE_CONFIG_HOME}`, so git remains clean even when the proxy or integrator writes back metadata.
+- Runtime caches such as `${STELAE_DISCOVERY_PATH}` stay under `${STELAE_CONFIG_HOME}`, while generated artifacts (`${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${TOOL_SCHEMA_STATUS_PATH}`) live under `${STELAE_STATE_HOME}`. Git remains clean even when the proxy or integrator writes back metadata.
 
 ### Hygiene Checks
 

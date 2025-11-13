@@ -13,7 +13,8 @@ def test_env_example_has_no_provider_specific_variables() -> None:
     assert "QDRANT_" not in content
     assert "/home/gabri" not in content
     assert "STELAE_CONFIG_HOME=${HOME}/.config/stelae" in content
-    assert "PROXY_CONFIG=${STELAE_CONFIG_HOME}/proxy.json" in content
+    assert "STELAE_STATE_HOME=${STELAE_CONFIG_HOME}/.state" in content
+    assert "PROXY_CONFIG=${STELAE_STATE_HOME}/proxy.json" in content
 
 
 def test_cloudflared_samples_are_placeholder_only() -> None:

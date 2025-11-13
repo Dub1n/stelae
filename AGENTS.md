@@ -3,7 +3,7 @@
 ## Project Structure & Module Organization
 
 - `scripts/` contains Python/bash automation (renderers, restart helpers, MCP servers); keep each module focused and under ~150 lines.
-- `config/` stores templates (`proxy.template.json`, Cloudflare templates) and runtime data (`tool_overrides.json`, `discovered_servers.json`). Treat `.template` files as source of truth and rerender to produce `config/proxy.json` or `ops/cloudflared.yml`.
+- `config/` stores templates (`proxy.template.json`, Cloudflare templates). Treat `.template` files as source of truth and rerender to produce runtime artifacts inside `${STELAE_STATE_HOME}` (defaults to `${STELAE_CONFIG_HOME}/.state`), keeping templates clean.
 - `cloudflare/worker/` holds the manifest worker plus `wrangler.toml`. `ops/` houses operational manifests (Cloudflared templates). Diagnostics live in `dev/`, integration tests in `tests/`, logs under `logs/`, and PM2 definitions in `ecosystem.config.js`.
 - The Go proxy binary resides in `~/apps/mcp-proxy`; rebuild there with `go build -o build/mcp-proxy` after proxy changes, then use this repo’s renderers to refresh configs.
 
@@ -44,9 +44,9 @@
 
 ## Security & Configuration Tips
 
-- All generated artifacts and local overrides live under `${STELAE_CONFIG_HOME}` (default `~/.config/stelae`). Automation writes `proxy.json`, merged tool overrides, discovery caches, tool schema status, and your `*.local.*` templates there so git never sees machine-specific data. Delete a `*.local.*` file to reset it to the tracked default. Run `pytest tests/test_repo_sanitized.py` before committing template changes to ensure tracked configs stay placeholder-only.
+- User-editable overlays live under `${STELAE_CONFIG_HOME}` (default `~/.config/stelae`). Automation writes runtime artifacts (`proxy.json`, merged tool overrides, tool schema status, etc.) to `${STELAE_STATE_HOME}` so git never sees machine-specific data; route any new generated files there as well. Delete a `.local.*` file to reset it to the tracked default. Run `pytest tests/test_repo_sanitized.py` before committing template changes to ensure tracked configs stay placeholder-only.
 - Keep `.env` out of git; renderers (`scripts/render_proxy_config.py`, `scripts/render_cloudflared_config.py`) handle substitution. Regenerate Cloudflare configs via `make render-cloudflared`, store credentials under `~/.cloudflared`, and validate the public endpoint with the curl/JQ commands in `README.md`.
-- Never manually edit `${PROXY_CONFIG}`, `${STELAE_CONFIG_HOME}/cloudflared.yml`, or `${TOOL_SCHEMA_STATUS_PATH}`; rerender or let automation update them.
+- Never manually edit `${PROXY_CONFIG}` (or any file under `${STELAE_STATE_HOME}`), `${STELAE_CONFIG_HOME}/cloudflared.yml`, or `${TOOL_SCHEMA_STATUS_PATH}`; rerender or let automation update them.
 - Cloudflare worker expects KV data (`scripts/push_manifest_to_kv.sh`). After pushing, deploy with `npx wrangler deploy --config cloudflare/worker/wrangler.toml`.
 
 ## Agent Workflow & Communication

@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from stelae_lib.config_overlays import config_home, overlay_path_for
+from stelae_lib.config_overlays import overlay_path_for, runtime_path
 from stelae_lib.integrator.tool_aggregations import load_tool_aggregation_config
 from stelae_lib.integrator.tool_overrides import ToolOverridesStore
 
@@ -45,7 +45,7 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=Path,
-        help="Merged overrides destination (defaults to ${TOOL_OVERRIDES_PATH} or ~/.config/stelae/tool_overrides.json)",
+        help="Merged overrides destination (defaults to ${TOOL_OVERRIDES_PATH} or ~/.config/stelae/.state/tool_overrides.json)",
     )
     parser.add_argument(
         "--scope",
@@ -56,7 +56,7 @@ def main() -> None:
     args = parser.parse_args()
 
     overlay_path = overlay_path_for(args.overrides)
-    runtime_default = args.output or os.getenv("TOOL_OVERRIDES_PATH") or (config_home() / "tool_overrides.json")
+    runtime_default = args.output or os.getenv("TOOL_OVERRIDES_PATH") or runtime_path("tool_overrides.json")
 
     if args.scope == "default":
         config = load_tool_aggregation_config(

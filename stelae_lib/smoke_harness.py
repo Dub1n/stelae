@@ -15,6 +15,7 @@ SMOKE_ENV_KEYS = (
     "APPS_DIR",
     "VENDOR_DIR",
     "STELAE_CONFIG_HOME",
+    "STELAE_STATE_HOME",
     "PROXY_BIN",
     "PROXY_CONFIG",
     "PROXY_PORT",
@@ -77,10 +78,12 @@ def build_env_map(
     """Generate the `.env` key/value map for the sandbox."""
     vendor_dir = apps_dir / "vendor"
     discovery_path = config_home / "discovered_servers.local.json"
-    overrides_path = config_home / "tool_overrides.json"
-    tool_schema_status_path = config_home / "tool_schema_status.json"
+    state_dir = config_home / ".state"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    overrides_path = state_dir / "tool_overrides.json"
+    tool_schema_status_path = state_dir / "tool_schema_status.json"
     proxy_bin = apps_dir / "mcp-proxy" / "build" / "mcp-proxy"
-    proxy_config = config_home / "proxy.json"
+    proxy_config = state_dir / "proxy.json"
     phoenix = phoenix_root
     mem_dir = phoenix / ".ai" / "memory"
     playground_cache = Path.home() / ".cache" / "ms-playwright"
@@ -89,6 +92,7 @@ def build_env_map(
         "APPS_DIR": str(apps_dir),
         "VENDOR_DIR": str(vendor_dir),
         "STELAE_CONFIG_HOME": str(config_home),
+        "STELAE_STATE_HOME": str(state_dir),
         "PROXY_BIN": str(proxy_bin),
         "PROXY_CONFIG": str(proxy_config),
         "PROXY_PORT": str(proxy_port),
