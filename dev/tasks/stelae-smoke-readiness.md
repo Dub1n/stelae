@@ -1,9 +1,9 @@
 # Task: Stelae smoke readiness (catalog hygiene · harness reliability · Codex orchestration)
 
 Related requirements: consolidated from
-`dev/tasks/e2e-clone-smoke-test.md`, `clone-smoke-harness-stability.md`,
-`stelae-tool-aggregation-visibility.md`, `stelae-mcp-catalog-consistency.md`, and
-`codex-manage-stelae-smoke.md`.
+`archive/e2e-clone-smoke-test.md`, `archive/clone-smoke-harness-stability.md`,
+`archive/stelae-tool-aggregation-visibility.md`, `archive/stelae-mcp-catalog-consistency.md`, and
+`archive/codex-manage-stelae-smoke.md`.
 
 Tags: `#infra`, `#tests`, `#docs`
 
