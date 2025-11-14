@@ -19,6 +19,18 @@ Tags: `#infra`, `#tests`, `#docs`
 | Harness + restart reliability | `scripts/run_e2e_clone_smoke_test.py` finishes clone → bundle → render → restart → Codex stages with bounded retries and diagnostics while keeping git clean. | `[~]` (port preflight + restart probes landed, Codex stage timeouts under investigation) |
 | Codex orchestration | Codex CLI + wrapper can run the golden-path `manage_stelae` scenario end-to-end using only MCP calls, with transcripts stored by the harness. | `[~]` (Stage scripts + wrapper integration complete; catalog consistency still blocks “tool missing” flakes.) |
 
+## Active checklist
+
+> For all checklist items, find the relevant workstream and ensure the work is carried out as part of it's setup. This includes performing any pre-reading and adding documentation to the appropriate places.
+
+- [ ] Trials – Codex CLI wrappers + harness prove `workspace_fs_read`, `doc_fetch_suite`, and `manage_stelae` all register and complete without manual prompts. *(Appendix B documents the current blocker: Codex still reports `Expecting value` from `workspace_fs_read` even though HTTP probes pass.)*
+- [ ] Harness reliability – capture a “restart succeeds under 120 s” run with `--capture-debug-tools --manual-stage install` plus logs attached to `dev/logs/harness/`.
+- [ ] Codex orchestration – rerun the full golden path (discover → dry-run install → real install → remove) after catalog fixes land and archive the transcripts under `dev/logs/harness/`.
+- [ ] Docs/tests – README, `docs/ARCHITECTURE.md`, and `docs/e2e_clone_smoke_test.md` now reference this consolidated task and document the overlay + harness expectations (✅ Action Plan #3).
+- [ ] `manage_docy_sources` response encoding – ensure the proxy stops double-encoding the JSON payload so Codex no longer sees “Output validation error … is not of type 'object'.”
+- [ ] Automate harness dependency bootstrap so sandbox `python-site/` always has `httpx`, `anyio`, `mcp`, `fastmcp`, `trio`, etc., before pytest runs (or run tests inside the prepared venv).
+- [ ] Preserve Codex evidence when the harness deletes workspaces (copy `codex-transcripts/*.jsonl` into `dev/logs/harness/` before cleanup so transcripts survive like the debug logs).
+
 ## Workstreams
 
 ### Catalog hygiene
@@ -30,8 +42,12 @@ Tags: `#infra`, `#tests`, `#docs`
   - FastMCP bridge passes downstream payloads verbatim through `PassthroughFuncMetadata`, preventing aggregator schema mismatches and enabling `STELAE_STREAMABLE_DEBUG_*` logging.
 - **Still open:**
   - Trials that prove Codex naturally lists `workspace_fs_read`, `doc_fetch_suite`, and `manage_stelae` without hard-coded prompts. Capture successes/failures via `codex-transcripts/*.jsonl` + mirrored tool-debug logs. *(See Appendix B for the current Codex CLI smoke baseline.)*
+    - 2025‑11‑13 manual bundle-tools repro (workspace `/tmp/stelae-smoke-investigation`, artifacts `dev/logs/harness/20251113-204753-{bundle-tools.jsonl,streamable_tool_debug.log,tool_aggregator_debug.log}`) – Codex still cannot call `tools/list` directly and kept probing `mcp__stelae__strata_ops_suite` (`call_action`, `discover_server_actions`) until it gave up (`Server 'tools' not found or not connected`). When it moved on, `workspace_fs_read` returned well-formed JSON for `/tmp/stelae-smoke-investigation/client-repo/README.md`, `grep` reported the expected “No matches found,” and `doc_fetch_suite.list_documentation_sources_tool` succeeded (empty array). The remaining regression is `manage_docy_sources.list_sources`: Codex still records “Output validation error … is not of type 'object'” because the proxy emits a JSON blob encoded as a string pointing at `/home/gabri/dev/stelae/config/docy_sources.json`. Hypothesis check: this confirms the manifest drift is specifically about discovery (`tools/list`) while `workspace_fs_read` itself is healthy in this workspace.
+    - 2025‑11‑14 automated rerun: pointing `.env` `PYTHON`/`SHIM_PYTHON` at `~/.venvs/stelae-bridge/bin/python` let `tool_aggregator_server.py` + `stelae_integrator_server.py` register (`tools/list` via curl now advertises 10 tools, matching the aggregate set). However, the harness’ pytest stage exposed more missing deps for `/usr/bin/python3` (`httpx`, `anyio`, `mcp`, `fastmcp`, `trio`); installing them into `python-site/` allowed the run to finish, but the workspace was auto-cleaned at the end so `codex-transcripts/*.jsonl` were removed (only `dev/logs/harness/20251114-100152-bundle-tools-streamable_tool_debug.log` remained in-repo). Follow-up: make the dependency bootstrap automatic and copy transcripts before cleanup so we keep evidence even when the workspace is wiped.
+    - Follow-up analysis (same workspace) shows the proxy itself only lists `grep` because every other tool is disabled in `tool_overrides.json` unless the aggregate/management servers connect. Runtime overrides in `/tmp/stelae-smoke-investigation/config-home/.state/tool_overrides.json` contain the expected aggregate entries (`workspace_fs_read`, `doc_fetch_suite`, etc.), but both stdio helpers fail to start: `tool_aggregator_server.py` exits with `ModuleNotFoundError: No module named 'httpx'` and `stelae_integrator_server.py` exits with `ModuleNotFoundError: No module named 'mcp'` when invoked with the current `.env` (`PYTHON=/usr/bin/python3`). Because pm2 launches the proxy with that interpreter, neither aggregated tool nor `manage_stelae` registers, so Codex’s `tools/list` request legitimately returns only `grep`. Fix direction: either point `PYTHON` at a venv that already has `fastmcp`/`httpx` (`~/.venvs/stelae-bridge/bin/python`) or install the dependencies into the system interpreter before rerendering/restarting.
   - Update docs/README with the precise “overlay workflow & guardrails” so contributors re-run `process_tool_aggregations.py --scope default`, `process_tool_aggregations.py --scope local`, `make render-proxy`, and `pytest tests/test_repo_sanitized.py` after editing tracked templates. *(This change landed as part of Action Plan #3.)*
-  - Maintain the `dev/logs/harness/*-streamable-tool-debug.log` snapshots for every harness run until `workspace_fs_read` JSON errors disappear.
+  - Maintain the `dev/logs/harness/*-streamable-tool-debug.log` snapshots for every harness run until `workspace_fs_read` JSON errors disappear. *(2025‑11‑13 snapshot above contains only a sentinel message because `codex exec` spoke directly to the HTTP proxy—`stelae-bridge` never received traffic, so no FastMCP payloads were written; the matching `tool_aggregator_debug.log` copy captures the same “not invoked” note.)*
+  - Keep `docs/ARCHITECTURE.md`’s “Catalog Aggregation & Overrides” diagram synchronized with this pipeline. Anytime we change the code that shapes the flow (e.g., `scripts/process_tool_aggregations.py`, `ToolOverridesStore`, `render_proxy_config.py`, the Go proxy catalog builders, or `scripts/tool_aggregator_server.py`), update the diagram as part of this workstream so future diagnostics rely on an accurate map.
 
 ### Harness + restart reliability
 
@@ -67,12 +83,9 @@ Tags: `#infra`, `#tests`, `#docs`
   - [ ] Extend `tests/test_repo_sanitized.py` (or add a sibling test) to load a rendered manifest snapshot and assert aggregate names + schema dedupe, plus add unit coverage for `probe_jsonrpc_initialize`/heartbeat timeouts so restart regressions surface without running the full harness.
   - [ ] Schedule (or at least document) a nightly/on-demand clone-harness run that archives `codex-transcripts` and `logs/streamable_tool_debug.log` artifacts, using the existing per-stage log mirroring to simplify uploads.
 
-## Active checklist
+### Follow-ups
 
-- [ ] Trials – Codex CLI wrappers + harness prove `workspace_fs_read`, `doc_fetch_suite`, and `manage_stelae` all register and complete without manual prompts. *(Appendix B documents the current blocker: Codex still reports `Expecting value` from `workspace_fs_read` even though HTTP probes pass.)*
-- [ ] Harness reliability – capture a “restart succeeds under 120 s” run with `--capture-debug-tools --manual-stage install` plus logs attached to `dev/logs/harness/`.
-- [ ] Codex orchestration – rerun the full golden path (discover → dry-run install → real install → remove) after catalog fixes land and archive the transcripts under `dev/logs/harness/`.
-- [ ] Docs/tests – README, `docs/ARCHITECTURE.md`, and `docs/e2e_clone_smoke_test.md` now reference this consolidated task and document the overlay + harness expectations (✅ Action Plan #3).
+- [ ] Interpreter portability – decide on a portable way to provide `fastmcp` + `httpx` for `tool_aggregator_server.py` / `stelae_integrator_server.py` (e.g., ship a venv, add a requirements installer, or relax the dependency to system packages) so `.env.example` can go back to a generic value without breaking fresh installs.
 
 ## References
 
