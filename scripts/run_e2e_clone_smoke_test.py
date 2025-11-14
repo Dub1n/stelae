@@ -183,6 +183,7 @@ class CloneSmokeHarness:
                 "STELAE_DIR": str(self.clone_dir),
                 "APPS_DIR": str(self.apps_dir),
                 "STELAE_CONFIG_HOME": str(self.config_home),
+                "STELAE_ENV_FILE": str(self.config_home / ".env"),
                 "PM2_HOME": str(self.pm2_home),
                 "GOMODCACHE": str(self.workspace / ".gomodcache"),
                 "GOCACHE": str(self.workspace / ".gocache"),
@@ -602,9 +603,22 @@ class CloneSmokeHarness:
             },
         )
         env_contents = format_env_lines(env_map)
-        env_file = self.clone_dir / ".env"
-        self._log(f"Writing sandbox .env → {env_file}")
+        env_file = self.config_home / ".env"
+        self._log(f"Writing sandbox env → {env_file}")
         env_file.write_text(env_contents, encoding="utf-8")
+        self._run(
+            [
+                sys.executable,
+                "scripts/setup_env.py",
+                "--config-home",
+                str(self.config_home),
+                "--repo-root",
+                str(self.clone_dir),
+                "--env-file",
+                str(env_file),
+            ],
+            cwd=self.clone_dir,
+        )
 
     def _copy_wrapper_release(self) -> None:
         if not self.wrapper_release:
@@ -654,23 +668,26 @@ class CloneSmokeHarness:
             raise SystemExit(
                 f"--skip-bootstrap requires an existing smoke workspace (marker missing at {self.workspace})."
             )
+        repo_env = self.clone_dir / ".env"
+        config_env = self.config_home / ".env"
         required = [
             (self.clone_dir, "cloned repo"),
-            (self.clone_dir / ".env", "sandbox .env"),
+            (repo_env, "repo .env"),
+            (config_env, "config-home .env"),
             (self.apps_dir / "mcp-proxy", "mcp-proxy checkout"),
         ]
         missing = [f"{label} ({path})" for path, label in required if not path.exists()]
         if missing:
             joined = "\n  - ".join(missing)
             raise SystemExit(f"--skip-bootstrap requested but required artifacts are missing:\n  - {joined}")
-        env_file = self.clone_dir / ".env"
+        env_file = config_env
         env_data = env_file.read_text(encoding="utf-8").splitlines()
         proxy_port_line = next(
             (line for line in env_data if line.startswith("PROXY_PORT=") or line.startswith("PUBLIC_PORT=")),
             None,
         )
         if not proxy_port_line:
-            raise SystemExit("--skip-bootstrap requested but PROXY_PORT/PUBLIC_PORT not found in sandbox .env")
+            raise SystemExit("--skip-bootstrap requested but PROXY_PORT/PUBLIC_PORT not found in config-home .env")
         _, value = proxy_port_line.split("=", 1)
         try:
             port_value = int(value.strip())
@@ -1021,7 +1038,7 @@ class CloneSmokeHarness:
             PM2_HOME: `{self.pm2_home}`
             Client repo (Codex working tree): `{self.client_repo}`
 
-            Run the Codex CLI manually for this stage using the sandbox `.env` (`source {self.clone_dir / '.env'}`) and the prompt below. The harness expects you to run the same instructions it would have passed to `codex exec`:
+            Run the Codex CLI manually for this stage using the sandbox env file (`source {self.config_home / '.env'}`; the repo `.env` symlink points here) and the prompt below. The harness expects you to run the same instructions it would have passed to `codex exec`:
 
             ```
             {stage.prompt}
@@ -1104,7 +1121,7 @@ class CloneSmokeHarness:
         ctx = ManualContext(
             sandbox_root=self.workspace,
             clone_dir=self.clone_dir,
-            env_file=self.clone_dir / ".env",
+            env_file=self.config_home / ".env",
             config_home=self.config_home,
             proxy_url=f"http://127.0.0.1:{self.proxy_port}/mcp",
             manual_result=self.manual_result_path,

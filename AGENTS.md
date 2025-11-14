@@ -9,7 +9,7 @@
 
 ## Runtime, Build, and Dev Commands
 
-- Environment: copy `.env.example` → `.env`, update path/binary variables, then run `make render-proxy`. Keep `.env` local; renderers inject values for PM2.
+- Environment: run `python scripts/setup_env.py`, edit `${STELAE_ENV_FILE}` (defaults to `${STELAE_CONFIG_HOME}/.env`) to update path/binary variables, then run `make render-proxy`. Keep `${STELAE_ENV_FILE}` local; renderers inject values for PM2.
 - Core stack = mcp-proxy, custom tools, the Stelae integrator, the tool aggregator helper, the 1mcp stdio agent, the public 1mcp catalog bridge, and the FastMCP bridge. The starter bundle (Docy + manager, Basic Memory, Strata, Fetch, Scrapling, filesystem/ripgrep/terminal helpers) lives in `config/bundles/starter_bundle.json`; install or update it via `python scripts/install_stelae_bundle.py [--server name...]` so the extras stay in `${STELAE_CONFIG_HOME}` overlays instead of git, and keep the Cloudflare tunnel/worker opt-in. The Codex MCP wrapper is intentionally excluded from this bundle—build the release via `~/dev/codex-mcp-wrapper/scripts/build_release.py`, copy it into `${STELAE_CONFIG_HOME}/codex-mcp-wrapper/releases/<version>`, and then run the manual `manage_stelae install_server` flow documented in `README.md` when you explicitly want the wrapper.
 - PM2 lifecycle (`source ~/.nvm/nvm.sh` first):
   - `make up` / `make down` – start or stop the fleet described in `ecosystem.config.js`.
@@ -45,7 +45,7 @@
 ## Security & Configuration Tips
 
 - User-editable overlays live under `${STELAE_CONFIG_HOME}` (default `~/.config/stelae`). Automation writes runtime artifacts (`proxy.json`, merged tool overrides, tool schema status, etc.) to `${STELAE_STATE_HOME}` so git never sees machine-specific data; route any new generated files there as well. Delete a `.local.*` file to reset it to the tracked default. Run `pytest tests/test_repo_sanitized.py` before committing template changes to ensure tracked configs stay placeholder-only.
-- Keep `.env` out of git; renderers (`scripts/render_proxy_config.py`, `scripts/render_cloudflared_config.py`) handle substitution. Regenerate Cloudflare configs via `make render-cloudflared`, store credentials under `~/.cloudflared`, and validate the public endpoint with the curl/JQ commands in `README.md`.
+- Keep `${STELAE_ENV_FILE}` out of git; renderers (`scripts/render_proxy_config.py`, `scripts/render_cloudflared_config.py`) handle substitution. Regenerate Cloudflare configs via `make render-cloudflared`, store credentials under `~/.cloudflared`, and validate the public endpoint with the curl/JQ commands in `README.md`.
 - Never manually edit `${PROXY_CONFIG}` (or any file under `${STELAE_STATE_HOME}`), `${STELAE_CONFIG_HOME}/cloudflared.yml`, or `${TOOL_SCHEMA_STATUS_PATH}`; rerender or let automation update them.
 - Cloudflare worker expects KV data (`scripts/push_manifest_to_kv.sh`). After pushing, deploy with `npx wrangler deploy --config cloudflare/worker/wrangler.toml`.
 

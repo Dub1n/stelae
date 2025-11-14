@@ -35,4 +35,5 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started · `[!]` broken · 
 > Not for tasks (which live above), these are to be launched should a prerequesite be met, rather than completed in sequence
 
 - [x] Remove legacy Python shim (scripts/mcp_output_shim.py) and all references from docs/templates. Keep only proxy call-path adapter; confirm no server routes through shim; update README and ARCHITECTURE accordingly.
+- [x] Keep workstation-specific configs under `${STELAE_CONFIG_HOME}` by moving the canonical `.env` into the config home (`STELAE_ENV_FILE`) via `scripts/setup_env.py` and teaching automation to rely on that path.
 - [ ] Create a `dev/tasks/*_task_dependencies.json` map if future work introduces enough parallel tasks to benefit from explicit DAG tracking.

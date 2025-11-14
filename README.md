@@ -61,18 +61,23 @@ Keep hand-edited overlays (`*.local.json`, `.env.local`, discovery caches) in `$
 
 ## Environment & Config
 
-1. Copy `.env.example` → `.env` and update absolute paths:
+1. Bootstrap the env file so `${STELAE_CONFIG_HOME}/.env` (exported as `STELAE_ENV_FILE`) becomes the canonical source of truth:
+   ```bash
+   python scripts/setup_env.py
+   ```
+   The helper copies `.env.example` into `${STELAE_ENV_FILE}` on first run and replaces `repo/.env` with a symlink (or copy when symlinks are unavailable) for backward compatibility.
+2. Edit `${STELAE_ENV_FILE}` and update absolute paths:
    - Project roots: `STELAE_DIR`, `APPS_DIR`, `PHOENIX_ROOT`, `SEARCH_ROOT`.
    - Binaries: `FILESYSTEM_BIN`, `RG_BIN`, `SHELL_BIN`, `DOCY_BIN`, `MEMORY_BIN`, `STRATA_BIN`, `ONE_MCP_BIN`, `LOCAL_BIN/mcp-server-fetch`.
    - Public URLs: `PUBLIC_BASE_URL=https://mcp.infotopology.xyz`, `PUBLIC_SSE_URL=${PUBLIC_BASE_URL}/stream`.
-   - Local overlay home: `STELAE_CONFIG_HOME=${HOME}/.config/stelae`. User-editable overlays (`*.local.json`, `.env.local`, discovery caches) live here. Generated runtime artifacts (`${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${TOOL_SCHEMA_STATUS_PATH}`, etc.) now live under `STELAE_STATE_HOME=${STELAE_CONFIG_HOME}/.state`, keeping the repo and your overlays tidy—route any future runtime outputs there as well. Additional values appended by the integrator land in `${STELAE_CONFIG_HOME}/.env.local`; keep the repo `.env` focused on human-edited keys.
+   - Local overlay home: `STELAE_CONFIG_HOME=${HOME}/.config/stelae`. User-editable overlays (`*.local.json`, `.env.local`, discovery caches) live here. Generated runtime artifacts (`${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${TOOL_SCHEMA_STATUS_PATH}`, etc.) now live under `STELAE_STATE_HOME=${STELAE_CONFIG_HOME}/.state`, keeping the repo and your overlays tidy—route any future runtime outputs there as well. Additional values appended by the integrator land in `${STELAE_CONFIG_HOME}/.env.local`; keep `${STELAE_ENV_FILE}` focused on human-edited keys.
    - Ports: `PROXY_PORT` controls where `mcp-proxy` listens locally; `PUBLIC_PORT` defaults to the same value so tunnels/cloudflared point to the correct listener. The clone smoke harness randomizes `PROXY_PORT` per workspace to avoid colliding with your long-lived dev stack, so keep these fields in sync.
-2. Regenerate runtime config:
+3. Regenerate runtime config:
    \```bash
    make render-proxy
    \```
-   This renders `${PROXY_CONFIG}` (defaults to `~/.config/stelae/.state/proxy.json`) from `config/proxy.template.json` plus `${STELAE_CONFIG_HOME}/proxy.template.local.json` if present. The renderer also merges `.env`, `.env.example`, and `${STELAE_CONFIG_HOME}/.env.local`, so placeholders such as `{{ PATH }}` resolve correctly without pulling in fragile shell state.
-3. (Optional) Tailor tool metadata with the overrides template (`config/tool_overrides.json`). The file is validated against `config/tool_overrides.schema.json`, carries an explicit `schemaVersion`, and supports per-tool `description`, aliasing via `name`, richer annotation fields (including `title`), plus full `inputSchema`/`outputSchema` overrides so manifests always describe the wrapped payloads we return. The merged runtime file lives at `${TOOL_OVERRIDES_PATH}`; personal tweaks stay in `${STELAE_CONFIG_HOME}/tool_overrides.local.json`, so keep the template focused on defaults that should ship with the repo:
+   This renders `${PROXY_CONFIG}` (defaults to `~/.config/stelae/.state/proxy.json`) from `config/proxy.template.json` plus `${STELAE_CONFIG_HOME}/proxy.template.local.json` if present. The renderer also merges `${STELAE_ENV_FILE}`, `.env.example`, and `${STELAE_CONFIG_HOME}/.env.local`, so placeholders such as `{{ PATH }}` resolve correctly without pulling in fragile shell state.
+4. (Optional) Tailor tool metadata with the overrides template (`config/tool_overrides.json`). The file is validated against `config/tool_overrides.schema.json`, carries an explicit `schemaVersion`, and supports per-tool `description`, aliasing via `name`, richer annotation fields (including `title`), plus full `inputSchema`/`outputSchema` overrides so manifests always describe the wrapped payloads we return. The merged runtime file lives at `${TOOL_OVERRIDES_PATH}`; personal tweaks stay in `${STELAE_CONFIG_HOME}/tool_overrides.local.json`, so keep the template focused on defaults that should ship with the repo:
 
    ```json
    {
@@ -206,7 +211,7 @@ Rerun the installer after pulling template updates or whenever you delete your l
 
 Every config file tracked in this repo is a template. Any local edits made via `manage_stelae`, the restart scripts, or manual tweaks are written to `${STELAE_CONFIG_HOME}` instead:
 
-- `${STELAE_CONFIG_HOME}/.env.local` receives hydrated secrets and generated values so `.env` stays portable.
+- `${STELAE_CONFIG_HOME}/.env.local` receives hydrated secrets and generated values so `${STELAE_ENV_FILE}` stays portable.
 - `${STELAE_CONFIG_HOME}/*.local.json` mirrors the repo files (e.g., `proxy.template.local.json`, `tool_overrides.local.json`, `tool_aggregations.local.json`) and contains only your deviations.
 - Renderers merge template → overlay → runtime (`${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${STELAE_CONFIG_HOME}/cloudflared.yml`, ...). Delete a `*.local.*` file and rerun the matching command to reset it.
 - Runtime caches such as `${STELAE_DISCOVERY_PATH}` stay under `${STELAE_CONFIG_HOME}`, while generated artifacts (`${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${TOOL_SCHEMA_STATUS_PATH}`) live under `${STELAE_STATE_HOME}`. Git remains clean even when the proxy or integrator writes back metadata.
@@ -335,7 +340,7 @@ Every config file tracked in this repo is a template. Any local edits made via `
     --params '{"name": "demo_server", "dry_run": true}'
   ```
 
-- Catalog overrides that hydrate descriptors (for example the Qdrant MCP) may require new environment keys. When `manage_stelae` encounters missing keys it appends safe defaults to your writable env overlay (default `${STELAE_CONFIG_HOME}/.env.local`, or the last `env` file you pass), keeping `.env.example` + tracked configs generic for fresh clones.
+- Catalog overrides that hydrate descriptors (for example the Qdrant MCP) may require new environment keys. When `manage_stelae` encounters missing keys it appends safe defaults to your writable env overlay (default `${STELAE_CONFIG_HOME}/.env.local`, or the last `env` file you pass), keeping `.env.example` + `${STELAE_ENV_FILE}` generic for fresh clones.
 - Supported operations:
   - `discover_servers` – Calls the vendored 1mcp catalogue to find candidates. Accepts `query`, `tags` (list or comma-separated), `preset`, `limit`, `min_score`, `append`, and `dry_run`. The response now echoes the matching descriptors under `details.servers` so you can immediately pick a `name` to install without running `list_discovered_servers`.
   - `list_discovered_servers` – Normalized entries + validation issues, helpful when vetting 1mcp output.

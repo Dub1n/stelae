@@ -1,6 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+REPO_ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
+HOME_DIR="${HOME}"
+DEFAULT_CONFIG_HOME="${HOME_DIR}/.config/stelae"
+INITIAL_CONFIG_HOME="${STELAE_CONFIG_HOME:-$DEFAULT_CONFIG_HOME}"
+ENV_FILE_CANDIDATE="${STELAE_ENV_FILE:-${INITIAL_CONFIG_HOME}/.env}"
+REPO_ENV_FILE="${REPO_ROOT}/.env"
+ENV_SOURCED=""
+
+if [ -f "$ENV_FILE_CANDIDATE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE_CANDIDATE"
+  set +a
+  ENV_SOURCED="$ENV_FILE_CANDIDATE"
+elif [ -f "$REPO_ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$REPO_ENV_FILE"
+  set +a
+  ENV_SOURCED="$REPO_ENV_FILE"
+fi
+
+STELAE_CONFIG_HOME="${STELAE_CONFIG_HOME:-$DEFAULT_CONFIG_HOME}"
+STELAE_ENV_FILE="${STELAE_ENV_FILE:-${STELAE_CONFIG_HOME}/.env}"
+export STELAE_ENV_FILE
+
 SCRIPT_START=$(date +%s)
 
 timestamp() {
@@ -25,11 +52,15 @@ on_exit() {
 }
 trap on_exit EXIT
 
+if [ -n "$ENV_SOURCED" ]; then
+  log "Loaded environment variables from $ENV_SOURCED"
+else
+  warn "No env file found. Proceeding with defaults; run scripts/setup_env.py if values are missing."
+fi
+
 # --- paths & config -----------------------------------------------------------
-HOME_DIR="${HOME}"
-STELAE_DIR="${STELAE_DIR:-$HOME_DIR/dev/stelae}"
+STELAE_DIR="${STELAE_DIR:-$REPO_ROOT}"
 APPS_DIR="${APPS_DIR:-$HOME_DIR/apps}"
-STELAE_CONFIG_HOME="${STELAE_CONFIG_HOME:-$HOME_DIR/.config/stelae}"
 STELAE_STATE_HOME="${STELAE_STATE_HOME:-$STELAE_CONFIG_HOME/.state}"
 mkdir -p "$STELAE_STATE_HOME"
 
@@ -51,7 +82,9 @@ CF_DIR="$HOME_DIR/.cloudflared"
 CF_CONF="$CF_DIR/config.yml"
 
 # public URL for probes
-PUBLIC_BASE_URL="$(grep -E '^PUBLIC_BASE_URL=' "$STELAE_DIR/.env" 2>/dev/null | sed 's/^[^=]*=//')"
+if [ -z "${PUBLIC_BASE_URL:-}" ] && [ -f "$STELAE_ENV_FILE" ]; then
+  PUBLIC_BASE_URL="$(grep -E '^PUBLIC_BASE_URL=' "$STELAE_ENV_FILE" 2>/dev/null | sed 's/^[^=]*=//')"
+fi
 PUBLIC_BASE_URL="${PUBLIC_BASE_URL:-https://mcp.infotopology.xyz}"
 
 # readiness thresholds
@@ -378,7 +411,7 @@ fi
 
 # render proxy config ----------------------------------------------------------
 log "Rendering proxy config → $PROXY_JSON"
-python3 "$RENDERER" --template "$PROXY_TEMPLATE" --output "$PROXY_JSON" --env-file "$STELAE_DIR/.env" --fallback-env "$STELAE_DIR/.env.example"
+python3 "$RENDERER" --template "$PROXY_TEMPLATE" --output "$PROXY_JSON" --env-file "$STELAE_ENV_FILE" --fallback-env "$STELAE_DIR/.env.example"
 python3 - <<'PY' "$PROXY_JSON"
 import json,sys; json.load(open(sys.argv[1]))
 PY

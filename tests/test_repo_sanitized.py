@@ -14,6 +14,7 @@ def test_env_example_has_no_provider_specific_variables() -> None:
     assert "/home/gabri" not in content
     assert "STELAE_CONFIG_HOME=${HOME}/.config/stelae" in content
     assert "STELAE_STATE_HOME=${STELAE_CONFIG_HOME}/.state" in content
+    assert "STELAE_ENV_FILE=${STELAE_CONFIG_HOME}/.env" in content
     assert "PROXY_CONFIG=${STELAE_STATE_HOME}/proxy.json" in content
 
 

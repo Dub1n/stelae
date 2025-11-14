@@ -9,6 +9,7 @@ Render ops/cloudflared.yml from layered templates and environment files.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 from pathlib import Path
@@ -21,6 +22,13 @@ if str(ROOT) not in sys.path:
 from stelae_lib.config_overlays import config_home, load_layered_env, overlay_path_for
 
 TEMPLATE_PATTERN = re.compile(r"\{\{\s*([A-Z0-9_]+)\s*\}\}")
+
+
+def _default_env_file() -> Path:
+    candidate = os.environ.get("STELAE_ENV_FILE")
+    if candidate:
+        return Path(candidate).expanduser()
+    return config_home() / ".env"
 
 
 def compute(values: dict[str, str]) -> dict[str, str]:
@@ -95,7 +103,7 @@ def main() -> None:
         help="Optional overlay template path (defaults to ~/.config/stelae mirror)",
     )
     ap.add_argument("--output", default=Path("stelae/ops/cloudflared.yml"), type=Path)
-    ap.add_argument("--env-file", default=Path("stelae/.env"), type=Path)
+    ap.add_argument("--env-file", default=_default_env_file(), type=Path)
     ap.add_argument("--fallback-env", default=Path("stelae/.env.example"), type=Path)
     ap.add_argument(
         "--overlay-env",

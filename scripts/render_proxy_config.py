@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -16,6 +17,13 @@ if str(ROOT) not in sys.path:
 from stelae_lib.config_overlays import config_home, deep_merge, load_layered_env, overlay_path_for
 
 TEMPLATE_PATTERN = re.compile(r"\{\{\s*([A-Z0-9_]+)\s*\}\}")
+
+
+def _default_env_file() -> Path:
+    candidate = os.environ.get("STELAE_ENV_FILE")
+    if candidate:
+        return Path(candidate).expanduser()
+    return config_home() / ".env"
 
 
 def render(template: str, values: dict[str, str]) -> str:
@@ -37,7 +45,7 @@ def main() -> None:
         "--overlay-template", type=Path, help="Optional overlay template path (defaults to ~/.config/stelae mirror)"
     )
     parser.add_argument("--output", default=Path("config/proxy.json"), type=Path)
-    parser.add_argument("--env-file", default=Path(".env"), type=Path)
+    parser.add_argument("--env-file", default=_default_env_file(), type=Path)
     parser.add_argument("--fallback-env", default=Path(".env.example"), type=Path)
     parser.add_argument(
         "--overlay-env", type=Path, help="Optional overlay env file (defaults to ~/.config/stelae/.env.local)"

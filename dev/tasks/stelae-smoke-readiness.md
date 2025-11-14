@@ -16,7 +16,7 @@ Tags: `#infra`, `#tests`, `#docs`
 | Stream | Goal | Status |
 | --- | --- | --- |
 | Catalog hygiene | Keep the published manifest limited to curated aggregate tools, dedupe schemas, and capture Codex catalog regressions in the harness. | `[~]` (`workspace_fs_read` JSON parsing gap still unresolved) |
-| Harness + restart reliability | `scripts/run_e2e_clone_smoke_test.py` finishes clone → bundle → render → restart → Codex stages with bounded retries and diagnostics while keeping git clean. | `[~]` (port preflight + restart probes landed, Codex stage timeouts under investigation) |
+| Harness + restart reliability | `scripts/run_e2e_clone_smoke_test.py` finishes clone → bundle → render → restart → Codex stages with bounded retries and diagnostics while keeping git clean. Env bootstraps now run through `scripts/setup_env.py` so `${STELAE_ENV_FILE}` lives under `${STELAE_CONFIG_HOME}` and the harness no longer writes repo-local `.env` files directly. | `[~]` (port preflight + restart probes landed, Codex stage timeouts under investigation) |
 | Codex orchestration | Codex CLI + wrapper can run the golden-path `manage_stelae` scenario end-to-end using only MCP calls, with transcripts stored by the harness. | `[~]` (Stage scripts + wrapper integration complete; catalog consistency still blocks “tool missing” flakes.) |
 
 ## Active checklist

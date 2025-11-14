@@ -24,6 +24,17 @@ from stelae_lib.config_overlays import config_home, overlay_path_for, parse_env_
 ENV_PATTERN = re.compile(r"\{\{\s*([A-Z0-9_]+)\s*\}\}")
 
 
+def _default_env_files(root: Path) -> list[Path]:
+    files = [root / ".env.example"]
+    override = os.environ.get("STELAE_ENV_FILE")
+    if override:
+        files.append(Path(override).expanduser())
+    else:
+        files.append(config_home() / ".env")
+    files.append(root / ".env")
+    return files
+
+
 @dataclass
 class IntegratorResponse:
     status: str
@@ -75,7 +86,7 @@ class StelaeIntegratorService:
         self.root = root or Path(__file__).resolve().parents[2]
         self.config_home = config_home()
         # Load env files (.env.example → .env → overlay) before wiring stores.
-        default_env_files = [self.root / ".env.example", self.root / ".env"]
+        default_env_files = _default_env_files(self.root)
         provided_envs = [Path(p) for p in env_files] if env_files else []
         candidates = list(provided_envs or default_env_files)
         self.env_overlay = self.config_home / ".env.local"
