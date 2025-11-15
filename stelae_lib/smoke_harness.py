@@ -86,7 +86,7 @@ def build_env_map(
     proxy_bin = apps_dir / "mcp-proxy" / "build" / "mcp-proxy"
     proxy_config = state_dir / "proxy.json"
     phoenix = phoenix_root
-    mem_dir = phoenix / ".ai" / "memory"
+    mem_dir = config_home / "memory"
     playground_cache = Path.home() / ".cache" / "ms-playwright"
     env: Dict[str, str] = {
         "STELAE_DIR": str(clone_dir),
