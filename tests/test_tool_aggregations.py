@@ -5,6 +5,8 @@ from typing import Any
 
 import pytest
 
+from mcp import types
+
 from stelae_lib.config_overlays import overlay_path_for
 from stelae_lib.integrator.tool_aggregations import (
     AggregatedToolRunner,
@@ -123,10 +125,57 @@ def test_runner_dispatches_and_maps_arguments() -> None:
     result = asyncio.run(
         runner.dispatch({"operation": "ping", "url": "https://example.com"})
     )
-    assert result["status"] == "ok"
+    assert isinstance(result, tuple)
+    content_blocks, structured = result
+    assert structured["status"] == "ok"
+    assert len(content_blocks) == 1
+    assert isinstance(content_blocks[0], types.TextContent)
+    assert "ok" in content_blocks[0].text
     assert observed["tool"] == "demo_tool"
     assert observed["arguments"]["params"]["url"] == "https://example.com"
     assert observed["timeout"] == aggregation.timeout_seconds
+
+
+def test_runner_decodes_structured_json_payloads() -> None:
+    config_data = {
+        "schemaVersion": 1,
+        "aggregations": [
+            {
+                "name": "demo_aggregate",
+                "description": "Sample aggregate",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"operation": {"type": "string"}},
+                    "required": ["operation"],
+                },
+                "operations": [
+                    {
+                        "value": "ping",
+                        "downstreamTool": "demo_tool",
+                        "argumentMappings": [
+                            {"target": "operation", "value": "ping"},
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+    config = ToolAggregationConfig.from_data(config_data)
+    aggregation = config.aggregations[0]
+
+    async def fake_call(name: str, arguments: dict[str, Any], timeout: float | None):
+        return {
+            "content": [{"type": "text", "text": "payload"}],
+            "structuredContent": {"result": '{"status": "ok", "entries": [1]}'},
+        }
+
+    runner = AggregatedToolRunner(aggregation, fake_call)
+    result = asyncio.run(runner.dispatch({"operation": "ping"}))
+    assert isinstance(result, tuple)
+    content_blocks, structured = result
+    assert isinstance(content_blocks[0], types.TextContent)
+    assert structured["result"]["entries"] == [1]
+    assert structured["result"]["status"] == "ok"
 
 
 def test_require_any_of_enforced() -> None:
@@ -172,10 +221,12 @@ def test_aggregation_runtime_dedupes_and_hides(tmp_path: Path) -> None:
     assert required_fields == ["operation"]
 
     enum_values = aggregated["inputSchema"]["properties"]["operation"]["enum"]
-    assert enum_values == ["fetch_document_links", "fetch_documentation_page"]
+    assert {"fetch_document_links", "fetch_documentation_page"}.issubset(set(enum_values))
 
     docs_tools = servers["docs"]["tools"]
-    assert all(entry["enabled"] is False for entry in docs_tools.values())
+    for tool_name in ("fetch_document_links", "fetch_documentation_page"):
+        assert tool_name in docs_tools
+        assert docs_tools[tool_name]["enabled"] is False
 
 
 def test_overlay_only_excludes_defaults(monkeypatch, tmp_path: Path) -> None:

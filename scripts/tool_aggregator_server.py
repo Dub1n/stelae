@@ -65,6 +65,11 @@ class PassthroughFuncMetadata(FuncMetadata):
             return await fn(**payload)
         return fn(**payload)
 
+    def convert_result(self, result: Any) -> Any:
+        """Return tool results without FastMCP post-processing."""
+
+        return result
+
 
 class ProxyCaller:
     def __init__(self, base_url: str) -> None:

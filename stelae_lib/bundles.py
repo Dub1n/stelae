@@ -37,6 +37,72 @@ def _apply_overlay(base_path: Path, addition: dict[str, Any], *, dry_run: bool) 
     return True, overlay_path
 
 
+def _merge_named_entries(
+    existing: list[dict[str, Any]],
+    additions: list[dict[str, Any]],
+    *,
+    key_func: Callable[[dict[str, Any]], str | None],
+) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for entry in additions:
+        key = key_func(entry)
+        if not key or key in seen:
+            continue
+        result.append(json.loads(json.dumps(entry, ensure_ascii=False)))
+        seen.add(key)
+    for entry in existing:
+        key = key_func(entry)
+        if not key or key in seen:
+            continue
+        result.append(json.loads(json.dumps(entry, ensure_ascii=False)))
+        seen.add(key)
+    return result
+
+
+def _apply_tool_aggregations_overlay(
+    base_path: Path,
+    addition: dict[str, Any],
+    *,
+    dry_run: bool,
+) -> tuple[bool, Path]:
+    overlay_path = overlay_path_for(base_path)
+    existing = load_json(overlay_path, default={})
+    passthrough_keys = {
+        key: value
+        for key, value in addition.items()
+        if key not in {"aggregations", "hiddenTools"}
+    }
+    merged = deep_merge(existing, passthrough_keys)
+    existing_aggs = existing.get("aggregations", []) if isinstance(existing.get("aggregations"), list) else []
+    addition_aggs = addition.get("aggregations", []) if isinstance(addition.get("aggregations"), list) else []
+    merged["aggregations"] = _merge_named_entries(
+        existing_aggs,
+        addition_aggs,
+        key_func=lambda entry: str(entry.get("name") or "").strip() or None,
+    )
+    existing_hidden = (
+        existing.get("hiddenTools", []) if isinstance(existing.get("hiddenTools"), list) else []
+    )
+    addition_hidden = (
+        addition.get("hiddenTools", []) if isinstance(addition.get("hiddenTools"), list) else []
+    )
+    merged["hiddenTools"] = _merge_named_entries(
+        existing_hidden,
+        addition_hidden,
+        key_func=lambda entry: (
+            f"{str(entry.get('server') or '').strip()}::{str(entry.get('tool') or '').strip()}"
+            if entry.get("server") and entry.get("tool")
+            else None
+        ),
+    )
+    if merged == existing:
+        return False, overlay_path
+    if not dry_run:
+        write_json(overlay_path, merged)
+    return True, overlay_path
+
+
 def install_bundle(
     bundle: dict[str, Any],
     *,
@@ -93,7 +159,11 @@ def install_bundle(
             emit(f"[bundle] Overlay updated → {path}")
     aggregations_payload = bundle.get("toolAggregations")
     if isinstance(aggregations_payload, dict) and aggregations_payload.get("aggregations"):
-        changed, path = _apply_overlay(ROOT / "config" / "tool_aggregations.json", aggregations_payload, dry_run=dry_run)
+        changed, path = _apply_tool_aggregations_overlay(
+            ROOT / "config" / "tool_aggregations.json",
+            aggregations_payload,
+            dry_run=dry_run,
+        )
         if changed:
             overlay_updates.append({"path": str(path), "dryRun": dry_run})
             emit(f"[bundle] Overlay updated → {path}")

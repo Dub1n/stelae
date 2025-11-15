@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, Mapping, MutableMapping, Sequence
 
+from mcp import types
+
 from stelae_lib.config_overlays import deep_merge, overlay_path_for
 from stelae_lib.integrator.tool_overrides import ToolOverridesStore
 
@@ -476,28 +478,26 @@ class AggregatedToolRunner:
             label=f"{self.definition.name}:{operation.value}",
         )
         timeout = operation.timeout_seconds or self.definition.timeout_seconds or self._fallback_timeout
-        result = await self._proxy_call(operation.downstream_tool, request_args, timeout)
+        raw_result = await self._proxy_call(operation.downstream_tool, request_args, timeout)
+        decoded_result = _decode_json_like(raw_result)
+        structured_payload = None
         if operation.response_rules:
-            transformed = _evaluate_rules(
+            structured_payload = _evaluate_rules(
                 operation.response_rules,
-                result,
+                decoded_result,
                 label=f"{self.definition.name}:{operation.value}:response",
             )
-            if debug_enabled:
-                snapshot_result = _debug_repr(transformed)
-                LOGGER.info(
-                    "Debug aggregated tool %s operation=%s transformed=%s",
-                    self.definition.name,
-                    operation.value,
-                    snapshot_result,
-                )
-                _append_debug_log(
-                    f"{datetime.utcnow().isoformat()}Z tool={self.definition.name} "
-                    f"operation={operation.value} result={snapshot_result}"
-                )
-            return transformed
+        else:
+            structured_content = decoded_result.get("structuredContent")
+            if isinstance(structured_content, Mapping):
+                structured_payload = structured_content
+        proxy_content = decoded_result.get("content")
+        content_blocks = _convert_content_blocks(proxy_content)
+        if not content_blocks:
+            fallback_body = structured_payload if structured_payload is not None else decoded_result
+            content_blocks = [_fallback_text_block(fallback_body)]
         if debug_enabled:
-            snapshot_result = _debug_repr(result)
+            snapshot_result = _debug_repr(decoded_result)
             LOGGER.info(
                 "Debug aggregated tool %s operation=%s result=%s",
                 self.definition.name,
@@ -508,7 +508,89 @@ class AggregatedToolRunner:
                 f"{datetime.utcnow().isoformat()}Z tool={self.definition.name} "
                 f"operation={operation.value} result={snapshot_result}"
             )
-        return result
+        if structured_payload is not None:
+            return content_blocks, structured_payload
+        return content_blocks
+
+
+def _decode_json_like(value: Any) -> Any:
+    if isinstance(value, str):
+        text = value.strip()
+        if text and text[0] in {"{", "["}:
+            try:
+                parsed = json.loads(text)
+            except json.JSONDecodeError:
+                return value
+            return _decode_json_like(parsed)
+        return value
+    if isinstance(value, list):
+        return [_decode_json_like(item) for item in value]
+    if isinstance(value, Mapping):
+        return {key: _decode_json_like(val) for key, val in value.items()}
+    return value
+
+
+def _convert_content_blocks(raw_content: Any) -> list[types.Content]:
+    blocks: list[types.Content] = []
+    if isinstance(raw_content, list):
+        for entry in raw_content:
+            block = _convert_content_entry(entry)
+            if block is not None:
+                blocks.append(block)
+    elif isinstance(raw_content, Mapping):
+        block = _convert_content_entry(raw_content)
+        if block is not None:
+            blocks.append(block)
+    elif isinstance(raw_content, types.Content):
+        blocks.append(raw_content)
+    return blocks
+
+
+def _convert_content_entry(entry: Any) -> types.Content | None:
+    if isinstance(entry, types.Content):
+        return entry
+    if isinstance(entry, Mapping):
+        kind = entry.get("type")
+        annotations = entry.get("annotations")
+        meta = entry.get("_meta")
+        ann_block = annotations if isinstance(annotations, Mapping) else None
+        meta_block = meta if isinstance(meta, Mapping) else None
+        if kind == "text":
+            text = str(entry.get("text") or "")
+            return types.TextContent(
+                type="text",
+                text=text,
+                annotations=ann_block,
+                _meta=meta_block,
+            )
+        if kind == "image":
+            data = entry.get("data")
+            mime = entry.get("mimeType") or entry.get("mime_type")
+            if isinstance(data, str) and isinstance(mime, str):
+                return types.ImageContent(
+                    type="image",
+                    data=data,
+                    mimeType=mime,
+                    annotations=ann_block,
+                    _meta=meta_block,
+                )
+    if isinstance(entry, str):
+        return types.TextContent(type="text", text=entry)
+    if entry is None:
+        return None
+    serialized = json.dumps(entry, ensure_ascii=False)
+    return types.TextContent(type="text", text=serialized)
+
+
+def _fallback_text_block(payload: Any) -> types.TextContent:
+    if isinstance(payload, str):
+        text = payload
+    else:
+        try:
+            text = json.dumps(payload, indent=2, ensure_ascii=False)
+        except TypeError:
+            text = str(payload)
+    return types.TextContent(type="text", text=text)
 
 
 def load_tool_aggregation_config(
