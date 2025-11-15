@@ -2,7 +2,7 @@
 
 ## Overview
 
-Stelae combines a Go-based MCP aggregation proxy, a fleet of downstream MCP servers, a FastMCP bridge for stdio clients, and a Cloudflare tunnel for public access. Everything originates from the local WSL workspace while remaining consumable by remote ChatGPT Connectors. The Go proxy currently comes from the [`Dub1n/mcp-proxy`](https://github.com/Dub1n/mcp-proxy) fork so we can expose a unified `/mcp` facade (HEAD/GET/POST) for readiness probes and streamable clients while upstreaming the feature.
+Stelae combines a Go-based MCP aggregation proxy, a fleet of downstream MCP servers, a FastMCP bridge for stdio clients, and a Cloudflare tunnel for public access. Everything originates from the local WSL workspace while remaining consumable by remote ChatGPT Connectors. The Go proxy currently comes from the [Dub1n/mcp-proxy](https://github.com/Dub1n/mcp-proxy) fork so we can expose a unified `/mcp` facade (HEAD/GET/POST) for readiness probes and streamable clients while upstreaming the feature.
 
 ### Config overlays
 
@@ -13,6 +13,27 @@ Hygiene guardrail: `pytest tests/test_repo_sanitized.py` fails if tracked templa
 `make verify-clean` wraps the same automation path contributors run manually: it snapshots `git status`, executes `make render-proxy` plus `scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --no-cloudflared --skip-populate-overrides`, and then asserts the working tree matches the pre-run snapshot. Any tracked drift now fails the check immediately.
 
 **Overlay workflow:** after editing tracked templates run `python scripts/process_tool_aggregations.py --scope default`, then `python scripts/process_tool_aggregations.py --scope local`, followed by `make render-proxy` and `pytest tests/test_repo_sanitized.py`. This guarantees `${STELAE_CONFIG_HOME}` (human-edited overlays) and `${STELAE_STATE_HOME}` (generated artifacts) stay in sync. Run `make verify-clean` before publishing manifest changes so restart automation proves `git status` remains empty. The consolidated workbook in `dev/tasks/stelae-smoke-readiness.md` references this loop whenever catalog or harness work begins.
+
+#### Overlay → runtime render flow
+
+```mermaid
+flowchart LR
+    Templates["Tracked templates<br/>(config/*.template.*)"]
+    LocalOverlays["${STELAE_CONFIG_HOME}/*.local.json<br/>${STELAE_CONFIG_HOME}/.env.local"]
+    EnvFiles[".env.example → ${STELAE_ENV_FILE}"]
+    Renderers["scripts/render_* helpers<br/>(render_proxy_config.py, render_cloudflared_config.py, etc.)"]
+    State["${STELAE_STATE_HOME}<br/>proxy.json · tool_overrides.json · tool_schema_status.json"]
+    PM2["pm2 + long-lived daemons"]
+
+    Templates --> Renderers
+    LocalOverlays --> Renderers
+    EnvFiles --> Renderers
+    Renderers --> State
+    State --> PM2
+    LocalReset["Delete *.local file"] -.-> LocalOverlays
+```
+
+Templates remain read-only; every renderer merges the tracked default with the writable overlays and env layers before emitting runtime JSON into `${STELAE_STATE_HOME}` (the only path PM2 reads). Removing a `.local` file and rerendering immediately restores the tracked baseline.
 
 ### Core vs optional bundle
 
@@ -190,7 +211,7 @@ PY
 
 1. `config/tool_aggregations.json` declares each aggregate tool (manifest metadata, per-operation mappings, validation hints, and a `hideTools` list). The tracked file now contains only the suites that wrap in-repo servers (so far `manage_docy_sources`), while `${STELAE_CONFIG_HOME}/tool_aggregations.local.json` carries optional bundles and local overrides. The merged payload still obeys `config/tool_aggregations.schema.json` so CI / restart scripts can lint config changes early.
 2. `scripts/process_tool_aggregations.py` runs during `make render-proxy` and the restart workflow. By default it executes the local scope, which looks only at `${STELAE_CONFIG_HOME}/tool_aggregations.local.json`, writes any user-defined aggregates into `${TOOL_OVERRIDES_PATH}`, and flips the corresponding `hideTools` entries to `enabled: false`. The tracked defaults in `config/tool_aggregations.json` are already reflected in `config/tool_overrides.json`; when those defaults change, rerun the script with `--scope default` and commit the result. The exporter also deduplicates JSON Schema `enum`/`required` arrays while merging data so repeated renders or local tweaks never surface invalid schemas to Codex.
-3. `scripts/tool_aggregator_server.py` is a FastMCP stdio server launched by the proxy. On startup it registers one MCP tool per aggregation; at call time it validates the input per the declarative mapping rules, translates arguments into the downstream schema, and uses the proxy JSON-RPC endpoint to call the real tool. Response mappings (optional) can reshape the downstream payload before returning to the client.
+3. `scripts/tool_aggregator_server.py` is a FastMCP stdio server launched by the proxy. On startup it registers one MCP tool per aggregation; at call time it validates the input per the declarative mapping rules, translates arguments into the downstream schema, and uses the proxy JSON-RPC endpoint to call the real tool. A custom `FuncMetadata` shim bypasses FastMCP’s argument marshalling so payloads are forwarded exactly as Codex sends them, and the runner now unwraps JSON-in-a-string responses before returning the downstream `content` blocks plus their original `structuredContent`. Response mappings (optional) can still reshape the downstream payload before returning to the client.
 4. Because both the overrides and the stdio helper derive from the same config, adding a new aggregate requires zero Python changes—edit the JSON, run `make render-proxy`, and the proxy automatically restarts the helper with the new catalog.
 
 Tracked suites declared in `config/tool_aggregations.json`:
@@ -199,9 +220,54 @@ Tracked suites declared in `config/tool_aggregations.json`:
 
 After you install the starter bundle, `${STELAE_CONFIG_HOME}/tool_aggregations.local.json` adds the optional suites (`workspace_fs_read`, `workspace_fs_write`, `workspace_shell_control`, `memory_suite`, `doc_fetch_suite`, `scrapling_fetch_suite`, and `strata_ops_suite`) so third-party helpers continue to surface as a single aggregate entry without touching the tracked templates.
 
-- `manage_docy_sources` – Docy catalog administration (list/add/remove/sync/import).
+- `manage_docy_sources` – Docy catalog administration (list/add/remove/sync/import). The helper disables FastMCP’s schema conversion so `structuredContent` objects from the Docy manager flow straight back to Codex (no more JSON-in-a-string wrappers), and it automatically converts legacy string payloads into proper `TextContent` + dict responses.
 
 If `tools/list` ever shrinks to the fallback `fetch`/`search` entries, the aggregator likely failed to register; rerun `make restart-proxy` (or `scripts/run_restart_stelae.sh --full`) to relaunch the stdio server and restore the curated catalog.
+
+#### Aggregated Tool Formatting Flow
+
+The request/response wiring below shows every component that touches the payload, along with the conditions that affect formatting. When we bypass FastMCP’s schema conversion we only skip redundant JSON parsing—the declarative argument and response mapping layers still enforce the schemas mirrored in `tool_overrides.json`.
+
+```mermaid
+flowchart LR
+    A["Client (Codex / bridge)"] --> B["tool_aggregator handler"]
+    B --> C["PassthroughFuncMetadata\n(no FastMCP arg validation/pre-parse)"]
+    C --> D["AggregatedToolRunner.dispatch()"]
+    D --> E["resolve_operation()\nselectorField + aliases"]
+    E --> F{"requireAnyOf satisfied?"}
+    F -- no --> G["ToolAggregationError\nreported upstream"]
+    F -- yes --> H["_evaluate_rules(argumentMappings)\n• copy literals\n• drop null when stripIfNull\n• enforce 'required'"]
+    H --> I["ProxyCaller → /mcp tools/call"]
+    I --> J["Downstream server"]
+```
+
+```mermaid
+flowchart LR
+    J["Downstream server"] --> K["Proxy result\n(content + structuredContent)"]
+    K --> L["_decode_json_like()\nrecursively parse JSON-looking strings"]
+    L --> M{"responseMappings defined?"}
+    M -- yes --> N["_evaluate_rules(responseMappings)\nproduces Aggregation result"]
+    M -- no --> O{"structuredContent dict present?"}
+    O -- yes --> P["structured_payload = structuredContent"]
+    O -- no --> Q["structured_payload = None"]
+    N --> R
+    P --> R
+    R --> S["_convert_content_blocks()\naccept dict/list/strings"]
+    S --> T{"content blocks empty?"}
+    T -- yes --> U["_fallback_text_block(pretty JSON)"]
+    T -- no --> V["use downstream content"]
+    U --> W["content = [TextContent]"]
+    V --> W
+    R --> X{"structured_payload exists?"}
+    X -- yes --> Y["return (content, structured_payload)\nmatches tool_overrides outputSchema"]
+    X -- no --> Z["return content only"]
+```
+
+Key takeaways:
+
+- **Input path:** clients can send unparsed JSON strings (typical of some MCP agents). `PassthroughFuncMetadata` forwards them untouched, while the declarative `argumentMappings` still enforce required arguments and strip `null` values so downstream calls remain deterministic.
+- **Output path:** every downstream response flows through `_decode_json_like` and `_convert_content_blocks`, guaranteeing that `structuredContent` remains a genuine object while the text block mirrors the payload. When `responseMappings` exist (e.g., to wrap results inside `{"result": {...}}`), the transformed dict is what the client receives; otherwise we reuse the downstream schema verbatim.
+- **Tool overrides:** `ToolAggregationConfig.apply_overrides()` still updates `tool_overrides.json` with the aggregate’s `inputSchema`/`outputSchema`, so Codex sees descriptors that match the runtime behavior (tuple return when `structured_payload` exists, plain text when it does not).
 
 - The proxy records per-tool adapter state in `${TOOL_SCHEMA_STATUS_PATH}` (path set through `manifest.toolSchemaStatusPath`) and patches `${TOOL_OVERRIDES_PATH}` whenever call-path adaptation selects a different schema (e.g., persisting generic for text-only servers). After rerunning `make render-proxy` + restarting PM2, external clients see the updated schemas. `scripts/populate_tool_overrides.py --proxy-url <endpoint> --quiet` now runs during `scripts/restart_stelae.sh` so every restart reuses the freshly collected `tools/list` payload to ensure all downstream schemas are persisted; the script still supports per-server scans for development via `--servers`, and operators can opt out entirely for a given restart with `--skip-populate-overrides`. When invoking manually, export `PYTHONPATH=$STELAE_DIR` so the helper can import `stelae_lib`.
 - Facade fallback descriptors (`search`, `fetch`) remain available even if no downstream server supplies them, and they can also be overridden via the master block.
@@ -209,6 +275,32 @@ If `tools/list` ever shrinks to the fallback `fetch`/`search` entries, the aggre
 ### Catalog publication & Codex trust boundaries
 
 **Renderer → pm2 → proxy.** The catalog always originates from the rendered proxy config: `config/proxy.template.json:2-76` defines the Go facade address plus `toolOverridesPath`/`toolSchemaStatusPath` fields that point at `${STELAE_STATE_HOME}`. `scripts/render_proxy_config.py:18-78` loads layered `.env` values, guarantees `PROXY_PORT` is set (defaulting to `PUBLIC_PORT` or `9090`), and writes the merged JSON to `${PROXY_CONFIG}` (defaulting to `~/.config/stelae/.state/proxy.json`). Restarts (`scripts/run_restart_stelae.sh:41-139`) export that same `PROXY_PORT`, wait for the HTTP `/mcp` endpoint to report a minimum tool count, and immediately run `scripts/populate_tool_overrides.py` through the proxy so schema changes are captured in the config-home overlay. The clone-smoke harness keeps disposable sandboxes from clashing with the long-lived dev proxy by writing the randomly chosen `choose_proxy_port()` value into `.env`, `${STELAE_CONFIG_HOME}`, and the rendered proxy file inside `${STELAE_STATE_HOME}` (`stelae_lib/smoke_harness.py:54-122` plus docs/e2e_clone_smoke_test.md:89-124). Because `ecosystem.config.js:24-65` always launches pm2 with `${PROXY_CONFIG}` and defaults `STELAE_PROXY_BASE` to `http://127.0.0.1:9090`, any sandbox or developer environment that needs a different port must ensure both env vars are updated before restarts run.
+
+#### Catalog rendering & publication flow
+
+```mermaid
+flowchart LR
+    Aggregations["config/tool_aggregations*.json<br/>config/tool_overrides.json"] --> Process["scripts/process_tool_aggregations.py"]
+    LocalOverrides["${STELAE_CONFIG_HOME}/tool_overrides.local.json"] --> Process
+    Process --> StateOverrides["${STELAE_STATE_HOME}/tool_overrides.json"]
+
+    ProxyTemplate["config/proxy.template.json"] --> RenderProxy["scripts/render_proxy_config.py"]
+    EnvLayer["${STELAE_ENV_FILE} + ${STELAE_CONFIG_HOME}/.env.local"] --> RenderProxy
+    RenderProxy --> ProxyConfig["${PROXY_CONFIG}"]
+
+    ProxyConfig --> Restart["scripts/run_restart_stelae.sh<br/>pm2 ecosystem"]
+    Restart --> Proxy["Go mcp-proxy"]
+    Proxy --> Bridge["stelae_streamable_mcp\n(stdio)"]
+    Proxy --> Tunnel["cloudflared tunnel\n(https://mcp.infotopology.xyz)"]
+    Tunnel --> Remote["Remote clients (ChatGPT, etc.)"]
+    Bridge --> Codex["Codex CLI / desktop IDEs"]
+
+    Proxy --> Populate["scripts/populate_tool_overrides.py"]
+    Populate --> LocalOverrides
+    StateOverrides --> Proxy
+```
+
+Tracked + local overrides feed `process_tool_aggregations.py`, renderers materialize `${PROXY_CONFIG}`, the restart helper launches pm2 processes, and both FastMCP and Cloudflare consumers read the exact catalog that `/mcp` advertises. `populate_tool_overrides.py` completes the loop by snapshotting live schemas back into the overlay.
 
 **Bridge + Codex trust.** The FastMCP bridge (`scripts/stelae_streamable_mcp.py:61-519`) acts as the stdio endpoint for Codex/VS Code. On startup it queries `PROXY_BASE` for `tools/list`, injects a local fallback descriptor for `manage_stelae` if the proxy catalog still lacks it, and monkey-patches FastMCP to forward `tools/list`, `tools/call`, prompts, and resources straight through to the Go facade. Codex only trusts the catalog it receives during `initialize`; even if `/mcp` and the TUI report the expected entries, an interactive session will continue using whatever tool list it cached earlier. That is why verifying the catalog requires creating a fresh Codex session each time the proxy restarts, rather than relying on `codex mcp` or curl probes alone.
 
