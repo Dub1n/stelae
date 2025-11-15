@@ -40,8 +40,6 @@
       "transport": "stdio",
       "command": "{{MEMORY_BIN}}",
       "args": [
-        "--project",
-        "{{BASIC_MEMORY_PROJECT}}",
         "mcp",
         "--transport",
         "stdio"
