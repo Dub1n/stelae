@@ -26,8 +26,8 @@
         "{{STELAE_DIR}}/scripts/docy_manager_server.py"
       ],
       "env": {
-        "STELAE_DOCY_CATALOG": "{{STELAE_DIR}}/config/docy_sources.json",
-        "STELAE_DOCY_URL_FILE": "{{STELAE_DIR}}/.docy.urls"
+        "STELAE_DOCY_CATALOG": "{{STELAE_DOCY_CATALOG}}",
+        "STELAE_DOCY_URL_FILE": "{{STELAE_DOCY_URL_FILE}}"
       }
     },
     {
@@ -70,6 +70,7 @@
       "transport": "stdio",
       "command": "{{FILESYSTEM_BIN}}",
       "args": [
+        "--allow-write",
         "{{STELAE_DIR}}"
       ]
     },

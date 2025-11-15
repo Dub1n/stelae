@@ -101,14 +101,13 @@ class StelaeIntegratorService:
         self.env_values = values
         self.env_file = provided_envs[-1] if provided_envs else self.env_overlay
         discovery_base_path = discovery_path or self.root / "config" / "discovered_servers.json"
-        discovery_overlay_path = (
-            discovery_path
-            if discovery_path
-            else Path(
-                self.env_values.get("STELAE_DISCOVERY_PATH")
-                or overlay_path_for(discovery_base_path)
+        if discovery_path:
+            discovery_overlay_path = Path(discovery_path)
+        else:
+            discovery_value = self.env_values.get("STELAE_DISCOVERY_PATH") or str(
+                runtime_path("discovered_servers.json")
             )
-        )
+            discovery_overlay_path = Path(discovery_value)
         template_base_path = template_path or self.root / "config" / "proxy.template.json"
         template_overlay_path = template_path if template_path else overlay_path_for(template_base_path)
         overrides_base_path = overrides_path or self.root / "config" / "tool_overrides.json"

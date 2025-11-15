@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run 1mcp catalogue searches and optionally seed discovered_servers.local.json."""
+"""Run 1mcp catalogue searches and optionally seed discovered_servers.json."""
 
 from __future__ import annotations
 
@@ -12,9 +12,14 @@ from typing import Any, Dict, List
 from stelae_lib.fileio import atomic_write
 from stelae_lib.integrator.one_mcp import OneMCPDiscovery, OneMCPDiscoveryError
 
+_DEFAULT_STATE_HOME = Path(
+    os.getenv("STELAE_STATE_HOME")
+    or Path(os.getenv("STELAE_CONFIG_HOME", Path.home() / ".config" / "stelae")) / ".state"
+)
+_DEFAULT_STATE_HOME.mkdir(parents=True, exist_ok=True)
 DEFAULT_OUTPUT = Path(
     os.getenv("STELAE_DISCOVERY_PATH")
-    or (Path(os.getenv("STELAE_CONFIG_HOME", Path.home() / ".config" / "stelae")) / "discovered_servers.local.json")
+    or (_DEFAULT_STATE_HOME / "discovered_servers.json")
 )
 
 

@@ -14,9 +14,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REPO = Path(os.getenv("ONE_MCP_DIR", Path.home() / "apps" / "vendor" / "1mcpserver"))
 DEFAULT_CONFIG = Path(os.getenv("ONE_MCP_CONFIG", Path.home() / ".config" / "1mcp" / "mcp.json"))
+DEFAULT_STATE_HOME = Path(
+    os.getenv("STELAE_STATE_HOME")
+    or Path(os.getenv("STELAE_CONFIG_HOME", Path.home() / ".config" / "stelae")) / ".state"
+)
+DEFAULT_STATE_HOME.mkdir(parents=True, exist_ok=True)
 DEFAULT_DISCOVERY = Path(
     os.getenv("STELAE_DISCOVERY_PATH")
-    or (Path(os.getenv("STELAE_CONFIG_HOME", Path.home() / ".config" / "stelae")) / "discovered_servers.local.json")
+    or (DEFAULT_STATE_HOME / "discovered_servers.json")
 )
 DEFAULT_UV = os.getenv("ONE_MCP_BIN", "uv")
 

@@ -12,6 +12,8 @@
 - Treat the README “Stack Snapshot” table as the live roster for MCP services (proxy, Docy, aggregator, integrator, custom tools, FastMCP bridge, discovery agent, etc.); each entry lists the transport, launch command, and purpose so you can immediately verify why a server is missing from `pm2 status`.
 - The shipped proxy uses the `Dub1n/mcp-proxy` fork because it exposes the `/mcp` streamable facade. Override `STELAE_PROXY_SOURCE` (or `--proxy-source`) if you need to pin a different remote, then rebuild via `go build -o build/mcp-proxy` before rerendering configs.
 - Local Codex/TUI clients connect through `scripts/stelae_streamable_mcp.py`; configure `~/.codex/config.toml` so `STELAE_PROXY_BASE` points at the bare origin (`http://127.0.0.1:9090`) because the bridge appends `/mcp` internally. If the proxy handshake fails the bridge drops to the fallback `search`/`fetch` catalog, so keep the base URL clean and restart `stelae-bridge` in PM2 when debugging tool gaps.
+- Docy/`doc_fetch_suite` entries must never depend on raw GitHub copies of this repo; keep tracked docs local and only add URLs that are intentionally public (external references, sample domains, published guides). Diagnostics that live in the repo can use neutral placeholders (e.g., `https://www.example.com`) when a remote fetch is needed for tooling, and the MCP resources function remains the sole surface for surfacing repo docs to agents.
+- `workspace_fs_read`/`workspace_fs_write` talk to `rust-mcp-filesystem --allow-write {{STELAE_DIR}}`; always pass absolute paths under `${STELAE_DIR}` so reads/writes stay inside this repo (relative paths inherit the proxy’s cwd and will hit `~/apps/mcp-proxy` otherwise).
 
 ## Runtime, Build, and Dev Commands
 

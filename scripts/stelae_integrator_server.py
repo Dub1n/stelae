@@ -18,6 +18,18 @@ if str(ROOT) not in sys.path:
 
 from stelae_lib.integrator import StelaeIntegratorService  # noqa: E402
 
+
+def _default_discovery_path() -> Path:
+    env_path = os.getenv("STELAE_DISCOVERY_PATH")
+    if env_path:
+        return Path(env_path)
+    state_home = Path(
+        os.getenv("STELAE_STATE_HOME")
+        or Path(os.getenv("STELAE_CONFIG_HOME", Path.home() / ".config" / "stelae")) / ".state"
+    )
+    state_home.mkdir(parents=True, exist_ok=True)
+    return state_home / "discovered_servers.json"
+
 app = FastMCP(
     name="stelae-integrator",
     instructions="Install and reconcile MCP servers discovered by 1mcp.",
@@ -25,10 +37,7 @@ app = FastMCP(
 
 
 def _build_service() -> StelaeIntegratorService:
-    discovery_path = Path(
-        os.getenv("STELAE_DISCOVERY_PATH")
-        or (Path(os.getenv("STELAE_CONFIG_HOME", Path.home() / ".config" / "stelae")) / "discovered_servers.local.json")
-    )
+    discovery_path = _default_discovery_path()
     template_path = Path(os.getenv("STELAE_PROXY_TEMPLATE", ROOT / "config" / "proxy.template.json"))
     overrides_path = Path(os.getenv("STELAE_TOOL_OVERRIDES", ROOT / "config" / "tool_overrides.json"))
     return StelaeIntegratorService(

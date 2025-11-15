@@ -18,13 +18,13 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from stelae_lib.config_overlays import config_home
+from stelae_lib.config_overlays import config_home, state_home
 from stelae_lib.docy_catalog import DocyCatalog
 
 CATALOG_PATH = Path(os.getenv("STELAE_DOCY_CATALOG", ROOT / "config" / "docy_sources.json"))
 URL_FILE_PATH = Path(os.getenv("STELAE_DOCY_URL_FILE", ROOT / ".docy.urls"))
 DEFAULT_DISCOVERY_PATH = Path(
-    os.getenv("STELAE_DISCOVERY_PATH") or (config_home() / "discovered_servers.local.json")
+    os.getenv("STELAE_DISCOVERY_PATH") or (state_home() / "discovered_servers.json")
 )
 OPERATIONS = {"list_sources", "add_source", "remove_source", "sync_catalog", "import_from_manifest"}
 
