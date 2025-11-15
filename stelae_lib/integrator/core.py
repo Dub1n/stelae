@@ -19,7 +19,14 @@ from .one_mcp import OneMCPDiscovery, OneMCPDiscoveryError
 from .proxy_template import ProxyTemplate
 from .runner import CommandFailed, CommandRunner
 from .tool_overrides import ToolOverridesStore
-from stelae_lib.config_overlays import config_home, overlay_path_for, parse_env_file, runtime_path
+from stelae_lib.config_overlays import (
+    config_home,
+    ensure_parent,
+    expand_env_values,
+    overlay_path_for,
+    parse_env_file,
+    runtime_path,
+)
 
 ENV_PATTERN = re.compile(r"\{\{\s*([A-Z0-9_]+)\s*\}\}")
 
@@ -92,22 +99,34 @@ class StelaeIntegratorService:
         self.env_overlay = self.config_home / ".env.local"
         if self.env_overlay not in candidates:
             candidates.append(self.env_overlay)
-        values: Dict[str, str] = {}
+
+        layered_values: Dict[str, str] = {}
         for candidate in candidates:
-            values.update(parse_env_file(candidate))
+            layered_values.update(parse_env_file(candidate))
+
+        expanded_values = expand_env_values(layered_values, fallback=os.environ, allow_unresolved=True)
+        values: Dict[str, str] = {}
         for key, value in os.environ.items():
             if isinstance(key, str) and isinstance(value, str):
-                values.setdefault(key, value)
+                values[key] = value
+        values.update(expanded_values)
         self.env_values = values
         self.env_file = provided_envs[-1] if provided_envs else self.env_overlay
-        discovery_base_path = discovery_path or self.root / "config" / "discovered_servers.json"
+        discovery_template_path = self.root / "config" / "discovered_servers.json"
+        default_discovery_path = Path(
+            self.env_values.get("STELAE_DISCOVERY_PATH") or runtime_path("discovered_servers.json")
+        )
+        if not default_discovery_path.exists() and discovery_template_path.exists():
+            ensure_parent(default_discovery_path)
+            default_discovery_path.write_text(
+                discovery_template_path.read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
         if discovery_path:
             discovery_overlay_path = Path(discovery_path)
         else:
-            discovery_value = self.env_values.get("STELAE_DISCOVERY_PATH") or str(
-                runtime_path("discovered_servers.json")
-            )
-            discovery_overlay_path = Path(discovery_value)
+            discovery_overlay_path = default_discovery_path
+        discovery_base_path = discovery_overlay_path
         template_base_path = template_path or self.root / "config" / "proxy.template.json"
         template_overlay_path = template_path if template_path else overlay_path_for(template_base_path)
         overrides_base_path = overrides_path or self.root / "config" / "tool_overrides.json"

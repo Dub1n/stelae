@@ -15,6 +15,9 @@ from mcp.server import FastMCP
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+DEFAULT_ENV_FILE = ROOT / ".env"
+if not os.getenv("STELAE_ENV_FILE") and DEFAULT_ENV_FILE.exists():
+    os.environ["STELAE_ENV_FILE"] = str(DEFAULT_ENV_FILE)
 
 from stelae_lib.integrator import StelaeIntegratorService  # noqa: E402
 

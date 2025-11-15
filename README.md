@@ -20,7 +20,7 @@ A WSL-native deployment of [mcp-proxy](https://github.com/TBXark/mcp-proxy) that
 | Strata MCP | local | stdio | `${STRATA_BIN}` | Progressive discovery / intent routing. |
 | Fetch MCP | local | HTTP | `${LOCAL_BIN}/mcp-server-fetch` | Official MCP providing canonical `fetch`. |
 | Scrapling MCP | local | stdio | `uvx scrapling-fetch-mcp --stdio` | Scrapling fetcher (basic/stealth/max-stealth), adapted by the Go proxy at call time. |
-| FastMCP bridge | default | streamable HTTP (`/mcp`) / stdio | `python -m scripts.stelae_streamable_mcp` | Exposes the full proxy catalog to desktop agents; falls back to local search/fetch if the proxy is unavailable. |
+| FastMCP bridge | default | streamable HTTP (`/mcp`) / stdio | `python -m scripts.stelae_streamable_mcp` | Exposes the full proxy catalog to desktop agents; falls back to local search/fetch if the proxy is unavailable. Automatically loads `.env` / `.env.local` so MCP adapters inherit the same runtime paths as pm2. |
 | 1mcp agent | default | stdio | `${ONE_MCP_BIN} --transport stdio` | Discovers nearby MCP servers and writes `${STELAE_DISCOVERY_PATH}` (defaults to `${STELAE_STATE_HOME}/discovered_servers.json`) for the integrator. |
 | Custom tools MCP | default | stdio | `${PYTHON} ${STELAE_DIR}/scripts/custom_tools_server.py` | Config-driven wrapper that exposes scripts listed in `config/custom_tools.json`. |
 
@@ -474,7 +474,7 @@ Operational steps:
 - **Cloudflare tunnel up:** `pm2 start "cloudflared tunnel run stelae" --name cloudflared` (or `pm2 restart cloudflared`). `curl -sk https://mcp.infotopology.xyz/.well-known/mcp/manifest.json` must return HTTP 200; a Cloudflare 1033 error indicates the tunnel is down. The watchdog (`scripts/watch_public_mcp.py`) now reuses the same `pm2 ensure` logic, so it can delete+start the tunnel automatically if the PM2 entry disappears.
 - **Manifest sanity:** `curl -s http://localhost:${PROXY_PORT:-9090}/.well-known/mcp/manifest.json | jq '{servers, tools: (.tools | map(.name))}'` verifies every essential MCP (filesystem, ripgrep, shell, docs, memory, fetch, strata, 1mcp).
 - **SSE probes:** use the Python harness under `docs/openai-mcp.md` (or the snippets in this README) to connect to `/rg/sse` and `/fetch/sse`. Confirm `grep` returns results and `fetch` succeeds when `raw: true` (Docy’s markdown extraction still needs a fix; track in TODO).
-- **Streamable HTTP bridge:** `scripts/stelae_streamable_mcp.py` now proxies the full catalog for local desktop agents; ensure the `stelae-bridge` pm2 process stays online.
+- **Streamable HTTP bridge:** `scripts/stelae_streamable_mcp.py` now proxies the full catalog for local desktop agents; ensure the `stelae-bridge` pm2 process stays online. The bridge loads `.env`/`.env.local` on startup so every MCP helper (e.g., `mcp__stelae__manage_stelae`) receives the same env vars the proxy uses.
 
 ```python
 # Minimal SSE smoke test (run inside the stelae-search virtualenv)

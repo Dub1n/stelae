@@ -21,10 +21,33 @@ from mcp.client.sse import sse_client
 from mcp.client.session import ClientSession
 from mcp.server import FastMCP
 
+from stelae_lib.config_overlays import config_home, load_layered_env
 from stelae_lib.integrator.core import StelaeIntegratorService
 
 DEFAULT_PROXY_BASE = "http://localhost:9090"
 BASE_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_ENV_FILE = BASE_DIR / ".env"
+if not os.getenv("STELAE_ENV_FILE") and DEFAULT_ENV_FILE.exists():
+    os.environ["STELAE_ENV_FILE"] = str(DEFAULT_ENV_FILE)
+
+
+def _bootstrap_env() -> None:
+    """Load layered env values so adapters inherit repo settings."""
+
+    config_dir = Path(os.getenv("STELAE_CONFIG_HOME") or config_home())
+    env_file = Path(os.getenv("STELAE_ENV_FILE", config_dir / ".env"))
+    fallback_file = BASE_DIR / ".env.example"
+    overlay_file = config_dir / ".env.local"
+    merged = load_layered_env(
+        fallback_file=fallback_file,
+        env_file=env_file if env_file.exists() else None,
+        overlay_file=overlay_file if overlay_file.exists() else None,
+    )
+    for key, value in merged.items():
+        os.environ[key] = value
+
+
+_bootstrap_env()
 LOG_DIR = BASE_DIR / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 DEFAULT_STREAMABLE_HOST = "0.0.0.0"

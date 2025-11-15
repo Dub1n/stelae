@@ -88,7 +88,7 @@
       "command": "{{SHELL_BIN}}",
       "args": [
         "--workdir",
-        "{{PHOENIX_ROOT}}",
+        "{{STELAE_DIR}}",
         "--allow",
         "npm,pytest,make,python,git"
       ]
