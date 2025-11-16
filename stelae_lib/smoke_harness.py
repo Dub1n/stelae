@@ -108,7 +108,7 @@ def build_env_map(
         "STRATA_BIN": str(local_bin / "strata"),
         "DOCY_BIN": str(local_bin / "mcp-server-docy"),
         "MEMORY_BIN": str(local_bin / "basic-memory"),
-        "SHELL_BIN": str(local_bin / "terminal_controller"),
+        "NPX_BIN": "npx",
         "PLAYWRIGHT_BROWSERS_PATH": str(playground_cache),
         "CODEX_WRAPPER_BIN": str(wrapper_bin) if wrapper_bin else "",
         "CODEX_WRAPPER_CONFIG": str(wrapper_config) if wrapper_config else "",

@@ -9,7 +9,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Mapping
 
 import httpx
 from mcp.server import FastMCP
@@ -19,7 +19,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from stelae_lib.integrator.stateful_runner import StatefulAggregatedToolRunner
 from stelae_lib.integrator.tool_aggregations import (
+    AggregatedToolDefinition,
     AggregatedToolRunner,
     ToolAggregationError,
     ToolAggregationConfig,
@@ -46,6 +48,14 @@ _SCHEMA_PATH = Path(
 )
 _PROXY_BASE_ENV = os.getenv("STELAE_PROXY_BASE")
 _DEFAULT_PROXY = "http://127.0.0.1:9090"
+_WORKSPACE_ROOT = Path(os.getenv("STELAE_DIR", ROOT)).resolve()
+_STATE_HOME = Path(
+    os.getenv("STELAE_STATE_HOME", Path.home() / ".config" / "stelae" / ".state")
+).resolve()
+_STATE_CONTEXT = {
+    "STELAE_DIR": str(_WORKSPACE_ROOT),
+    "STELAE_STATE_HOME": str(_STATE_HOME),
+}
 
 
 class PassthroughFuncMetadata(FuncMetadata):
@@ -114,6 +124,8 @@ class ProxyCaller:
         return body.get("result", {})
 
 
+
+
 def _load_config() -> ToolAggregationConfig:
     if not _CONFIG_PATH.exists():
         raise SystemExit(f"Aggregation config not found: {_CONFIG_PATH}")
@@ -130,11 +142,22 @@ def _register_aggregations(config: ToolAggregationConfig) -> None:
     )
     for aggregation in config.aggregations:
         proxy_base = _proxy_base_for(aggregation.proxy_url, config)
-        runner = AggregatedToolRunner(
-            aggregation,
-            ProxyCaller(proxy_base),
-            fallback_timeout=config.defaults.timeout_seconds,
-        )
+        proxy_caller = ProxyCaller(proxy_base)
+        if aggregation.state:
+            runner = StatefulAggregatedToolRunner(
+                aggregation,
+                proxy_caller,
+                fallback_timeout=config.defaults.timeout_seconds,
+                context=_STATE_CONTEXT,
+                workspace_root=_WORKSPACE_ROOT,
+                state_root=_STATE_HOME,
+            )
+        else:
+            runner = AggregatedToolRunner(
+                aggregation,
+                proxy_caller,
+                fallback_timeout=config.defaults.timeout_seconds,
+            )
 
         @app.tool(name=aggregation.name, description=aggregation.description)
         async def handler(runner=runner, **payload):  # type: ignore[misc]

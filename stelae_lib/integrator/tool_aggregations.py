@@ -7,7 +7,7 @@ from datetime import datetime
 import logging
 import os
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, Mapping, MutableMapping, Sequence
+from typing import Any, Awaitable, Callable, Dict, Literal, Mapping, MutableMapping, Sequence
 
 from mcp import types
 
@@ -110,6 +110,242 @@ class HiddenTool:
             raise ToolAggregationError("hiddenTools entries require non-empty 'server' and 'tool'")
         reason = str(payload.get("reason")) if payload.get("reason") else None
         return cls(server=server, tool=tool, reason=reason)
+
+
+@dataclass(frozen=True)
+class StateFieldDefinition:
+    name: str
+    kind: Literal["path", "list", "value"]
+    root: str | None = None
+    max_length: int | None = None
+
+    @classmethod
+    def from_data(cls, name: str, payload: Mapping[str, Any] | None) -> "StateFieldDefinition":
+        if not isinstance(payload, Mapping):
+            return cls(name=name, kind="value")
+        raw_kind = str(payload.get("type") or "value").strip().lower()
+        kind: Literal["path", "list", "value"]
+        if raw_kind not in {"path", "list", "value"}:
+            raise ToolAggregationError(f"State field '{name}' has invalid type '{raw_kind}'")
+        kind = raw_kind or "value"  # type: ignore[assignment]
+        root = str(payload.get("root") or "").strip() or None
+        max_length = payload.get("maxLength")
+        max_len_value = int(max_length) if isinstance(max_length, (int, float)) else None
+        return cls(name=name, kind=kind, root=root, max_length=max_len_value)
+
+
+@dataclass(frozen=True)
+class StateValueSource:
+    source_type: Literal["argument", "literal", "state"]
+    path: str | None = None
+    key: str | None = None
+    literal: Any | None = None
+
+    @classmethod
+    def from_data(cls, payload: Mapping[str, Any]) -> "StateValueSource":
+        if not isinstance(payload, Mapping):
+            raise ToolAggregationError("State value source must be an object")
+        source_type = str(payload.get("type") or "").strip()
+        if source_type not in {"argument", "literal", "state"}:
+            raise ToolAggregationError(f"Unsupported state source type '{source_type}'")
+        path = None
+        key = None
+        literal = None
+        if source_type == "argument":
+            path = str(payload.get("path") or "").strip()
+            if not path:
+                raise ToolAggregationError("Argument source requires 'path'")
+        elif source_type == "state":
+            key = str(payload.get("key") or "").strip()
+            if not key:
+                raise ToolAggregationError("State source requires 'key'")
+        else:
+            literal = payload.get("value")
+        return cls(source_type=source_type, path=path, key=key, literal=literal)
+
+
+@dataclass(frozen=True)
+class StatePreloadDefinition:
+    argument: str
+    state_key: str
+    only_if_missing: bool
+
+    @classmethod
+    def from_data(cls, payload: Mapping[str, Any]) -> "StatePreloadDefinition":
+        if not isinstance(payload, Mapping):
+            raise ToolAggregationError("state preload must be an object")
+        argument = str(payload.get("argument") or "").strip()
+        state_key = str(payload.get("stateKey") or "").strip()
+        if not argument or not state_key:
+            raise ToolAggregationError("state preload requires 'argument' and 'stateKey'")
+        only_if_missing = bool(payload.get("onlyIfMissing", True))
+        return cls(argument=argument, state_key=state_key, only_if_missing=only_if_missing)
+
+
+@dataclass(frozen=True)
+class StateMutationDefinition:
+    action: Literal["set", "append"]
+    key: str
+    source: StateValueSource | None = None
+    value_template: Dict[str, StateValueSource] | None = None
+    as_path: bool = False
+    relative_to_current: bool = False
+    require_exists: bool = False
+    max_length: int | None = None
+
+    @classmethod
+    def from_data(cls, payload: Mapping[str, Any]) -> "StateMutationDefinition":
+        if not isinstance(payload, Mapping):
+            raise ToolAggregationError("state mutation must be an object")
+        action = str(payload.get("action") or "").strip()
+        key = str(payload.get("key") or "").strip()
+        if not action or not key:
+            raise ToolAggregationError("state mutation requires 'action' and 'key'")
+        if action == "set":
+            source_payload = payload.get("source")
+            if not isinstance(source_payload, Mapping):
+                raise ToolAggregationError("state mutation 'set' requires a 'source'")
+            source = StateValueSource.from_data(source_payload)
+            as_path = bool(payload.get("asPath", False))
+            relative_to_current = bool(payload.get("relativeToCurrent", False))
+            require_exists = bool(payload.get("requireExists", False))
+            return cls(
+                action="set",
+                key=key,
+                source=source,
+                as_path=as_path,
+                relative_to_current=relative_to_current,
+                require_exists=require_exists,
+            )
+        if action == "append":
+            value_payload = payload.get("value")
+            if not isinstance(value_payload, Mapping):
+                raise ToolAggregationError("state mutation 'append' requires 'value'")
+            value_template = {
+                str(field): StateValueSource.from_data(source)
+                for field, source in value_payload.items()
+                if isinstance(field, str) and isinstance(source, Mapping)
+            }
+            if not value_template:
+                raise ToolAggregationError("state mutation 'append' must declare at least one field")
+            max_len = payload.get("maxLength")
+            max_length = int(max_len) if isinstance(max_len, (int, float)) else None
+            return cls(
+                action="append",
+                key=key,
+                value_template=value_template,
+                max_length=max_length,
+            )
+        raise ToolAggregationError(f"Unsupported state mutation action '{action}'")
+
+
+@dataclass(frozen=True)
+class StateResponseDefinition:
+    key: str
+    mode: Literal["value", "history"]
+    template: str | None = None
+    structured_field: str | None = None
+    max_argument: str | None = None
+
+    @classmethod
+    def from_data(cls, payload: Mapping[str, Any]) -> "StateResponseDefinition":
+        if not isinstance(payload, Mapping):
+            raise ToolAggregationError("state response must be an object")
+        key = str(payload.get("key") or "").strip()
+        mode = str(payload.get("type") or "").strip().lower()
+        if mode not in {"value", "history"}:
+            raise ToolAggregationError(f"Invalid state response type '{mode}'")
+        template = str(payload.get("template") or "").strip() or None
+        structured_field = str(payload.get("structuredField") or "").strip() or None
+        max_argument = str(payload.get("maxArgument") or "").strip() or None
+        return cls(
+            key=key,
+            mode=mode,  # type: ignore[arg-type]
+            template=template,
+            structured_field=structured_field,
+            max_argument=max_argument,
+        )
+
+
+@dataclass(frozen=True)
+class StateOperationDefinition:
+    value: str
+    mode: Literal["passthrough", "state_only"]
+    preloads: tuple[StatePreloadDefinition, ...]
+    mutations: tuple[StateMutationDefinition, ...]
+    response: StateResponseDefinition | None
+
+    @classmethod
+    def from_data(cls, payload: Mapping[str, Any]) -> "StateOperationDefinition":
+        if not isinstance(payload, Mapping):
+            raise ToolAggregationError("state operations must be an object")
+        value = str(payload.get("value") or "").strip()
+        if not value:
+            raise ToolAggregationError("state operation requires 'value'")
+        mode = str(payload.get("mode") or "passthrough").strip()
+        if mode not in {"passthrough", "state_only"}:
+            raise ToolAggregationError(f"Unsupported state operation mode '{mode}'")
+        preloads = tuple(
+            StatePreloadDefinition.from_data(entry)
+            for entry in payload.get("preloadArguments", [])
+            if isinstance(entry, Mapping)
+        )
+        mutations = tuple(
+            StateMutationDefinition.from_data(entry)
+            for entry in payload.get("mutations", [])
+            if isinstance(entry, Mapping)
+        )
+        response_payload = payload.get("response")
+        response = (
+            StateResponseDefinition.from_data(response_payload)
+            if isinstance(response_payload, Mapping)
+            else None
+        )
+        return cls(
+            value=value,
+            mode=mode,  # type: ignore[arg-type]
+            preloads=preloads,
+            mutations=mutations,
+            response=response,
+        )
+
+
+@dataclass(frozen=True)
+class AggregationStateDefinition:
+    path: str
+    defaults: Dict[str, Any]
+    fields: Dict[str, StateFieldDefinition]
+    operations: Dict[str, StateOperationDefinition]
+
+    @classmethod
+    def from_data(cls, payload: Mapping[str, Any]) -> "AggregationStateDefinition":
+        if not isinstance(payload, Mapping):
+            raise ToolAggregationError("state block must be an object")
+        path = str(payload.get("path") or "").strip()
+        if not path:
+            raise ToolAggregationError("state block requires a 'path'")
+        defaults = dict(payload.get("defaults") or {})
+        fields_payload = payload.get("fields")
+        fields: Dict[str, StateFieldDefinition] = {}
+        if isinstance(fields_payload, Mapping):
+            for key, definition in fields_payload.items():
+                if isinstance(key, str):
+                    fields[key] = StateFieldDefinition.from_data(key, definition if isinstance(definition, Mapping) else None)
+        operations_payload = payload.get("operations")
+        if not isinstance(operations_payload, list):
+            raise ToolAggregationError("state block requires an 'operations' array")
+        operations: Dict[str, StateOperationDefinition] = {}
+        for entry in operations_payload:
+            if not isinstance(entry, Mapping):
+                continue
+            op = StateOperationDefinition.from_data(entry)
+            operations[op.value] = op
+        if not operations:
+            raise ToolAggregationError("state block must declare at least one operation")
+        return cls(path=path, defaults=defaults, fields=fields, operations=operations)
+
+    def get_operation(self, value: str) -> StateOperationDefinition | None:
+        return self.operations.get(value)
 
 
 @dataclass(frozen=True)
@@ -286,6 +522,7 @@ class AggregatedToolDefinition:
     server: str
     operations: Sequence[OperationMapping]
     hidden_tools: Sequence[HiddenTool]
+    state: AggregationStateDefinition | None = None
 
     @classmethod
     def from_data(
@@ -340,6 +577,12 @@ class AggregatedToolDefinition:
             for item in payload.get("hideTools", [])
             if isinstance(item, Mapping)
         )
+        state_payload = payload.get("state")
+        state_config = (
+            AggregationStateDefinition.from_data(state_payload)
+            if isinstance(state_payload, Mapping)
+            else None
+        )
         return cls(
             name=name,
             description=description,
@@ -353,6 +596,7 @@ class AggregatedToolDefinition:
             server=server,
             operations=tuple(operations),
             hidden_tools=hidden_tools,
+            state=state_config,
         )
 
     def resolve_operation(self, arguments: Mapping[str, Any]) -> OperationMapping:

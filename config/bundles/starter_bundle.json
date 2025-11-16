@@ -85,13 +85,12 @@
     {
       "name": "sh",
       "transport": "stdio",
-      "command": "{{SHELL_BIN}}",
+      "command": "{{NPX_BIN}}",
       "args": [
-        "--workdir",
-        "{{STELAE_DIR}}",
-        "--allow",
-        "npm,pytest,make,python,git"
-      ]
+        "--yes",
+        "mcp-server-commands@0.6.0"
+      ],
+      "cwd": "{{STELAE_DIR}}"
     }
   ],
   "toolOverrides": {
@@ -3296,84 +3295,10 @@
       "sh": {
         "enabled": true,
         "tools": {
-          "change_directory": {
+          "run_command": {
             "enabled": false,
-            "description": "\n    Change current working directory\n    \n    Args:\n        path: Directory path to switch to\n    \n    Returns:\n        Operation result information\n    ",
-            "name": "change_directory",
-            "inputSchema": {
-              "type": "object",
-              "properties": {
-                "path": {
-                  "title": "Path",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "path"
-              ]
-            },
-            "outputSchema": {
-              "type": "object",
-              "properties": {
-                "result": {
-                  "title": "Result",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "result"
-              ]
-            }
-          },
-          "delete_file_content": {
-            "enabled": false,
-            "description": "\n    Delete content at specific row(s) from a file\n    \n    Args:\n        path: Path to the file\n        row: Row number to delete (0-based, optional)\n        rows: List of row numbers to delete (0-based, optional)\n        substring: If provided, only delete this substring within the specified row(s), not the entire row (optional)\n    \n    Returns:\n        Operation result information\n    ",
-            "name": "delete_file_content",
-            "inputSchema": {
-              "type": "object",
-              "properties": {
-                "path": {
-                  "title": "Path",
-                  "type": "string"
-                },
-                "row": {
-                  "default": null,
-                  "title": "Row",
-                  "type": "integer"
-                },
-                "rows": {
-                  "default": null,
-                  "items": {},
-                  "title": "Rows",
-                  "type": "array"
-                },
-                "substring": {
-                  "default": null,
-                  "title": "Substring",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "path"
-              ]
-            },
-            "outputSchema": {
-              "type": "object",
-              "properties": {
-                "result": {
-                  "title": "Result",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "result"
-              ]
-            }
-          },
-          "execute_command": {
-            "enabled": false,
-            "description": "\n    Execute terminal command and return results\n    \n    Args:\n        command: Command line command to execute\n        timeout: Command timeout in seconds, default is 30 seconds\n    \n    Returns:\n        Output of the command execution\n    ",
-            "name": "execute_command",
+            "description": "Run allow-listed commands through mcp-server-commands.\n\n    Args:\n        command: Command line statement to execute\n        stdin: Optional text piped into the process\n        workdir: Working directory (defaults to the workspace root)",
+            "name": "run_command",
             "inputSchema": {
               "type": "object",
               "properties": {
@@ -3381,10 +3306,13 @@
                   "title": "Command",
                   "type": "string"
                 },
-                "timeout": {
-                  "default": 30,
-                  "title": "Timeout",
-                  "type": "integer"
+                "stdin": {
+                  "title": "Stdin",
+                  "type": "string"
+                },
+                "workdir": {
+                  "title": "Workdir",
+                  "type": "string"
                 }
               },
               "required": [
@@ -3394,273 +3322,28 @@
             "outputSchema": {
               "type": "object",
               "properties": {
-                "result": {
-                  "title": "Result",
+                "status": {
+                  "title": "Status",
                   "type": "string"
-                }
-              },
-              "required": [
-                "result"
-              ]
-            }
-          },
-          "get_command_history": {
-            "enabled": false,
-            "description": "\n    Get recent command execution history\n    \n    Args:\n        count: Number of recent commands to return\n    \n    Returns:\n        Formatted command history record\n    ",
-            "name": "get_command_history",
-            "inputSchema": {
-              "type": "object",
-              "properties": {
-                "count": {
-                  "default": 10,
-                  "title": "Count",
-                  "type": "integer"
+                },
+                "stdout": {
+                  "title": "Stdout",
+                  "type": "string"
+                },
+                "stderr": {
+                  "title": "Stderr",
+                  "type": "string"
+                },
+                "command": {
+                  "title": "Command",
+                  "type": "string"
                 }
               }
-            },
-            "outputSchema": {
-              "type": "object",
-              "properties": {
-                "result": {
-                  "title": "Result",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "result"
-              ]
-            }
-          },
-          "get_current_directory": {
-            "enabled": false,
-            "description": "\n    Get current working directory\n    \n    Returns:\n        Path of current working directory\n    ",
-            "name": "get_current_directory",
-            "inputSchema": {
-              "type": "object"
-            },
-            "outputSchema": {
-              "type": "object",
-              "properties": {
-                "result": {
-                  "title": "Result",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "result"
-              ]
-            }
-          },
-          "insert_file_content": {
-            "enabled": false,
-            "description": "\n    Insert content at specific row(s) in a file\n    \n    Args:\n        path: Path to the file\n        content: Content to insert (string or JSON object)\n        row: Row number to insert at (0-based, optional)\n        rows: List of row numbers to insert at (0-based, optional)\n    \n    Returns:\n        Operation result information\n    ",
-            "name": "insert_file_content",
-            "inputSchema": {
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "type": "string"
-                },
-                "path": {
-                  "title": "Path",
-                  "type": "string"
-                },
-                "row": {
-                  "default": null,
-                  "title": "Row",
-                  "type": "integer"
-                },
-                "rows": {
-                  "default": null,
-                  "items": {},
-                  "title": "Rows",
-                  "type": "array"
-                }
-              },
-              "required": [
-                "path",
-                "content"
-              ]
-            },
-            "outputSchema": {
-              "type": "object",
-              "properties": {
-                "result": {
-                  "title": "Result",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "result"
-              ]
-            }
-          },
-          "list_directory": {
-            "enabled": false,
-            "inputSchema": {
-              "properties": {
-                "path": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "default": null,
-                  "title": "Path"
-                }
-              },
-              "type": "object"
-            },
-            "outputSchema": {
-              "properties": {
-                "result": {
-                  "title": "Result",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "result"
-              ],
-              "type": "object"
-            }
-          },
-          "read_file": {
-            "enabled": false,
-            "description": "\n    Read content from a file with optional row selection\n    \n    Args:\n        path: Path to the file\n        start_row: Starting row to read from (0-based, optional)\n        end_row: Ending row to read to (0-based, inclusive, optional)\n        as_json: If True, attempt to parse file content as JSON (optional)\n    \n    Returns:\n        File content or selected lines, optionally parsed as JSON\n    ",
-            "name": "read_file",
-            "inputSchema": {
-              "type": "object",
-              "properties": {
-                "as_json": {
-                  "default": false,
-                  "title": "As Json",
-                  "type": "boolean"
-                },
-                "end_row": {
-                  "default": null,
-                  "title": "End Row",
-                  "type": "integer"
-                },
-                "path": {
-                  "title": "Path",
-                  "type": "string"
-                },
-                "start_row": {
-                  "default": null,
-                  "title": "Start Row",
-                  "type": "integer"
-                }
-              },
-              "required": [
-                "path"
-              ]
-            },
-            "outputSchema": {
-              "type": "object",
-              "properties": {
-                "result": {
-                  "title": "Result",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "result"
-              ]
-            }
-          },
-          "update_file_content": {
-            "enabled": false,
-            "description": "\n    Update content at specific row(s) in a file\n    \n    Args:\n        path: Path to the file\n        content: New content to place at the specified row(s)\n        row: Row number to update (0-based, optional)\n        rows: List of row numbers to update (0-based, optional)\n        substring: If provided, only replace this substring within the specified row(s), not the entire row\n    \n    Returns:\n        Operation result information\n    ",
-            "name": "update_file_content",
-            "inputSchema": {
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "type": "string"
-                },
-                "path": {
-                  "title": "Path",
-                  "type": "string"
-                },
-                "row": {
-                  "default": null,
-                  "title": "Row",
-                  "type": "integer"
-                },
-                "rows": {
-                  "default": null,
-                  "items": {},
-                  "title": "Rows",
-                  "type": "array"
-                },
-                "substring": {
-                  "default": null,
-                  "title": "Substring",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "path",
-                "content"
-              ]
-            },
-            "outputSchema": {
-              "type": "object",
-              "properties": {
-                "result": {
-                  "title": "Result",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "result"
-              ]
-            }
-          },
-          "write_file": {
-            "enabled": false,
-            "inputSchema": {
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "type": "string"
-                },
-                "mode": {
-                  "default": "overwrite",
-                  "title": "Mode",
-                  "type": "string"
-                },
-                "path": {
-                  "title": "Path",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "path",
-                "content"
-              ],
-              "type": "object"
-            },
-            "outputSchema": {
-              "properties": {
-                "result": {
-                  "title": "Result",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "result"
-              ],
-              "type": "object"
             }
           }
         }
       }
+
     }
   },
   "toolAggregations": {
@@ -4579,11 +4262,6 @@
             "reason": "Wrapped by workspace_fs_read"
           },
           {
-            "server": "sh",
-            "tool": "list_directory",
-            "reason": "Wrapped by workspace_fs_read"
-          },
-          {
             "server": "fs",
             "tool": "list_directory_with_sizes",
             "reason": "Wrapped by workspace_fs_read"
@@ -4601,11 +4279,6 @@
           {
             "server": "fs",
             "tool": "head_file",
-            "reason": "Wrapped by workspace_fs_read"
-          },
-          {
-            "server": "sh",
-            "tool": "read_file",
             "reason": "Wrapped by workspace_fs_read"
           },
           {
@@ -5047,26 +4720,6 @@
             "reason": "Wrapped by workspace_fs_write"
           },
           {
-            "server": "sh",
-            "tool": "write_file",
-            "reason": "Wrapped by workspace_fs_write"
-          },
-          {
-            "server": "sh",
-            "tool": "delete_file_content",
-            "reason": "Wrapped by workspace_fs_write"
-          },
-          {
-            "server": "sh",
-            "tool": "insert_file_content",
-            "reason": "Wrapped by workspace_fs_write"
-          },
-          {
-            "server": "sh",
-            "tool": "update_file_content",
-            "reason": "Wrapped by workspace_fs_write"
-          },
-          {
             "server": "fs",
             "tool": "zip_directory",
             "reason": "Wrapped by workspace_fs_write"
@@ -5108,10 +4761,15 @@
               "title": "Command",
               "type": "string"
             },
-            "timeout": {
-              "default": 30,
-              "title": "Timeout",
-              "type": "integer"
+            "stdin": {
+              "title": "Stdin",
+              "type": "string",
+              "description": "Optional text piped into the command's STDIN."
+            },
+            "workdir": {
+              "title": "Workdir",
+              "type": "string",
+              "description": "Override the working directory for a single command (defaults to the tracked directory)."
             },
             "path": {
               "title": "Path",
@@ -5131,8 +4789,8 @@
         "operations": [
           {
             "value": "execute_command",
-            "downstreamTool": "execute_command",
-            "description": "Execute terminal command and return results\n    \n    Args:\n        command: Command line command to execute\n        timeout: Command timeout in seconds, default is 30 seconds\n    \n    Returns:\n        Output of the command execution",
+            "downstreamTool": "run_command",
+            "description": "Execute terminal command and return results\n    \n    Args:\n        command: Command line command to execute\n        stdin: Optional stdin piped into the process\n        workdir: Optional working directory override\n    \n    Returns:\n        Output of the command execution",
             "argumentMappings": [
               {
                 "target": "command",
@@ -5141,8 +4799,14 @@
                 "stripIfNull": true
               },
               {
-                "target": "timeout",
-                "from": "timeout",
+                "target": "stdin",
+                "from": "stdin",
+                "required": false,
+                "stripIfNull": true
+              },
+              {
+                "target": "workdir",
+                "from": "workdir",
                 "required": false,
                 "stripIfNull": true
               }
@@ -5150,7 +4814,7 @@
           },
           {
             "value": "change_directory",
-            "downstreamTool": "change_directory",
+            "downstreamTool": "run_command",
             "description": "Change current working directory\n    \n    Args:\n        path: Directory path to switch to\n    \n    Returns:\n        Operation result information",
             "argumentMappings": [
               {
@@ -5163,13 +4827,13 @@
           },
           {
             "value": "get_current_directory",
-            "downstreamTool": "get_current_directory",
+            "downstreamTool": "run_command",
             "description": "Get current working directory\n    \n    Returns:\n        Path of current working directory",
             "argumentMappings": []
           },
           {
             "value": "get_command_history",
-            "downstreamTool": "get_command_history",
+            "downstreamTool": "run_command",
             "description": "Get recent command execution history\n    \n    Args:\n        count: Number of recent commands to return\n    \n    Returns:\n        Formatted command history record",
             "argumentMappings": [
               {
@@ -5181,25 +4845,99 @@
             ]
           }
         ],
+        "state": {
+          "path": "{{STELAE_STATE_HOME}}/workspace_shell_control.json",
+          "defaults": {
+            "cwd": "{{STELAE_DIR}}",
+            "history": []
+          },
+          "fields": {
+            "cwd": {
+              "type": "path",
+              "root": "{{STELAE_DIR}}"
+            },
+            "history": {
+              "type": "list",
+              "maxLength": 50
+            }
+          },
+          "operations": [
+            {
+              "value": "execute_command",
+              "preloadArguments": [
+                {
+                  "argument": "workdir",
+                  "stateKey": "cwd",
+                  "onlyIfMissing": true
+                }
+              ],
+              "mutations": [
+                {
+                  "action": "append",
+                  "key": "history",
+                  "value": {
+                    "command": {
+                      "type": "argument",
+                      "path": "command"
+                    },
+                    "cwd": {
+                      "type": "argument",
+                      "path": "workdir"
+                    }
+                  },
+                  "maxLength": 50
+                }
+              ]
+            },
+            {
+              "value": "change_directory",
+              "mode": "state_only",
+              "mutations": [
+                {
+                  "action": "set",
+                  "key": "cwd",
+                  "source": {
+                    "type": "argument",
+                    "path": "path"
+                  },
+                  "asPath": true,
+                  "relativeToCurrent": true,
+                  "requireExists": true
+                }
+              ],
+              "response": {
+                "type": "value",
+                "key": "cwd",
+                "template": "Switched to directory: {value}",
+                "structuredField": "result"
+              }
+            },
+            {
+              "value": "get_current_directory",
+              "mode": "state_only",
+              "response": {
+                "type": "value",
+                "key": "cwd",
+                "template": "{value}",
+                "structuredField": "result"
+              }
+            },
+            {
+              "value": "get_command_history",
+              "mode": "state_only",
+              "response": {
+                "type": "history",
+                "key": "history",
+                "structuredField": "result",
+                "maxArgument": "count"
+              }
+            }
+          ]
+        },
         "hideTools": [
           {
             "server": "sh",
-            "tool": "execute_command",
-            "reason": "Wrapped by workspace_shell_control"
-          },
-          {
-            "server": "sh",
-            "tool": "change_directory",
-            "reason": "Wrapped by workspace_shell_control"
-          },
-          {
-            "server": "sh",
-            "tool": "get_current_directory",
-            "reason": "Wrapped by workspace_shell_control"
-          },
-          {
-            "server": "sh",
-            "tool": "get_command_history",
+            "tool": "run_command",
             "reason": "Wrapped by workspace_shell_control"
           }
         ]

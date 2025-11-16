@@ -11,7 +11,7 @@ A WSL-native deployment of [mcp-proxy](https://github.com/TBXark/mcp-proxy) that
 | mcp-proxy | default | HTTP/SSE (:${PROXY_PORT:-9090}) | `${PROXY_BIN}` | Aggregates tools/prompts/resources from local MCP servers into one endpoint. |
 | Filesystem MCP | local | stdio | `${FILESYSTEM_BIN} --root ${STELAE_DIR}` | Scoped read/write access to the repo. |
 | ripgrep MCP | local | stdio | `${RG_BIN} --stdio --root ${SEARCH_ROOT}` | Code search backend powering the `grep` tool. |
-| Terminal Controller MCP | local | stdio | `${SHELL_BIN}` | Allowlisted command execution in Phoenix workspace. |
+| Commands MCP | local | stdio | `${NPX_BIN}` | Runs the `g0t4/mcp-server-commands` binary so terminal helpers execute inside the repo. |
 | Docy MCP | local | stdio | `${DOCY_BIN} --stdio` | Documentation / URL ingestion (feeds canonical `fetch`). |
 | Docy manager MCP | default | stdio | `${PYTHON} ${STELAE_DIR}/scripts/docy_manager_server.py` | Adds/removes Docy documentation sources via MCP/CLI, rendering `.docy.urls`. |
 | Tool aggregator MCP | default | stdio | `${PYTHON} ${STELAE_DIR}/scripts/tool_aggregator_server.py` | Publishes declarative composite tools from `config/tool_aggregations.json` (e.g., `manage_docy_sources`). |
@@ -31,7 +31,7 @@ Path placeholders expand from `.env`; see setup below.
 ### Core vs Optional Stack
 
 - **Core template:** the repo now ships only the self-management essentials (custom tools, the Stelae integrator, the tool aggregator helper, the 1mcp stdio agent, and the public 1mcp catalog bridge) plus the Go proxy and FastMCP bridge. Every fresh clone therefore exposes just the in-repo aggregate (`manage_docy_sources`) alongside these servers; no third-party MCPs or workspace helpers are tracked in git.
-- **Starter bundle:** Docy + Docy manager, Basic Memory, Strata, Fetch, Scrapling, and the developer-quality-of-life servers (filesystem, ripgrep, terminal controller) live in `config/bundles/starter_bundle.json`. Install them (and their overrides/aggregations) with `python scripts/install_stelae_bundle.py` after cloning. Use `--server` to pick individual entries or `--dry-run` to preview without touching overlays. This pass is what writes the `workspace_fs_*`, `memory_suite`, `doc_fetch_suite`, `scrapling_fetch_suite`, and `strata_ops_suite` aggregations into `${STELAE_CONFIG_HOME}`, so run it whenever you want those high-level tools to appear.
+- **Starter bundle:** Docy + Docy manager, Basic Memory, Strata, Fetch, Scrapling, and the developer-quality-of-life servers (filesystem, ripgrep, commands runner) live in `config/bundles/starter_bundle.json`. Install them (and their overrides/aggregations) with `python scripts/install_stelae_bundle.py` after cloning. Use `--server` to pick individual entries or `--dry-run` to preview without touching overlays. This pass is what writes the `workspace_fs_*`, `memory_suite`, `doc_fetch_suite`, `scrapling_fetch_suite`, and `strata_ops_suite` aggregations into `${STELAE_CONFIG_HOME}`, so run it whenever you want those high-level tools to appear.
 - **Overlays only:** the installer writes to `${STELAE_CONFIG_HOME}/*.local.json` (no nested subdirectories), so optional services never reappear in tracked templates. Delete a `.local` file to return to the lean core stack, or rerun the installer if you need to rehydrate the bundle later.
 
 ### Overlay workflow & guardrails
@@ -68,7 +68,7 @@ Keep hand-edited overlays (`*.local.json`, `.env.local`, discovery caches) in `$
    The helper copies `.env.example` into `${STELAE_ENV_FILE}` on first run and replaces `repo/.env` with a symlink (or copy when symlinks are unavailable) for backward compatibility.
 2. Edit `${STELAE_ENV_FILE}` and update absolute paths:
    - Project roots: `STELAE_DIR`, `APPS_DIR`, `PHOENIX_ROOT`, `SEARCH_ROOT`.
-   - Binaries: `FILESYSTEM_BIN`, `RG_BIN`, `SHELL_BIN`, `DOCY_BIN`, `MEMORY_BIN`, `STRATA_BIN`, `ONE_MCP_BIN`, `LOCAL_BIN/mcp-server-fetch`.
+   - Binaries: `FILESYSTEM_BIN`, `RG_BIN`, `DOCY_BIN`, `MEMORY_BIN`, `STRATA_BIN`, `ONE_MCP_BIN`, `LOCAL_BIN/mcp-server-fetch`, `NPX_BIN` (runs `mcp-server-commands`).
    - Public URLs: `PUBLIC_BASE_URL=https://mcp.infotopology.xyz`, `PUBLIC_SSE_URL=${PUBLIC_BASE_URL}/stream`.
    - Local overlay home: `STELAE_CONFIG_HOME=${HOME}/.config/stelae`. User-editable overlays (`*.local.json`, `.env.local`, discovery caches) live here. Generated runtime artifacts (`${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${TOOL_SCHEMA_STATUS_PATH}`, etc.) now live under `STELAE_STATE_HOME=${STELAE_CONFIG_HOME}/.state`, keeping the repo and your overlays tidy—route any future runtime outputs there as well. Additional values appended by the integrator land in `${STELAE_CONFIG_HOME}/.env.local`; keep `${STELAE_ENV_FILE}` focused on human-edited keys.
    - Ports: `PROXY_PORT` controls where `mcp-proxy` listens locally; `PUBLIC_PORT` defaults to the same value so tunnels/cloudflared point to the correct listener. The clone smoke harness randomizes `PROXY_PORT` per workspace to avoid colliding with your long-lived dev stack, so keep these fields in sync.
@@ -141,7 +141,7 @@ Keep hand-edited overlays (`*.local.json`, `.env.local`, discovery caches) in `$
    - `workspace_fs_read` – Read-only filesystem helpers (`list_*`, `read_*`, `find_*`, `search_*`, `get_file_info`, `calculate_directory_size`).
    - `workspace_fs_write` – Mutating filesystem helpers (`create_directory`, `edit_file`, `write_file`, `move_file`, `delete_*`, `insert_*`, `zip_*`, `unzip_file`).
     > The filesystem server now launches with `rust-mcp-filesystem --allow-write {{STELAE_DIR}}`, so both read/write suites operate inside the repo. Pass absolute paths under `${STELAE_DIR}` when you need deterministic results—the binary inherits the proxy’s working directory, so relative paths depend on whichever cwd the proxy used when spawning the server.
-   - `workspace_shell_control` – Terminal controller helpers (`execute_command`, `change_directory`, `get_current_directory`, `get_command_history`).
+  - `workspace_shell_control` – Workspace command helpers (`execute_command`, `change_directory`, `get_current_directory`, `get_command_history`) backed by `mcp-server-commands`, with cwd/history persisted under `${STELAE_STATE_HOME}` and injected automatically into each call.
    - `memory_suite` – All Basic Memory operations (context build, notes CRUD, project switches, searches).
    - `doc_fetch_suite` – Docy fetch helpers (`fetch_document_links`, `fetch_documentation_page`, `list_documentation_sources_tool`).
    - `scrapling_fetch_suite` – Scrapling HTTP fetch modes (`s_fetch_page`, `s_fetch_pattern`).
@@ -170,7 +170,7 @@ Keep hand-edited overlays (`*.local.json`, `.env.local`, discovery caches) in `$
 
 ### Install the starter bundle
 
-The tracked templates stay lean on purpose. When you want Docy, Memory, Strata, Fetch, Scrapling, or the developer helpers (filesystem, ripgrep, terminal controller), run the installer so they land in your `${STELAE_CONFIG_HOME}` overlays instead of git. (The Codex MCP wrapper intentionally lives outside this bundle—see the note below for the manual install flow.)
+The tracked templates stay lean on purpose. When you want Docy, Memory, Strata, Fetch, Scrapling, or the developer helpers (filesystem, ripgrep, commands runner), run the installer so they land in your `${STELAE_CONFIG_HOME}` overlays instead of git. (The Codex MCP wrapper intentionally lives outside this bundle—see the note below for the manual install flow.)
 
 ```bash
 python scripts/install_stelae_bundle.py

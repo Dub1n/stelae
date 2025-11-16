@@ -121,10 +121,116 @@
           "minItems": 1,
           "items": {"$ref": "#/$defs/operation"}
         },
+        "state": {"$ref": "#/$defs/stateConfig"},
         "hideTools": {
           "type": "array",
           "items": {"$ref": "#/$defs/hiddenTool"}
         }
+      }
+    },
+    "stateConfig": {
+      "type": "object",
+      "required": ["path", "operations"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "defaults": {"type": "object"},
+        "fields": {
+          "type": "object",
+          "additionalProperties": {"$ref": "#/$defs/stateField"}
+        },
+        "operations": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/stateOperation"}
+        }
+      }
+    },
+    "stateField": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {"type": "string", "enum": ["path", "list", "value"]},
+        "root": {"type": "string"},
+        "maxLength": {"type": "integer", "minimum": 1}
+      }
+    },
+    "valueSource": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"type": "string", "enum": ["argument", "literal", "state"]},
+        "path": {"type": "string", "minLength": 1},
+        "key": {"type": "string", "minLength": 1},
+        "value": {}
+      }
+    },
+    "statePreload": {
+      "type": "object",
+      "required": ["argument", "stateKey"],
+      "additionalProperties": false,
+      "properties": {
+        "argument": {"type": "string", "minLength": 1},
+        "stateKey": {"type": "string", "minLength": 1},
+        "onlyIfMissing": {"type": "boolean"}
+      }
+    },
+    "stateMutation": {
+      "type": "object",
+      "oneOf": [
+        {
+          "required": ["action", "key", "source"],
+          "properties": {
+            "action": {"const": "set"},
+            "key": {"type": "string", "minLength": 1},
+            "source": {"$ref": "#/$defs/valueSource"},
+            "asPath": {"type": "boolean"},
+            "relativeToCurrent": {"type": "boolean"},
+            "requireExists": {"type": "boolean"}
+          }
+        },
+        {
+          "required": ["action", "key", "value"],
+          "properties": {
+            "action": {"const": "append"},
+            "key": {"type": "string", "minLength": 1},
+            "value": {
+              "type": "object",
+              "additionalProperties": {"$ref": "#/$defs/valueSource"}
+            },
+            "maxLength": {"type": "integer", "minimum": 1}
+          }
+        }
+      ]
+    },
+    "stateResponse": {
+      "type": "object",
+      "required": ["type", "key"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {"type": "string", "enum": ["value", "history"]},
+        "key": {"type": "string", "minLength": 1},
+        "template": {"type": "string"},
+        "structuredField": {"type": "string"},
+        "maxArgument": {"type": "string", "minLength": 1}
+      }
+    },
+    "stateOperation": {
+      "type": "object",
+      "required": ["value"],
+      "additionalProperties": false,
+      "properties": {
+        "value": {"type": "string", "minLength": 1},
+        "mode": {"type": "string", "enum": ["passthrough", "state_only"]},
+        "preloadArguments": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/statePreload"}
+        },
+        "mutations": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/stateMutation"}
+        },
+        "response": {"$ref": "#/$defs/stateResponse"}
       }
     }
   }
