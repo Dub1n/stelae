@@ -77,10 +77,10 @@ The workflow should also cover manual JSON blobs and provide guardrails (dry-run
 - **Output schema:** consistent envelope containing `status`, `details`, `files_updated`, `commands_run`, `warnings`, and `errors`. Every operation returns the same envelope so clients can parse results uniformly.
 - **Dispatch:** map each `operation` to a helper inside the server. Helpers call the shared libraries this task introduces (config merge, overrides seeding, restart orchestration, reconciler integration, 1mcp discovery) rather than shelling out unless necessary. Centralise locking, dry-run diffing, and logging in the dispatcher to keep behavior identical whether invoked via MCP or CLI.
 
-### Reference: Docy Manager Pattern
+### Reference: Documentation Catalog Pattern
 
-- The Docy source manager (see `dev/tasks/docy-source-manager.md`) demonstrates the per-server approach: keep a declarative JSON catalog under `config/`, render any generated artifacts via a Python renderer, and expose a single MCP/CLI tool with an `operation` enum for list/add/remove/sync tasks.
-- Reuse that pattern for the integrator: treat each managed surface (Docy, custom tools, discovered servers) as data + renderer combos, and have the MCP tool orchestrate updates plus any follow-up commands (renderers, restarts) while keeping manifests free of extra tool entries.
+- The documentation source manager demonstrates the per-server approach: keep a declarative JSON catalog under `config/`, render any generated artifacts via a Python renderer, and expose a single MCP/CLI tool with an `operation` enum for list/add/remove/sync tasks.
+- Reuse that pattern for the integrator: treat each managed surface (documentation catalog, custom tools, discovered servers) as data + renderer combos, and have the MCP tool orchestrate updates plus any follow-up commands (renderers, restarts) while keeping manifests free of extra tool entries.
 
 ### Testing Strategy
 

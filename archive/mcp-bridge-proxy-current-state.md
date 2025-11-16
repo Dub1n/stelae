@@ -17,7 +17,7 @@
   - **mcp-proxy** (Go binary at `/home/gabri/apps/mcp-proxy/build/mcp-proxy`), listens on **`:9092`**, serves multiple SSE servers.
   - **mcp-bridge** (Python FastAPI + Uvicorn on **`:9090`**), exposes `/mcp` for SSE (GET) + JSON-RPC POST and various debug endpoints.
   - **cloudflared** tunnel publishes public domain **`https://mcp.infotopology.xyz`** → origin **`http://127.0.0.1:9090`**.
-- Other PM2 apps observed: `strata`, `shell`, `memory`, `docy`, `1mcp`.
+- Other PM2 apps observed: `strata`, `shell`, `memory`, `docs`, `1mcp`.
 
 ---
 

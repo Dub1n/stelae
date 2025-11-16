@@ -92,7 +92,7 @@ curl -s https://mcp.infotopology.xyz/mcp -H 'Content-Type: application/json' \
 --data '{"jsonrpc":"2.0","id":"sh1","method":"tools/call","params":{"name":"execute_command","arguments":{"cmd":"git","args":["status","--porcelain"]}}}' | jq .
 ```
 
-### docs (docy)
+### docs (documentation catalog)
 
 * **inspect schema first:**
 

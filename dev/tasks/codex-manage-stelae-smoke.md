@@ -93,7 +93,7 @@ Scenario: prove Codex CLI can run the full discovery → install flow using only
 - Command: `source ~/.nvm/nvm.sh && scripts/run_restart_stelae.sh --no-bridge --full`. Letting the helper own pm2 (no `--keep-pm2`) avoided the “Process not found” errors seen when restarting partially-stopped apps.
 - Local verification:
   - `curl -s http://127.0.0.1:9090/.well-known/mcp/manifest.json | jq '{toolCount: (.tools|length)}'` → `toolCount: 71`.
-  - Sample tools: `manage_stelae`, `s_fetch_page`, `rg`, `docy`, `filesystem`, etc.
+  - Sample tools: `manage_stelae`, `s_fetch_page`, `rg`, documentation catalog helpers, filesystem, etc.
 - Public verification:
   - `curl -sk https://mcp.infotopology.xyz/.well-known/mcp/manifest.json | jq '{toolCount: (.tools|length), sample: (.tools|map(.name)[0:10])}'` → 60 tools, sample `[build_context, calculate_directory_size, canvas, change_directory, create_directory, create_memory_project, delete_file_content, delete_note, delete_project, directory_tree]`.
 - pm2 after the run:

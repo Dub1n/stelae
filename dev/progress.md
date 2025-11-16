@@ -19,7 +19,7 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started · `[!]` broken · 
 - [x] [tool-override-population](./tasks/tool-override-population.md) Auto-populate default `inputSchema`/`outputSchema` entries when new MCP servers are added, keeping overrides ready for on-demand shims.
 - [x] [shim-schema-retry](./tasks/shim-schema-retry.md) (prereq: tool-override-population) Teach the shim to attempt schema-specific wrapping before falling back to the generic adapter.
 - [x] [mcp-auto-loading](./tasks/mcp-auto-loading.md) Hook 1mcp discovery into the stack so newly found servers auto-merge into config + overrides (with guardrails).
-- [x] [docy-source-manager](./tasks/docy-source-manager.md) Manage the Docy URL catalog via a dedicated MCP tool so resources stay editable and visible through MCP alone.
+- [x] Documented the documentation catalog manager to keep the URL catalog editable and visible through MCP alone.
 - [~] [tool-overrides-schema-cleanup](./tasks/tool-overrides-schema-cleanup.md) Normalize tool override schema/automation with validation + per-server entries to eliminate drift and duplication.
 - [x] [tool-aggregations](./tasks/tool-aggregations.md) Add declarative tool aggregation helper + config to expose composite tools while hiding noisy downstream entries.
 - [x] [local-runtime-hardening](./tasks/local-runtime-hardening.md) Fix overlay regressions, add local-only runtime coverage, and strengthen generic-vs-local config hygiene.

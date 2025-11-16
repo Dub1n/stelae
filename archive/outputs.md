@@ -290,7 +290,7 @@ gabri@Bladee:~/dev/stelae$ source ~/.nvm/nvm.sh && pm2 status
 │ id │ name               │ mode     │ ↺    │ status    │ cpu      │ memory   │
 ├────┼────────────────────┼──────────┼──────┼───────────┼──────────┼──────────┤
 │ 6  │ 1mcp               │ fork     │ 0    │ online    │ 0%       │ 97.4mb   │
-│ 3  │ docy               │ fork     │ 0    │ online    │ 0%       │ 117.0mb  │
+│ 3  │ docs               │ fork     │ 0    │ online    │ 0%       │ 117.0mb  │
 │ 1  │ mcp-bridge         │ fork     │ 210  │ online    │ 0%       │ 54.2mb   │
 │ 0  │ mcp-proxy          │ fork     │ 0    │ online    │ 0%       │ 9.8mb    │
 │ 4  │ memory             │ fork     │ 0    │ online    │ 0%       │ 128.9mb  │

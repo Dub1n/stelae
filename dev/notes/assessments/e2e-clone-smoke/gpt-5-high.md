@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary
 
-- The core vs optional stack split is now correct and enforced. Optional servers (Docy, filesystem, rg, terminal, memory, Strata, Scrapling, wrapper) are installed into `${STELAE_CONFIG_HOME}` overlays via the starter bundle; tracked templates keep only self-management and the aggregator helper.
+- The core vs optional stack split is now correct and enforced. Optional servers (documentation catalog, filesystem, rg, terminal, memory, Strata, Scrapling, wrapper) are installed into `${STELAE_CONFIG_HOME}` overlays via the starter bundle; tracked templates keep only self-management and the aggregator helper.
 - A key improvement landed: clear separation between default and local tool aggregations and their effects on tool overrides, preventing catalog contamination and duplicate schema array members. The exporter dedupes JSON Schema `enum`/`required` arrays.
 - The streamable bridge now executes `manage_stelae` locally, so install/remove operations complete even while the Go proxy restarts—fixing prior mid-call disconnects.
 - The clone smoke harness matured: randomized `PROXY_PORT`, isolated PM2/CODEX homes, JSONL transcript parsing, staged automation/manual flows, and structural repo cleanliness checks.
@@ -27,7 +27,7 @@ Read and analyzed:
 
 - Templates vs overlays: tracked configs under `config/` are rendered with `.env` + `${STELAE_CONFIG_HOME}/.env.local`. Runtime artifacts (proxy.json, tool_overrides.json, discovery cache, schema status, cloudflared config) live under `${STELAE_CONFIG_HOME}` and never in git.
 - Core vs optional: core templates declare only self-management servers (`custom`, `integrator`, `one_mcp`, `public_mcp_catalog`, `tool_aggregator`). Optional bundle lives in `config/bundles/starter_bundle.json` and installs into overlays only.
-- Aggregations: `config/tool_aggregations.json` holds only in-repo aggregation defaults (`manage_docy_sources`); optional/local aggregations go to `${STELAE_CONFIG_HOME}/tool_aggregations.local.json`. Exporter writes only the relevant layer (`--scope default` vs `--scope local`) and dedupes JSON Schema arrays before emitting runtime overrides.
+- Aggregations: `config/tool_aggregations.json` holds only in-repo aggregation defaults (documentation catalog helpers); optional/local aggregations go to `${STELAE_CONFIG_HOME}/tool_aggregations.local.json`. Exporter writes only the relevant layer (`--scope default` vs `--scope local`) and dedupes JSON Schema arrays before emitting runtime overrides.
 - Streamable bridge: `scripts/stelae_streamable_mcp.py` exposes a connector-friendly MCP server. It proxies most tools to the Go proxy but directly dispatches `manage_stelae` to the local `StelaeIntegratorService`, making install/remove robust across proxy restarts.
 - Restart orchestration: `scripts/restart_stelae.sh` builds the Go proxy, ensures pm2 apps, waits on the randomized `PROXY_PORT`, probes readiness via HTTP JSON-RPC, populates overrides via the proxy catalog, and only then starts cloudflared.
 
@@ -36,7 +36,7 @@ Read and analyzed:
 - Aggregation hygiene and separation
   - Added `--scope local|default` to `scripts/process_tool_aggregations.py` so overlays and defaults are processed independently; default scope is `local` for runtime.
   - `ToolOverridesStore._merged_payload()` now calls `_dedupe_schema_arrays()` to canonicalize JSON Schema arrays; repeated renders or overlay edits no longer corrupt manifests.
-  - Tests: `tests/test_repo_sanitized.py` enforces core-only servers in tracked templates and presence of only `manage_docy_sources` in tracked aggregation defaults.
+  - Tests: `tests/test_repo_sanitized.py` enforces core-only servers in tracked templates and presence of only the documentation catalog aggregate in tracked defaults.
 
 - Streamable bridge stability
   - `scripts/stelae_streamable_mcp.py` routes `manage_stelae` calls to `_run_manage_operation` using `StelaeIntegratorService` locally; adds robust debug logging (`STELAE_STREAMABLE_DEBUG_*`) and safer JSON response handling for proxy errors.
@@ -57,7 +57,7 @@ Read and analyzed:
 ## 6. Current Status
 
 - Core stack renders and restarts cleanly; local probes show a reasonable tool count and correct aggregate exposure.
-- `workspace_fs_read`, `grep`, `doc_fetch_suite`, and `manage_stelae` are available in recent harness runs; docs note that Docy may return an empty source list by default, which should be interpreted as “tool available; dataset empty”.
+- `workspace_fs_read`, `grep`, `doc_fetch_suite`, and `manage_stelae` are available in recent harness runs; docs note that the documentation catalog may return an empty source list by default, which should be interpreted as “tool available; dataset empty”.
 - Clone smoke harness still has occasional environmental stalls; logs and parameterization help, but adding bounded backoffs and reducing dependence on pm2 state during initial readiness would improve reliability.
 
 ## 7. Recommendations and Next Actions
@@ -114,7 +114,7 @@ D. Guardrails and CI
 
 ## 9. Risks and Open Questions
 
-- Docy catalog baseline: Should we ship a minimal enabled source set in the starter bundle overlay to make `doc_fetch_suite` look less “empty” in smoke runs? Current behavior is correct but can mislead testers.
+- Documentation catalog baseline: Should we ship a minimal enabled source set in the starter bundle overlay to make `doc_fetch_suite` look less “empty” in smoke runs? Current behavior is correct but can mislead testers.
 - Discovery descriptors: The 1mcp metadata hydration now filled gaps for qdrant; decide which servers we officially support in discovery and document the required env defaults.
 - Public catalog bridge: Ensure rate limiting and error handling remain friendly when remote `public_mcp_catalog` flaps; consider a quick readiness gate before advertising it.
 
@@ -130,7 +130,7 @@ D. Guardrails and CI
 - Streamable bridge debugging:
   - `STELAE_STREAMABLE_DEBUG_TOOLS="*,manage_stelae" STELAE_STREAMABLE_DEBUG_LOG=~/.config/stelae/streamable_tool_debug.log`
 - Aggregator debugging:
-  - `STELAE_TOOL_AGGREGATOR_DEBUG_TOOLS="manage_docy_sources" STELAE_TOOL_AGGREGATOR_DEBUG_LOG=~/.config/stelae/agg_debug.log`
+  - `STELAE_TOOL_AGGREGATOR_DEBUG_TOOLS="documentation_catalog" STELAE_TOOL_AGGREGATOR_DEBUG_LOG=~/.config/stelae/agg_debug.log`
 - Restart quickly without CF/bridge:
 
   ```bash

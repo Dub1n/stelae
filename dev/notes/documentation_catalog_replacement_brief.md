@@ -1,8 +1,8 @@
-got it—here’s the landscape + a practical swap plan to retire docy without losing capability. ✧⁠◝⁠(⁠⁰⁠▿⁠⁰⁠)⁠◜⁠✧
+got it—here’s the landscape + a practical swap plan to retire the legacy documentation MCP without losing capability. ✧⁠◝⁠(⁠⁰⁠▿⁠⁰⁠)⁠◜⁠✧
 
 > context (what we’re replacing)
 >
-> stelae currently ships docy + a small manager and wraps it behind aggregated tools (`manage_docy_sources`, `doc_fetch_suite`), with aggregates allowed to persist JSON state under `${STELAE_STATE_HOME}`. the goal is to drop docy-specific assets from git and move to off‑the‑shelf mcp servers, with curated lists/history stored in a state file like `${STELAE_STATE_HOME}/doc_catalog.json` and exposed via a new aggregate (e.g., `documentation_catalog`).
+> stelae currently ships a legacy documentation MCP plus a small manager and wraps it behind aggregated tools (`documentation_catalog`, `doc_fetch_suite`), with aggregates allowed to persist JSON state under `${STELAE_STATE_HOME}`. the goal is to drop those bespoke assets from git and move to off‑the‑shelf mcp servers, with curated lists/history stored in a state file like `${STELAE_STATE_HOME}/doc_catalog.json` and exposed via a new aggregate (e.g., `documentation_catalog`).
 
 ---
 
@@ -16,7 +16,7 @@ got it—here’s the landscape + a practical swap plan to retire docy without l
 
 * **brave search mcp** (rich search + summarizer) → **mcp‑server‑fetch** (markdown fetch) → **scrapling mcp** (stealth/dynamic pages) → **qdrant/chroma** for rag. ([GitHub][4]) ([PyPI][5]) ([scrapling.readthedocs.io][6]) ([GitHub][2])
 
-either path keeps curated lists/history in your aggregate’s JSON state under `${STELAE_STATE_HOME}`; nothing docy‑specific remains in the repo.
+either path keeps curated lists/history in your aggregate’s JSON state under `${STELAE_STATE_HOME}`; nothing tied to the retired documentation stack remains in the repo.
 
 ---
 
@@ -251,7 +251,7 @@ use `manage_stelae` to add servers; new env keys land in `${STELAE_CONFIG_HOME}/
 1. **add new aggregate** `documentation_catalog` with the ops above; state at `${STELAE_STATE_HOME}/doc_catalog.json`. keep `doc_fetch_suite` around briefly for parity testing.
 2. **install** the chosen searcher(s) + fetcher(s) + rag via `manage_stelae`. missing env keys get hydrated into `${STELAE_CONFIG_HOME}/.env.local`.
 3. **wire the routes** (search→tavily/exa/brave/ddg; fetch→fetch/scrapling/firecrawl; rag→qdrant/chroma) in the aggregate json; render/restart as usual.
-4. **remove docy** from the starter bundle and delete the repo‑tracked docy files once parity checks pass (your core template is already designed to keep optional stacks out of git). ⁄(⁄ ⁄•⁄-⁄•⁄ ⁄)⁄
+4. **remove the legacy documentation binary** from the starter bundle and delete the repo‑tracked files once parity checks pass (your core template is already designed to keep optional stacks out of git). ⁄(⁄ ⁄•⁄-⁄•⁄ ⁄)⁄
 
 ---
 
@@ -275,7 +275,7 @@ if you want, i can draft the `documentation_catalog` aggregate json (argument/re
 tavily mcp docs (tools + http url) ([GitHub][7]) · exa mcp (remote url, tools, npx) ([docs.exa.ai][8]) · brave search mcp (tools, stdio/http, docker, api key) ([GitHub][9]) · firecrawl mcp (npx, streamable http, search/map/crawl/extract) ([Firecrawl][10]) · scrapling mcp (tools incl. stealthy_fetch; stdio/http; docker) ([scrapling.readthedocs.io][11]) · mcp‑server‑fetch (pip/uvx/docker; proxy; markdown) ([PyPI][5]) · duckduckgo mcp (keyless search + fetch; uv/npx smithery) ([GitHub][12]) · serper mcp (google operators + scrape; npx/docker) ([GitHub][13]) · qdrant mcp (store/find; transports) ([GitHub][14]) · chroma mcp (collection mgmt; embedding providers; persistent/http/cloud) ([GitHub][15])
 
 **stelae refs**
-docy + aggregates + bundle; state + overlays; render/restart flow.
+legacy docs stack + aggregates + bundle; state + overlays; render/restart flow.
 
 [1]: https://github.com/tavily-ai/tavily-mcp?utm_source=chatgpt.com "tavily-ai/tavily-mcp: Production ready MCP server with real- ..."
 [2]: https://github.com/qdrant/mcp-server-qdrant?utm_source=chatgpt.com "An official Qdrant Model Context Protocol (MCP) server ..."

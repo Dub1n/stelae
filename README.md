@@ -66,7 +66,7 @@ Keep hand-edited overlays (`*.local.json`, `.env.local`, discovery caches) in `$
    The helper copies `.env.example` into `${STELAE_ENV_FILE}` on first run and replaces `repo/.env` with a symlink (or copy when symlinks are unavailable) for backward compatibility.
 2. Edit `${STELAE_ENV_FILE}` and update absolute paths:
    - Project roots: `STELAE_DIR`, `APPS_DIR`, `PHOENIX_ROOT`, `SEARCH_ROOT`.
-   - Binaries: `FILESYSTEM_BIN`, `RG_BIN`, `DOCY_BIN`, `MEMORY_BIN`, `STRATA_BIN`, `ONE_MCP_BIN`, `LOCAL_BIN/mcp-server-fetch`, `NPX_BIN` (runs `mcp-server-commands`).
+   - Binaries: `FILESYSTEM_BIN`, `RG_BIN`, `MEMORY_BIN`, `STRATA_BIN`, `ONE_MCP_BIN`, `LOCAL_BIN/mcp-server-fetch`, `NPX_BIN` (runs `mcp-server-commands`).
    - Public URLs: `PUBLIC_BASE_URL=https://mcp.infotopology.xyz`, `PUBLIC_SSE_URL=${PUBLIC_BASE_URL}/stream`.
    - Local overlay home: `STELAE_CONFIG_HOME=${HOME}/.config/stelae`. User-editable overlays (`*.local.json`, `.env.local`, discovery caches) live here. Generated runtime artifacts (`${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${TOOL_SCHEMA_STATUS_PATH}`, etc.) now live under `STELAE_STATE_HOME=${STELAE_CONFIG_HOME}/.state`, keeping the repo and your overlays tidy—route any future runtime outputs there as well. Additional values appended by the integrator land in `${STELAE_CONFIG_HOME}/.env.local`; keep `${STELAE_ENV_FILE}` focused on human-edited keys.
    - Ports: `PROXY_PORT` controls where `mcp-proxy` listens locally; `PUBLIC_PORT` defaults to the same value so tunnels/cloudflared point to the correct listener. The clone smoke harness randomizes `PROXY_PORT` per workspace to avoid colliding with your long-lived dev stack, so keep these fields in sync.

@@ -1,4 +1,4 @@
-# Task: Remove Docy stack and stage new documentation catalog/RAG pipeline
+# Task: Retire the legacy documentation stack and stage the new documentation catalog/RAG pipeline
 
 Related requirement: `docs/current/progress.md` → Stelae Proxy Hardening → "Documentation catalog must be vendor-agnostic and live entirely outside tracked templates".
 
@@ -6,7 +6,7 @@ Tags: `#infra` `#docs`
 
 ## Checklist
 
-- [x] Phase 1: Remove Docy from tracked repo and starter bundle (scripts, templates, README/tests).
+- [x] Phase 1: Remove the legacy documentation stack from the tracked repo and starter bundle (scripts, templates, README/tests).
 - [ ] Phase 2: Refactor aggregates/state helpers to support doc catalog state (`documentation_catalog` aggregate, `${STELAE_STATE_HOME}/doc_catalog.json`).
 - [ ] Phase 3: Install/validate new MCP stack (Tavily search/fetch + Qdrant RAG baseline; add optional fetch fallbacks if needed).
 - [ ] Update spec/progress/task file.
@@ -15,25 +15,25 @@ Tags: `#infra` `#docs`
 ## References
 
 - Code:
-  - `scripts/docy_manager_server.py`, `scripts/render_docy_sources.py`, `config/docy_sources.json`, `.docy.urls` (to delete/relocate).
-  - `config/bundles/starter_bundle.json` (remove docy servers + aggregates, add new aggregate definition later).
-  - `scripts/tool_aggregator_server.py`, `stelae_lib/integrator/tool_aggregations.py`, `stelae_lib/integrator/stateful_runner.py` (ensure state helper covers new aggregate fields).
-  - `README.md`, `docs/ARCHITECTURE.md`, `tests/test_docy_manager.py`, `tests/test_docy_sources.py`, `tests/test_tool_aggregations.py` (Docy-specific cases to retire or rewrite).
+  - Legacy documentation manager/renderers/catalog templates (already removed) plus the new documentation catalog state helpers.
+  - `config/bundles/starter_bundle.json` (ensure documentation/catalog servers remain optional and clean).
+  - `scripts/tool_aggregator_server.py`, `stelae_lib/integrator/tool_aggregations.py`, `stelae_lib/integrator/stateful_runner.py` (ensure state helpers cover new aggregate fields).
+  - `README.md`, `docs/ARCHITECTURE.md`, tests covering the documentation catalog aggregate and fetch suite (now replacing the legacy stack).
 - Tests:
-  - `pytest tests/test_tool_aggregations.py`, `tests/test_streamable_mcp.py`, `tests/test_docy_manager.py`, `tests/test_docy_sources.py`.
+  - `pytest tests/test_tool_aggregations.py`, `tests/test_streamable_mcp.py`, plus any new documentation catalog unit tests.
 - Docs:
-  - `README.md` (Stack Snapshot + Docy sections), `docs/ARCHITECTURE.md`, `dev/tasks/docy-source-manager.md`, `docy_replacement_brief.md` (new research summary).
+  - `README.md` (Stack Snapshot + documentation sections), `docs/ARCHITECTURE.md`, and `dev/notes/documentation_catalog_replacement_brief.md` (research summary).
 
 ## Notes
 
-### Phase 1 – Remove Docy stack entirely ✅
+### Phase 1 – Remove the legacy documentation stack entirely ✅
 
 Completed:
 
-1. Deleted every Docy-specific asset (manager/renderer scripts, catalog template, `.docy.urls`, helper libs, tests, task logs) and scrubbed tracked docs plus starter bundle references.
-2. Updated starter bundle + overrides to drop `docy_manager`, `docs`, `manage_docy_sources`, and `doc_fetch_suite`, replacing tests/helpers with neutral “sample fetch suite” fixtures.
+1. Deleted every legacy documentation-specific asset (manager/renderer scripts, catalog template, URL caches, helper libs, tests, task logs) and scrubbed tracked docs plus starter bundle references.
+2. Updated starter bundle + overrides to drop the legacy documentation servers (catalog manager + fetch suite) and aggregates, replacing tests/helpers with neutral “sample fetch suite” fixtures.
 3. Scrubbed README/ARCHITECTURE/AGENTS/TODO/harness docs along with the smoke harness, missions, and tooling logs so the remaining text covers the upcoming vendor-neutral documentation flow.
-4. Adjusted aggregator/runtime tests and reran `pytest tests/test_tool_aggregations.py tests/test_streamable_mcp.py` to confirm the baseline still passes without Docy.
+4. Adjusted aggregator/runtime tests and reran `pytest tests/test_tool_aggregations.py tests/test_streamable_mcp.py` to confirm the baseline still passes after removing the legacy stack.
 
 ### Phase 2 – Prep new aggregate/state plumbing
 
@@ -53,7 +53,7 @@ Completed:
 
 - After MVP, consider layering Brave/Firecrawl/Scrapling search/fetchers as alternative engines using aggregate selectors.
 - Update bundle installer to optionally install Tavily + Qdrant + aggregate entries when `starter_bundle` is requested.
-- Remove legacy docy task doc (`dev/tasks/docy-source-manager.md`) once new stack is live.
+- Remove the legacy documentation task doc once the new stack is live.
 
 ## Checklist (Copy into PR or issue if needed)
 

@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-- Core vs optional stack boundaries are now codified in `README.md` (Core vs Optional Stack, Declarative Tool Aggregations) and `docs/ARCHITECTURE.md` (Config overlays, Core vs optional bundle). Optional servers and aggregations live exclusively under `${STELAE_CONFIG_HOME}` overlays, keeping tracked templates clean while allowing the starter bundle to expose filesystem/ripgrep/Docy tooling on demand.
+- Core vs optional stack boundaries are now codified in `README.md` (Core vs Optional Stack, Declarative Tool Aggregations) and `docs/ARCHITECTURE.md` (Config overlays, Core vs optional bundle). Optional servers and aggregations live exclusively under `${STELAE_CONFIG_HOME}` overlays, keeping tracked templates clean while allowing the starter bundle to expose filesystem/ripgrep/documentation catalog tooling on demand.
 - Tool aggregation/export fixes (`scripts/process_tool_aggregations.py`, `stelae_lib/integrator/tool_overrides.py`) eliminate duplicate JSON Schema enums/required sets and prevent local overlays from leaking back into tracked defaults. `tests/test_repo_sanitized.py` plus new aggregation tests enforce this hygiene.
 - The FastMCP bridge now handles `manage_stelae` locally (`scripts/stelae_streamable_mcp.py`), so install/remove operations survive Go proxy restarts. Fresh debug knobs (`STELAE_STREAMABLE_DEBUG_*`, `STELAE_TOOL_AGGREGATOR_DEBUG_*`) record raw payloads when Codex encounters parse errors.
 - The Codex-driven clone smoke harness (`scripts/run_e2e_clone_smoke_test.py`, `docs/e2e_clone_smoke_test.md`) provisions isolated workspaces, mirrors `.codex`, randomizes `PROXY_PORT`, stages pytest/`make verify-clean`, and captures JSONL transcripts for `bundle-tools`, `install`, and `remove` scenarios.
@@ -18,7 +18,7 @@
 
 ## What’s Working
 
-- **Catalog hygiene:** Only `manage_docy_sources` ships in tracked aggregations, and `scripts/process_tool_aggregations.py --scope local` writes starter-bundle composites to `${STELAE_CONFIG_HOME}` before renders, keeping manifests minimal by default.
+- **Catalog hygiene:** Only the documentation catalog aggregate ships in tracked aggregations, and `scripts/process_tool_aggregations.py --scope local` writes starter-bundle composites to `${STELAE_CONFIG_HOME}` before renders, keeping manifests minimal by default.
 - **Restart flow:** `scripts/run_restart_stelae.sh` now waits on the randomized port, probes `/mcp`, and logs `pm2 ensure <app>` transitions so the harness can see when the proxy/bridge/tunnel recover.
 - **Smoke harness artifacts:** Disposable `${STELAE_CONFIG_HOME}`, pm2 home, `codex-transcripts/*.jsonl`, and manual playbooks capture each stage. Harness asserts `workspace_fs_read`, `doc_fetch_suite`, `grep`, and `manage_stelae` calls appear before completing, doubling as catalog verification.
 - **Instrumentation:** `STELAE_STREAMABLE_DEBUG_TOOLS` + `STELAE_STREAMABLE_DEBUG_LOG` (bridge) and `STELAE_TOOL_AGGREGATOR_DEBUG_TOOLS` + `STELAE_TOOL_AGGREGATOR_DEBUG_LOG` (aggregator) now dump request/response JSON, providing the evidence needed to resolve Codex parsing failures.
@@ -61,7 +61,7 @@
 
 ## Key References
 
-- `README.md` — Core vs Optional Stack, Declarative Tool Aggregations, Docy source catalog, declarative tool aggregations, Troubleshooting.
+- `README.md` — Core vs Optional Stack, Declarative Tool Aggregations, documentation source catalog, declarative tool aggregations, Troubleshooting.
 - `docs/ARCHITECTURE.md` — Config overlays, Component topology, Discovery & auto-loading pipeline.
 - `docs/e2e_clone_smoke_test.md` — Harness prerequisites, staged automation/manual flows, artifact layout.
 - `scripts/run_e2e_clone_smoke_test.py`, `stelae_lib/smoke_harness.py` — automation entry point and helper library.

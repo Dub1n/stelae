@@ -30,8 +30,8 @@
 
 ## 2025-11-06 – Docs Server Availability Check
 
-- Confirmed through `curl` against `/mcp` that `documentation://sources` is present and readable (`resources/list` and `resources/read` succeed), which means the Docy MCP is launching under `mcp-proxy` as expected.
-- The returned payload currently shows an empty `sources` array. Failures like “Server 'docs' not found” likely stem from Docy not being initialized yet when the downstream query ran, or from offline sessions before the proxy came fully online. Once `make up` finishes (or `pm2 resurrect` is run at login), Docy should be reachable at `/docs/sse`.
+- Confirmed through `curl` against `/mcp` that `documentation://sources` is present and readable (`resources/list` and `resources/read` succeed), which means the documentation MCP is launching under `mcp-proxy` as expected.
+- The returned payload currently shows an empty `sources` array. Failures like “Server 'docs' not found” likely stem from the documentation catalog not being initialized yet when the downstream query ran, or from offline sessions before the proxy came fully online. Once `make up` finishes (or `pm2 resurrect` is run at login), the documentation server should be reachable at `/docs/sse`.
 
 ## 2025-11-06 – Tool Override Mechanics
 

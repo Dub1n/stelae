@@ -85,7 +85,7 @@ Finish the documentation catalog aggregate plus supporting fetch adapters so can
   - [x] Revisit the custom `scripts/stelae_search_mcp.py` shim once a bounded search/timeout strategy exists; until then rely solely on `mcp-grep`.
   - [x] Stand up a Streamable HTTP front-end (single `/mcp` POST/GET) that proxies into the existing SSE endpoints so ChatGPT’s connector wizard can complete.
   - [x] Keep the Cloudflare tunnel managed by PM2 (`cloudflared` process) to avoid 1033 errors when resolving `https://mcp.infotopology.xyz`.
-  - [ ] Finish the documentation catalog aggregate + fetch/RAG integration so canonical (non-`raw`) fetches succeed without Docy.
+  - [ ] Finish the documentation catalog aggregate + fetch/RAG integration so canonical (non-`raw`) fetches succeed end-to-end once the new catalog replaces the retired documentation server.
 
 - [x] **Wire proxy clients to essentials**
 

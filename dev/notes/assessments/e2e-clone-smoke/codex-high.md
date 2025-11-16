@@ -2,9 +2,9 @@
 
 ## Context
 
-- README.md:31-35 and docs/ARCHITECTURE.md:15-19 now spell out the split between the tracked core template (integrator, aggregator helper, proxy) and the optional starter bundle (filesystem/ripgrep/Docy/etc.) so overlays in `${STELAE_CONFIG_HOME}` stay machine-local.
+- README.md:31-35 and docs/ARCHITECTURE.md:15-19 now spell out the split between the tracked core template (integrator, aggregator helper, proxy) and the optional starter bundle (filesystem/ripgrep/documentation catalog/etc.) so overlays in `${STELAE_CONFIG_HOME}` stay machine-local.
 - Recent work (fd0aa59..4b01248) centered on the Codex-driven clone smoke harness plus catalog hygiene. The harness provisions a disposable workspace, installs the starter bundle without touching the host, mirrors Codex config, runs pytest/`make verify-clean`, and drives scripted Codex missions (docs/e2e_clone_smoke_test.md:1-150).
-- While iterating on the harness we tightened the tool aggregation story so only curated composites (e.g., `workspace_fs_read`, `doc_fetch_suite`) appear in manifests; templates now track only `manage_docy_sources`, and `scripts/process_tool_aggregations.py --scope local` writes the optional suites into `${STELAE_CONFIG_HOME}` (dev/tasks/stelae-tool-aggregation-visibility.md:23-34).
+- While iterating on the harness we tightened the tool aggregation story so only curated composites (e.g., `workspace_fs_read`, `doc_fetch_suite`) appear in manifests; templates now track only the documentation catalog aggregate, and `scripts/process_tool_aggregations.py --scope local` writes the optional suites into `${STELAE_CONFIG_HOME}` (dev/tasks/stelae-tool-aggregation-visibility.md:23-34).
 
 ## Timeline & Changes (Nov 10–12)
 

@@ -85,7 +85,7 @@ These responses are sufficient for ChatGPT verification and actual use (source: 
 - **SSE**: `curl -Ns https://mcp.infotopology.xyz/mcp` → comment heartbeat and `event: endpoint` immediately with `/mcp?session_id=<hex>` (no percent-encoding). Downstream POSTs now hit the facade as expected.
 - **Initialize**: `result.tools` includes the full upstream catalog merged with facade entries (search/fetch) sorted by name.
 - **tools/list**: Mirrors initialize.
-- **Tool execution**: The Go facade now returns deterministic sample hits for `search`; `fetch` continues proxying Basic Memory/Docy responses.
+- **Tool execution**: The Go facade now returns deterministic sample hits for `search`; `fetch` continues proxying Basic Memory/documentation catalog responses.
 
 ## 6. Compliance Matrix
 

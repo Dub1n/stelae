@@ -3,7 +3,7 @@
 - Session opened against `http://127.0.0.1:9090/mcp` and every tool from the current `tools/list` payload was invoked via `tools/call`, per the AGENTS.md directive to rely on real MCP responses.
 - Commands were issued with a small Python harness that reuses `dev/debug/chatgpt_connector_probe.py`; the raw "curl-style" transcript (full JSON for each HTTP request/response) lives at `dev/logs/tool_invocations/20251114T104345Z-tool-calls.json`.
 - Each tool was also invoked through the MCP bridge (`mcp__stelae__*` adapters) so we can capture what Codex sees when it calls the tool directly; those outputs are summarized below and can be reproduced by reusing the same adapters.
-- Legacy documentation-catalog captures have been archived; see `dev/notes/docy_replacement_brief.md` for the replacement plan.
+- Legacy documentation-catalog captures have been archived; see `dev/notes/documentation_catalog_replacement_brief.md` for the replacement plan.
 - The table now compares both perspectives so we can spot gaps (double-encoding, schema validation errors, discovery drift, etc.) without rerunning the probes.
 - 2025-11-15 refresh: reran `scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --no-cloudflared`, re-collected `manage_stelae` + `memory_suite`, and rechecked `workspace_shell_control` after pointing its `--workdir` at `${STELAE_DIR}`.
 

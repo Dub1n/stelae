@@ -60,7 +60,11 @@ def integrator_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     env_file = tmp_path / ".env"
     (tmp_path / "one_mcp").mkdir()
     _write_json(tmp_path / "one_mcp" / "discovered_servers.json", [SAMPLE_DISCOVERY | {"name": "refreshed"}])
-    env_file.write_text(f"ONE_MCP_DIR={tmp_path / 'one_mcp'}\n", encoding="utf-8")
+    env_file.write_text(
+        f"ONE_MCP_DIR={tmp_path / 'one_mcp'}\n"
+        f"STELAE_DISCOVERY_PATH={discovery_path}\n",
+        encoding="utf-8",
+    )
     config_home = tmp_path / ".stelae-config"
     monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_home))
     config_overlays.config_home.cache_clear()
