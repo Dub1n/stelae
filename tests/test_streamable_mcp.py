@@ -1,12 +1,20 @@
+import asyncio
 import json
 from pathlib import Path
+from typing import Any
 
 import anyio
 import pytest
 from mcp import types
 
 import scripts.stelae_streamable_mcp as hub
-from tests._tool_override_test_helpers import build_sample_runtime
+from tests._tool_override_test_helpers import (
+    build_sample_from_schema,
+    build_sample_runtime,
+    get_tool_schema,
+)
+
+jsonschema = pytest.importorskip("jsonschema")
 
 
 @pytest.mark.anyio("asyncio")
@@ -268,6 +276,72 @@ async def test_workspace_fs_read_roundtrip(monkeypatch):
     assert text_blocks, "expected at least one text block"
     decoded = json.loads(text_blocks[0].text)
     assert decoded == payload
+
+
+def test_manage_stelae_schema_output(monkeypatch):
+    schema = get_tool_schema("integrator", "manage_stelae")
+    structured_sample = build_sample_from_schema(schema)
+    result_payload = structured_sample.get("result", {})
+
+    def fake_manage_operation(operation: str, params: dict[str, Any]):
+        assert operation == "list_discovered_servers"
+        return result_payload
+
+    monkeypatch.setattr(hub, "_run_manage_operation", fake_manage_operation)
+
+    async def _runner():
+        contents, structured = await hub._call_manage_tool({"operation": "list_discovered_servers"})
+        assert any(isinstance(block, types.TextContent) for block in contents)
+        jsonschema.validate(structured, schema)
+        assert structured == structured_sample
+
+    asyncio.run(_runner())
+
+
+def test_manage_docy_sources_roundtrip_validates_schema(monkeypatch):
+    schema = get_tool_schema("tool_aggregator", "manage_docy_sources")
+    structured_sample = build_sample_from_schema(schema)
+
+    async def fake_proxy_jsonrpc(method, params=None, *, read_timeout=None):
+        if method == "tools/list":
+            return {
+                "tools": [
+                    {
+                        "name": "manage_docy_sources",
+                        "description": "Docy aggregate",
+                        "inputSchema": {"type": "object"},
+                        "outputSchema": schema,
+                    }
+                ]
+            }
+        if method == "tools/call":
+            assert params["name"] == "manage_docy_sources"
+            return {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(structured_sample, ensure_ascii=False),
+                    }
+                ],
+                "structuredContent": structured_sample,
+            }
+        return {}
+
+    async def _runner():
+        hub._activate_proxy_handlers()
+        hub.PROXY_MODE = True
+        monkeypatch.setattr(hub, "_proxy_jsonrpc", fake_proxy_jsonrpc)
+
+        contents, structured = await hub.app.call_tool(
+            "manage_docy_sources",
+            {"operation": "list_sources"},
+        )
+
+        assert any(isinstance(block, types.TextContent) for block in contents)
+        jsonschema.validate(structured, schema)
+        assert structured == structured_sample
+
+    asyncio.run(_runner())
 
 
 def test_rendered_manifest_contains_only_aggregates(tmp_path: Path) -> None:

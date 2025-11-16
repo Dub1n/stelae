@@ -6,6 +6,7 @@ from typing import Any
 import pytest
 
 from mcp import types
+jsonschema = pytest.importorskip("jsonschema")
 
 from stelae_lib.config_overlays import overlay_path_for
 from stelae_lib.integrator.tool_aggregations import (
@@ -15,7 +16,11 @@ from stelae_lib.integrator.tool_aggregations import (
     load_tool_aggregation_config,
 )
 from stelae_lib.integrator.tool_overrides import ToolOverridesStore
-from tests._tool_override_test_helpers import build_sample_runtime
+from tests._tool_override_test_helpers import (
+    build_sample_from_schema,
+    build_sample_runtime,
+    get_tool_schema,
+)
 
 
 @pytest.fixture()
@@ -290,3 +295,35 @@ def test_overlay_only_excludes_defaults(monkeypatch, tmp_path: Path) -> None:
     hidden = config.hidden_tools
     assert len(hidden) == 1
     assert hidden[0].server == "mem"
+
+
+def test_manage_docy_sources_decodes_structured_payload_to_match_schema() -> None:
+    config = load_tool_aggregation_config(Path("config/tool_aggregations.json"))
+    target = next(agg for agg in config.aggregations if agg.name == "manage_docy_sources")
+    schema = get_tool_schema(target.server, target.name)
+    structured_sample = build_sample_from_schema(schema)
+    serialized = json.dumps(structured_sample, ensure_ascii=False)
+
+    async def fake_call(name: str, arguments: dict[str, Any], timeout: float | None):
+        assert name == "manage_docy"
+        assert arguments["operation"] == "list_sources"
+        # Downstream servers sometimes double-encode structured payloads; simulate that to
+        # ensure the aggregator decoder keeps `structuredContent` aligned with overrides.
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": serialized,
+                }
+            ],
+            "structuredContent": serialized,
+        }
+
+    runner = AggregatedToolRunner(target, fake_call, fallback_timeout=15.0)
+    result = asyncio.run(runner.dispatch({"operation": "list_sources"}))
+    assert isinstance(result, tuple)
+    contents, structured = result
+    assert contents, "expected at least one content block"
+    assert isinstance(contents[0], types.TextContent)
+    assert structured == structured_sample
+    jsonschema.validate(structured, schema)
