@@ -1,0 +1,19 @@
+Appraisal
+- **§3 Proposed Artifacts & §4 Flow:** Collapsing tracked overrides → the new `intended_catalog.json` → `live_catalog.json` gives docs/tests a deterministic expected view, so we stop chasing the runtime override shadow. That only helps if aggregates keep downstream schemas aligned; if they drift, the intended catalog just becomes another stale layer.
+- **Operational/logging (§3, §4, §7.1, §7.2):** `live_catalog.json` and exported descriptors deliver the audit trail we’ve lacked, but we must log each write with timestamps so operators can link snapshots to warm-ups, and impose retention/rotation per §7.2 so `${STELAE_STATE_HOME}` can’t grow unbounded.
+- **Schema adoption loop (§5, §6, §7.6):** The reset/promotion/fallback chain plus `tool_schema_status.json` establishes an adoption path, but it needs schema diff logs, failure counters, and conspicuous warnings so a bad schema can’t auto-promote without being noticed.
+- **CLI/test roll-out (§7.4, §8):** Switching CLI tooling to default to the intended catalog with an explicit `--live-catalog` flag surfaces the new files, yet the CLI/tests must exercise both views during the phased rollout so we don’t ship blind regressions when the proxy finally flips the default.
+
+Recommendations
+- **Instrument schema adoption (§5, §6, §7.6):** Diff the previous schema, increment a counter in `tool_schema_status.json`, log the failure, and have `make verify-clean` fail after repeated fallbacks so humans intervene before the bad schema reaches prod.
+- **Control live catalog/descriptor retention (§3, §7.1, §7.2):** Write timestamped copies (e.g., `live_catalog.20251116-120000.json` with a `current` symlink), prune older snapshots, and keep `live_descriptors.json` alongside the catalog so `process_tool_aggregations.py` always sees the same data the proxy loaded.
+- **Align CLI/tests/docs/migration (§7.4, §8):** Adopt the intended catalog as the default for diagnostics, document `--live-catalog`, update smoke tests to cover both the legacy runtime overrides path and the new path, and keep the phased rollout steps (render both, flag-gate reads, flip default) explicit.
+
+Open Question Responses
+1. **Who owns the downstream descriptor cache?** Assuming the proxy can be extended to do so, it should dump merged descriptors to `${STELAE_STATE_HOME}/live_descriptors.json` (per §7.1) and `process_tool_aggregations.py` should consume it when present while falling back to tracked overrides.
+2. **Versioning intended vs live catalogs?** Keep a capped history of timestamped `live_catalog` snapshots, prune or compress older copies, and treat them as diffable artifacts without letting `${STELAE_STATE_HOME}` grow indefinitely (addressing §7.2).
+3. **Health gating scenarios?** Treat intended/live diffs as alerts, log the servers that failed to start, and leave the intended catalog untouched so operators can investigate why the live catalog is a subset, which matches the behavior urged in §7.3.
+4. **CLI impacts?** Default CLI helpers to `intended_catalog.json`, add a `--live-catalog` flag, and make tests/docs cover each view so we always know which file an inspection command is reading (§7.4).
+5. **Aggregate schema derivation?** When aggregates omit `responseMappings`, record per-operation downstream schema references during render so diagnostics can point back to the actual schema each operation expects, supporting the enhancement sketched in §7.5.
+6. **Breaking schema alerts?** After two failed validations, mark the entry as pending, fail `make verify-clean`, and emit a diff summary (per §7.6) so we don’t silently lock in broken schemas.
+7. **Migration plan?** Follow the Phase 1–3 rollout from §7.7: render both the legacy runtime overrides file and `intended_catalog.json`, flag-gate the proxy to optionally read the new file while continuing to emit `live_catalog.json`, then flip the default once smoke tests have verified both feeds.
