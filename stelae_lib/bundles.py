@@ -109,6 +109,7 @@ def install_bundle(
     server_filter: Iterable[str] | None = None,
     dry_run: bool = False,
     restart: bool = True,
+    force: bool = False,
     service_factory: Callable[[], StelaeIntegratorService] = StelaeIntegratorService,
     command_runner: CommandRunner | None = None,
     log: Callable[[str], None] | None = None,
@@ -134,7 +135,7 @@ def install_bundle(
                 emit(f"[bundle] Skipping '{name}' (filtered)")
             continue
         emit(f"[bundle] Installing '{name}'…")
-        payload = {"descriptor": raw_descriptor, "dry_run": dry_run}
+        payload = {"descriptor": raw_descriptor, "dry_run": dry_run, "force": force}
         result = service.run("install_server", payload)
         if result.get("status") != "ok":
             errors.append({"name": name, "error": result})

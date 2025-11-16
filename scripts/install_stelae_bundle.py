@@ -35,6 +35,11 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--dry-run", action="store_true", help="Preview changes without writing overlays or restarting")
     parser.add_argument("--no-restart", action="store_true", help="Skip render/restart even if files change")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing servers without requiring a manual manage_stelae run",
+    )
     return parser.parse_args()
 
 
@@ -54,6 +59,7 @@ def main() -> None:
         server_filter=args.servers,
         dry_run=args.dry_run,
         restart=not args.no_restart,
+        force=args.force,
         log=_log_progress,
     )
     print(f"Bundle '{bundle.get('name', bundle_path.name)}' ({bundle_path})")

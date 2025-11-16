@@ -13,11 +13,13 @@ class FakeService:
         self.failures = failures or set()
         self.unchanged = unchanged or set()
         self.default_commands: list[list[str]] = []
+        self.force_flags: List[bool] = []
 
     def run(self, operation: str, params: Dict[str, Any]) -> Dict[str, Any]:
         assert operation == "install_server"
         name = params["descriptor"]["name"]
         self.calls.append(name)
+        self.force_flags.append(bool(params.get("force")))
         if name in self.failures:
             return {"status": "error", "errors": ["boom"]}
         changed = name not in self.unchanged
@@ -89,6 +91,7 @@ def test_install_bundle_updates_overlays_and_runs_commands(tmp_path, monkeypatch
     data = json.loads(overrides_overlay.read_text())
     assert "docs" in data.get("servers", {})
     assert runner.commands == bundles.DEFAULT_RESTART_COMMANDS
+    assert service.force_flags == [False, False]
 
 
 def test_install_bundle_respects_filters_and_dry_run(tmp_path, monkeypatch):
@@ -111,3 +114,19 @@ def test_install_bundle_respects_filters_and_dry_run(tmp_path, monkeypatch):
     assert summary["errors"] == []
     overrides_overlay = config_dir / "tool_overrides.local.json"
     assert not overrides_overlay.exists()
+    assert service.force_flags == [False]
+
+
+def test_install_bundle_can_force_integrator(tmp_path, monkeypatch):
+    monkeypatch.setenv("STELAE_CONFIG_HOME", str(tmp_path / "config_home"))
+    config_overlays.config_home.cache_clear()
+    bundle = _sample_bundle()
+    service = FakeService()
+    summary = bundles.install_bundle(
+        bundle,
+        service_factory=lambda: service,
+        force=True,
+        restart=False,
+    )
+    assert summary["errors"] == []
+    assert service.force_flags == [True, True]
