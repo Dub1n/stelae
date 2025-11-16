@@ -24,6 +24,24 @@ from tests._tool_override_test_helpers import (
 )
 
 
+STARTER_AGGREGATION_CASES = [
+    ("doc_fetch_suite", {"operation": "fetch_document_links", "url": "https://example.com/docs"}),
+    ("workspace_fs_read", {"operation": "list_allowed_directories"}),
+    ("workspace_fs_write", {"operation": "create_directory", "path": "docs/new-directory"}),
+    ("workspace_shell_control", {"operation": "get_current_directory"}),
+    ("memory_suite", {"operation": "list_memory_projects"}),
+    ("scrapling_fetch_suite", {"operation": "s_fetch_page", "url": "https://example.com/docs"}),
+    (
+        "strata_ops_suite",
+        {
+            "operation": "discover_server_actions",
+            "server_names": ["docs"],
+            "user_query": "status",
+        },
+    ),
+]
+
+
 @pytest.fixture()
 def sample_schema_path(tmp_path: Path) -> Path:
     schema = {
@@ -326,5 +344,31 @@ def test_manage_docy_sources_decodes_structured_payload_to_match_schema() -> Non
     contents, structured = result
     assert contents, "expected at least one content block"
     assert isinstance(contents[0], types.TextContent)
+    assert structured == structured_sample
+    jsonschema.validate(structured, schema)
+
+
+@pytest.mark.parametrize(("aggregation_name", "arguments"), STARTER_AGGREGATION_CASES)
+def test_starter_bundle_aggregations_roundtrip_structured_payloads(
+    aggregation_name: str, arguments: dict[str, Any]
+) -> None:
+    target = get_starter_bundle_aggregation(aggregation_name)
+    schema = target.output_schema
+    assert isinstance(schema, dict), f"Starter bundle aggregation {aggregation_name} missing output schema"
+    structured_sample = build_sample_from_schema(schema)
+    serialized = json.dumps(structured_sample, ensure_ascii=False)
+
+    async def fake_call(name: str, params: dict[str, Any], timeout: float | None):
+        # Aggregator should decode double-encoded payloads and leave structured content intact.
+        return {
+            "content": [{"type": "text", "text": serialized}],
+            "structuredContent": serialized,
+        }
+
+    runner = AggregatedToolRunner(target, fake_call, fallback_timeout=20.0)
+    result = asyncio.run(runner.dispatch(arguments))
+    assert isinstance(result, tuple)
+    contents, structured = result
+    assert any(isinstance(block, types.TextContent) for block in contents), aggregation_name
     assert structured == structured_sample
     jsonschema.validate(structured, schema)
