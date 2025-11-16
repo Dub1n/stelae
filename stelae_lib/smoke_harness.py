@@ -78,9 +78,9 @@ def build_env_map(
 ) -> Dict[str, str]:
     """Generate the `.env` key/value map for the sandbox."""
     vendor_dir = apps_dir / "vendor"
-    discovery_path = state_dir / "discovered_servers.json"
     state_dir = config_home / ".state"
     state_dir.mkdir(parents=True, exist_ok=True)
+    discovery_path = state_dir / "discovered_servers.json"
     overrides_path = state_dir / "tool_overrides.json"
     tool_schema_status_path = state_dir / "tool_schema_status.json"
     proxy_bin = apps_dir / "mcp-proxy" / "build" / "mcp-proxy"

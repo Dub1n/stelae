@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 import stelae_lib.integrator.core as core_module
+import stelae_lib.config_overlays as config_overlays
 from stelae_lib.config_overlays import overlay_path_for
 from stelae_lib.integrator.core import StelaeIntegratorService
 from stelae_lib.integrator.one_mcp import DiscoveryResult
@@ -62,6 +63,8 @@ def integrator_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     env_file.write_text(f"ONE_MCP_DIR={tmp_path / 'one_mcp'}\n", encoding="utf-8")
     config_home = tmp_path / ".stelae-config"
     monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_home))
+    config_overlays.config_home.cache_clear()
+    config_overlays.state_home.cache_clear()
     return {
         "root": tmp_path,
         "template": template_path,
