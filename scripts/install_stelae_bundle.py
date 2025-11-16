@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install optional Stelae bundles (Docy, Memory, aggregator, etc.)."""
+"""Install optional Stelae bundles (memory, aggregator, etc.)."""
 
 from __future__ import annotations
 

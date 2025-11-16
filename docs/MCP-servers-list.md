@@ -38,7 +38,6 @@
 
 ## Web Read
 
-- [x] [011] [Docy](https://github.com/oborchers/mcp-server-docy) — Real-time access to web documentation online; no outdated, broken, rate-limited files/links. Scrapes with crawl4ai.
 - [x] [050] [scrapling-fetch](https://github.com/cyberchitta/scrapling-fetch-mcp) — Access text content from bot-protected websites. Fetches HTML/markdown from sites with anti-automation measures using Scrapling.
 - [x] [---] [Fetch](https://github.com/modelcontextprotocol/servers/blob/main/src/fetch) — pull HTML/JSON/MD/plaintext from URLs for docs/samples; no account needed; sandbox outputs.
 - [~] [243] [consult7](https://github.com/szeider/consult7) — analyze large codebases/docs with high‑context models; useful for code review. [WSL]

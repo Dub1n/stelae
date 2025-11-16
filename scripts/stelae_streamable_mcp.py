@@ -803,7 +803,7 @@ def _register_fallback_tools() -> None:
     )(search)
     fetch = app.tool(
         name="fetch",
-        description="Connector-compliant fetch built atop Docy/fetch servers.",
+        description="Connector-compliant fetch built atop the fetch servers.",
     )(fetch)
     LOGGER.info("Fallback search/fetch tools registered")
 

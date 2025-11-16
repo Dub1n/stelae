@@ -307,53 +307,6 @@ def test_manage_stelae_schema_output(monkeypatch):
     asyncio.run(_runner())
 
 
-def test_manage_docy_sources_roundtrip_validates_schema(monkeypatch):
-    aggregation = get_starter_bundle_aggregation("manage_docy_sources")
-    schema = aggregation.output_schema
-    assert isinstance(schema, dict)
-    structured_sample = build_sample_from_schema(schema)
-
-    async def fake_proxy_jsonrpc(method, params=None, *, read_timeout=None):
-        if method == "tools/list":
-            return {
-                "tools": [
-                    {
-                        "name": aggregation.name,
-                        "description": aggregation.description,
-                        "inputSchema": aggregation.input_schema,
-                        "outputSchema": schema,
-                    }
-                ]
-            }
-        if method == "tools/call":
-            assert params["name"] == "manage_docy_sources"
-            return {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": json.dumps(structured_sample, ensure_ascii=False),
-                    }
-                ],
-                "structuredContent": structured_sample,
-            }
-        return {}
-
-    async def _runner():
-        hub._activate_proxy_handlers()
-        hub.PROXY_MODE = True
-        monkeypatch.setattr(hub, "_proxy_jsonrpc", fake_proxy_jsonrpc)
-
-        contents, structured = await hub.app.call_tool(
-            aggregation.name,
-            {"operation": "list_sources"},
-        )
-
-        assert any(isinstance(block, types.TextContent) for block in contents)
-        jsonschema.validate(structured, schema)
-        assert structured == structured_sample
-
-    asyncio.run(_runner())
-
 
 def test_rendered_manifest_contains_only_aggregates(tmp_path: Path) -> None:
     fixture = build_sample_runtime(tmp_path)
@@ -365,9 +318,9 @@ def test_rendered_manifest_contains_only_aggregates(tmp_path: Path) -> None:
         for tool, descriptor in data["tools"].items()
         if descriptor.get("enabled", True)
     ]
-    assert enabled == [("tool_aggregator", "doc_fetch_suite")]
+    assert enabled == [("tool_aggregator", "sample_fetch_suite")]
 
-    schema = servers["tool_aggregator"]["tools"]["doc_fetch_suite"]["inputSchema"]
+    schema = servers["tool_aggregator"]["tools"]["sample_fetch_suite"]["inputSchema"]
     assert len(schema["required"]) == len(set(schema["required"]))
     enum_values = schema["properties"]["operation"]["enum"]
     assert len(enum_values) == len(set(enum_values))

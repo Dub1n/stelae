@@ -75,7 +75,7 @@ def _base_overrides() -> Dict[str, Any]:
             "tool_aggregator": {
                 "enabled": True,
                 "tools": {
-                    "doc_fetch_suite": {
+                    "sample_fetch_suite": {
                         "description": "Doc fetch aggregate (base)",
                         "enabled": True,
                         "inputSchema": {
@@ -110,8 +110,8 @@ def _aggregation_payload() -> Dict[str, Any]:
         "schemaVersion": 1,
         "aggregations": [
             {
-                "name": "doc_fetch_suite",
-                "description": "Docy fetch helpers (overlay)",
+                "name": "sample_fetch_suite",
+                "description": "Documentation fetch helpers (overlay)",
                 "inputSchema": {
                     "type": "object",
                     "required": ["operation"],
@@ -139,12 +139,12 @@ def _aggregation_payload() -> Dict[str, Any]:
                     {
                         "server": "docs",
                         "tool": "fetch_document_links",
-                        "reason": "Wrapped by doc_fetch_suite",
+                        "reason": "Wrapped by sample_fetch_suite",
                     },
                     {
                         "server": "docs",
                         "tool": "fetch_documentation_page",
-                        "reason": "Wrapped by doc_fetch_suite",
+                        "reason": "Wrapped by sample_fetch_suite",
                     },
                 ],
             }

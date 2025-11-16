@@ -10,6 +10,8 @@ Tags: `#infra`, `#tests`, `#docs`
 > This workbook now tracks every open item for the clone smoke initiative. The
 > legacy task files listed above are archived and point back here so all notes,
 > checklists, and run logs live in one place.
+>
+> **Note:** References to Docy/`doc_fetch_suite` describe the retired documentation stack and are preserved for historical context. The new `documentation_catalog` aggregate will replace those workflows once the vendor-neutral tooling lands.
 
 ## Scope & checkpoints
 
@@ -23,11 +25,11 @@ Tags: `#infra`, `#tests`, `#docs`
 
 > For all checklist items, find the relevant workstream and ensure the work is carried out as part of it's setup. This includes performing any pre-reading and adding documentation to the appropriate places.
 
-- [ ] Trials – Codex CLI wrappers + harness prove `workspace_fs_read`, `doc_fetch_suite`, and `manage_stelae` all register and complete without manual prompts. *(Appendix B documents the current blocker: Codex still reports `Expecting value` from `workspace_fs_read` even though HTTP probes pass.)*
+- [ ] Trials – Codex CLI wrappers + harness prove `workspace_fs_read` and `manage_stelae` all register and complete without manual prompts while the documentation catalog work remains in flight. *(Appendix B documents the current blocker: Codex still reports `Expecting value` from `workspace_fs_read` even though HTTP probes pass.)*
 - [ ] Harness reliability – capture a “restart succeeds under 120 s” run with `--capture-debug-tools --manual-stage install` plus logs attached to `dev/logs/harness/`.
 - [ ] Codex orchestration – rerun the full golden path (discover → dry-run install → real install → remove) after catalog fixes land and archive the transcripts under `dev/logs/harness/`.
 - [ ] Docs/tests – README, `docs/ARCHITECTURE.md`, and `docs/e2e_clone_smoke_test.md` now reference this consolidated task and document the overlay + harness expectations (✅ Action Plan #3).
-- [ ] `manage_docy_sources` response encoding – ensure the proxy stops double-encoding the JSON payload so Codex no longer sees “Output validation error … is not of type 'object'.”
+- [ ] Documentation catalog aggregate – ensure the forthcoming replacement stays schema-compliant so Codex no longer sees “Output validation error … is not of type 'object'.”
 - [ ] Automate harness dependency bootstrap so sandbox `python-site/` always has `httpx`, `anyio`, `mcp`, `fastmcp`, `trio`, etc., before pytest runs (or run tests inside the prepared venv).
 - [ ] Preserve Codex evidence when the harness deletes workspaces (copy `codex-transcripts/*.jsonl` into `dev/logs/harness/` before cleanup so transcripts survive like the debug logs).
 

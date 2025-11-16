@@ -263,7 +263,7 @@ class CloneSmokeHarness:
     def _configure_debug_env(self) -> None:
         self.debug_log_dir.mkdir(parents=True, exist_ok=True)
         self.repo_debug_dir.mkdir(parents=True, exist_ok=True)
-        self._env["STELAE_STREAMABLE_DEBUG_TOOLS"] = "workspace_fs_read,doc_fetch_suite"
+        self._env["STELAE_STREAMABLE_DEBUG_TOOLS"] = "workspace_fs_read,manage_stelae"
         self._env["STELAE_STREAMABLE_DEBUG_LOG"] = str(self.streamable_debug_log)
         self._env["STELAE_TOOL_AGGREGATOR_DEBUG_TOOLS"] = "workspace_fs_read"
         self._env["STELAE_TOOL_AGGREGATOR_DEBUG_LOG"] = str(self.aggregator_debug_log)
@@ -927,16 +927,10 @@ class CloneSmokeHarness:
                 and call.arguments.get("pattern") == "manage_stelae",
             ),
             ToolExpectation(
-                tool="manage_docy_sources",
-                description="List Docy sources before fetching docs",
+                tool="manage_stelae",
+                description="List discovered servers",
                 predicate=lambda call: isinstance(call.arguments, dict)
-                and call.arguments.get("operation") == "list_sources",
-            ),
-            ToolExpectation(
-                tool="doc_fetch_suite",
-                description="List documentation sources via docy",
-                predicate=lambda call: isinstance(call.arguments, dict)
-                and call.arguments.get("operation") == "list_documentation_sources_tool",
+                and call.arguments.get("operation") == "list_discovered_servers",
             ),
         ]
         install_expectations = [
@@ -970,8 +964,7 @@ class CloneSmokeHarness:
                 "line_number": True,
             }
         )
-        docy_manage_payload = json.dumps({"operation": "list_sources"})
-        doc_payload = json.dumps({"operation": "list_documentation_sources_tool"})
+        list_discovered_payload = json.dumps({"operation": "list_discovered_servers"})
         return textwrap.dedent(
             f"""
             Capture the MCP behavior for this sandbox—do not run shell commands or edit files manually.
@@ -980,8 +973,7 @@ class CloneSmokeHarness:
             2. Regardless of whether the catalog includes them, call these MCP tools in order and report their outputs or failures:
                - `workspace_fs_read` with {read_payload}
                - `grep` with {grep_payload}
-               - `manage_docy_sources` with {docy_manage_payload}
-               - `doc_fetch_suite` with {doc_payload}
+               - `manage_stelae` with {list_discovered_payload}
             3. If any call fails because the tool is missing, still include the failed attempt in your notes; do not substitute shell access.
 
             Summarize what you observed from each MCP call and stop.

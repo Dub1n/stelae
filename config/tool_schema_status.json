@@ -56,11 +56,5 @@
       "updated_at": 1762629781
     }
   },
-  "tool_aggregator": {
-    "doc_fetch_suite": {
-      "last_adapter": "generic",
-      "consecutive_generic_count": 2,
-      "updated_at": 1762786573
-    }
-  }
+  "tool_aggregator": {}
 }

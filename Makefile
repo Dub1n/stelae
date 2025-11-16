@@ -71,7 +71,7 @@ up: render-proxy
 	@echo "Tip (one-time): run 'pm2 startup systemd -u $${USER} --hp \"$${HOME}\"' to auto-start on boot."
 
 down:
-	-$(PM2) delete mcp-proxy strata docy memory shell cloudflared || true
+	-$(PM2) delete mcp-proxy strata memory shell cloudflared || true
 	$(PM2) save || true
 
 restart-proxy: render-proxy

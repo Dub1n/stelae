@@ -5,18 +5,18 @@ from stelae_lib.bundles import _merge_named_entries
 
 def test_merge_named_entries_prefers_additions() -> None:
     existing = [
-        {"name": "doc_fetch_suite", "description": "old"},
+        {"name": "scrapling_fetch_suite", "description": "old"},
         {"name": "custom_suite", "description": "custom"},
     ]
     additions = [
-        {"name": "doc_fetch_suite", "description": "new"},
+        {"name": "scrapling_fetch_suite", "description": "new"},
         {"name": "memory_suite", "description": "memory"},
     ]
 
     merged = _merge_named_entries(existing, additions, key_func=lambda entry: entry.get("name"))
 
     assert [entry["name"] for entry in merged] == [
-        "doc_fetch_suite",
+        "scrapling_fetch_suite",
         "memory_suite",
         "custom_suite",
     ]

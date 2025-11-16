@@ -31,7 +31,7 @@ python scripts/run_e2e_clone_smoke_test.py \
 The harness will:
 
 1. Clone Stelae + `mcp-proxy` into a disposable workspace, create an isolated `.env`,
-   and install the entire starter bundle (using `--no-restart`) so filesystem/Docy/rg/Strata/etc. are
+   and install the entire starter bundle (using `--no-restart`) so filesystem/rg/Strata/etc. are
    available before Codex connects. Restarts happen in the next step so the harness can stream the
    log output directly.
 2. Seed a tiny "client" git repo next to the clone so `codex exec` can run inside a
@@ -51,7 +51,7 @@ The harness will:
    with scripted instructions and writes the transcript to
    `${WORKSPACE}/codex-transcripts/<stage>.jsonl`. The harness parses the JSON lines
    and fails if it cannot find the required `workspace_fs_read`, `grep`,
-   `doc_fetch_suite`, or `manage_stelae` calls.
+   or `manage_stelae` calls.
 6. Assert `git status --porcelain` is empty after every major step (bundle install,
    Codex install/remove, final tests).
 
@@ -104,7 +104,7 @@ Common options:
 - Before the restart script runs, the harness preflights the chosen port: it inspects `ss`/`lsof`, sends `SIGTERM`/`SIGKILL` to any lingering listeners, and rechecks so pm2 never collides with a stale proxy. Expect to see `[port-preflight]` logs whenever an old process is cleaned up.
 - The renderer now substitutes `{{PROXY_PORT}}` inside `config/proxy.template.json`, so pm2 always starts `mcp-proxy` on the sandbox-specific port. Local `.env` files should keep `PROXY_PORT` and `PUBLIC_PORT` synchronized; in most setups both remain `9090`.
 - `ecosystem.config.js` defaults `PROXY_CONFIG` to `${STELAE_STATE_HOME}/proxy.json` (and `${STELAE_STATE_HOME}` falls back to `${STELAE_CONFIG_HOME}/.state`), which is the same file the harness renders inside the config home. This ensures pm2 restarts (even when the daemon survives across runs) keep honoring the sandbox port. When reusing a workspace created before this change, copy the updated `ecosystem.config.js` into the sandbox or rerun the bootstrap step so pm2 stops falling back to the repo path.
-- `scripts/process_tool_aggregations.py --scope local` refreshes only the user-defined aggregates under `${STELAE_CONFIG_HOME}` before exporting `${TOOL_OVERRIDES_PATH}`, and the exporter deduplicates JSON Schema `enum`/`required` arrays. The tracked template intentionally ships empty, so installing the starter bundle is what writes the Docy/workspace/memory/strata wrappers (including `manage_docy_sources`) into your overlay. Re-run the script (it is part of `scripts/run_restart_stelae.sh`) if `tools/list` starts showing the raw Docy/FS tools or Codex complains about repeated `operation` fields—those symptoms mean the manifest is still reading a stale override file. When default aggregates change, run `python scripts/process_tool_aggregations.py --scope default` once, commit the updated `config/tool_overrides.json`, and let `make render-proxy` pick it up.
+- `scripts/process_tool_aggregations.py --scope local` refreshes only the user-defined aggregates under `${STELAE_CONFIG_HOME}` before exporting `${TOOL_OVERRIDES_PATH}`, and the exporter deduplicates JSON Schema `enum`/`required` arrays. The tracked template intentionally ships empty, so installing the starter bundle is what writes the filesystem/memory/strata wrappers into your overlay. Re-run the script (it is part of `scripts/run_restart_stelae.sh`) if `tools/list` starts showing the raw filesystem tools or Codex complains about repeated `operation` fields—those symptoms mean the manifest is still reading a stale override file. When default aggregates change, run `python scripts/process_tool_aggregations.py --scope default` once, commit the updated `config/tool_overrides.json`, and let `make render-proxy` pick it up.
 - Sending `Ctrl+C` (SIGINT) or SIGTERM to the harness triggers the new graceful shutdown handler: it kills the sandbox PM2 daemon (respecting `PM2_HOME`), cleans up the workspace when `--keep-workspace` is not set, and exits with status 130/143. This prevents stray processes from lingering if a run is aborted mid-restart.
 - Restart/heartbeat timeouts automatically dump `pm2 status` plus tail snippets from `${PM2_HOME}/logs/*` so Codex transcripts always have the context needed to debug hanging restarts.
 
@@ -125,11 +125,9 @@ Each automatic run captures three transcripts:
 
 1. **`bundle-tools`** – Captures one `tools/list` snapshot for diagnostics and then
    calls `workspace_fs_read` (`read_file`), `grep`
-   (`pattern="manage_stelae"`), **`manage_docy_sources`
-   (`list_sources`) to hydrate Docy metadata**, and finally
-   `doc_fetch_suite` (`list_documentation_sources_tool`) even if the catalog
-   failed to advertise those entries. Each call must be attempted in that order;
-   a “tool missing” failure still counts as useful telemetry.
+   (`pattern="manage_stelae"`), and finally `manage_stelae`
+   (`list_discovered_servers`). Each call must be attempted in that order; a
+   “tool missing” failure still counts as useful telemetry.
 2. **`install`** – Calls `manage_stelae` with
    `{"operation":"install_server","params":{"name":"qdrant","target_name":"qdrant_smoke","force":true}}`
    and waits for completion, then issues a read-only verification call.

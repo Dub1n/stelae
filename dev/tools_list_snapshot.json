@@ -2189,60 +2189,6 @@
           "openWorldHint": false,
           "readOnlyHint": false
         },
-        "description": "Manage Docy documentation catalog (list/add/remove/sync).",
-        "inputSchema": {
-          "properties": {
-            "operation": {
-              "title": "Operation",
-              "type": "string"
-            },
-            "params": {
-              "anyOf": [
-                {
-                  "additionalProperties": true,
-                  "type": "object"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "title": "Params"
-            }
-          },
-          "required": [
-            "operation"
-          ],
-          "type": "object"
-        },
-        "name": "manage_docy",
-        "outputSchema": {
-          "properties": {
-            "result": {
-              "additionalProperties": true,
-              "title": "Result",
-              "type": "object"
-            }
-          },
-          "required": [
-            "result"
-          ],
-          "type": "object"
-        },
-        "x-stelae": {
-          "primaryServer": "docy_manager",
-          "servers": [
-            "docy_manager"
-          ]
-        }
-      },
-      {
-        "annotations": {
-          "destructiveHint": false,
-          "idempotentHint": false,
-          "openWorldHint": false,
-          "readOnlyHint": false
-        },
         "description": "Install/remove MCP servers discovered by 1mcp or manual JSON blobs.",
         "inputSchema": {
           "properties": {

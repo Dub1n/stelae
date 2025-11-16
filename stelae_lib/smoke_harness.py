@@ -106,7 +106,6 @@ def build_env_map(
         "FILESYSTEM_BIN": str(local_bin / "rust-mcp-filesystem"),
         "RG_BIN": str(local_bin / "mcp-grep-server"),
         "STRATA_BIN": str(local_bin / "strata"),
-        "DOCY_BIN": str(local_bin / "mcp-server-docy"),
         "MEMORY_BIN": str(local_bin / "basic-memory"),
         "NPX_BIN": "npx",
         "PLAYWRIGHT_BROWSERS_PATH": str(playground_cache),
@@ -183,8 +182,8 @@ def render_manual_playbook(ctx: ManualContext) -> str:
         1. Open a new terminal and `cd {ctx.clone_dir}`.
         2. Export `STELAE_CONFIG_HOME={ctx.config_home}` and `PM2_HOME={ctx.sandbox_root / '.pm2'}` so Codex reuses the sandbox.
         3. Start the Codex MCP wrapper using the sandbox `.env` (`source {ctx.env_file}` or pass `--env-file`).
-        4. Connect to the sandbox proxy: `{ctx.proxy_url}`. Verify `workspace_fs_read`, `grep`, `doc_fetch_suite`, and `manage_stelae` appear via `tools/list`.
-        5. Call `workspace_fs_read` with `{{"operation":"read_file","path":"README.md"}}`, then call `grep` with `{{"pattern":"manage_stelae","paths":["README.md"],"recursive":false,"regexp":false}}`, and finally call `doc_fetch_suite` with `{{"operation":"list_documentation_sources_tool"}}`.
+        4. Connect to the sandbox proxy: `{ctx.proxy_url}`. Verify `workspace_fs_read`, `grep`, and `manage_stelae` appear via `tools/list`.
+        5. Call `workspace_fs_read` with `{{"operation":"read_file","path":"README.md"}}`, then call `grep` with `{{"pattern":"manage_stelae","paths":["README.md"],"recursive":false,"regexp":false}}`, and finally call `manage_stelae` with `{{"operation":"list_discovered_servers"}}`.
         6. Install Qdrant under a throwaway alias by calling `manage_stelae` with `{{"operation":"install_server","params":{{"name":"qdrant","target_name":"qdrant_smoke","force":true}}}}` and wait for completion.
         7. Remove the alias via `manage_stelae` `{{"operation":"remove_server","params":{{"name":"qdrant_smoke","force":true}}}}`.
         8. Update `{ctx.manual_result}` with `status="passed"` (or `failed`) plus any notes and include the install/remove call IDs reported by Codex.

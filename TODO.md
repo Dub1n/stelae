@@ -3,16 +3,16 @@
 ## Current State
 
 README now has a dedicated “Connector Readiness” section with tunnel checks, SSE probe guidance, and a working Python smoke harness (README.md:147-213). The validation checklist just above it still keeps the essentials package front and center (README.md:139-143).
-TODO tracks the remaining connector work: stand up the Streamable HTTP front-end, keep Cloudflare’s tunnel under PM2, and repair Docy’s markdown path so non-raw fetches stop failing (TODO.md:69-73).
+TODO tracks the remaining connector work: stand up the Streamable HTTP front-end, keep Cloudflare’s tunnel under PM2, and finalize the vendor-neutral documentation catalog/RAG stack (TODO.md:69-73).
 Verification/observations:
 
 Public access is currently broken: timeout 15s curl -sk https://mcp.infotopology.xyz/.well-known/mcp/manifest.json returns Cloudflare 1033, which lines up with pm2 list showing no cloudflared process. The local manifest is healthy (curl -s http://localhost:9090/.well-known/mcp/manifest.json).
-The SSE harness (now documented and re-run) hits /rg/sse successfully, returning three matches for “Stelae”. Docy/fetch responds when raw: true, but the markdown simplification still dies at ExtractArticle.js, so that fix remains on the TODO.
+The SSE harness (now documented and re-run) hits /rg/sse successfully, returning three matches for “Stelae”.
 Next steps (suggested):
 
 pm2 start "cloudflared tunnel run stelae" --name cloudflared (and pm2 save) so the public manifest stops erroring; re-check with the curl probe.
 Build the single /mcp Streamable HTTP shim noted in TODO so ChatGPT’s connector wizard can complete without per-server SSE juggling.
-Patch Docy’s readability path or pin its dependency so canonical (non-raw) fetches succeed.
+Finish the documentation catalog aggregate plus supporting fetch adapters so canonical (non-raw) fetches have a clean backend.
 
 ## Phase 0 — Prep & Conventions
 
@@ -74,7 +74,6 @@ Patch Docy’s readability path or pin its dependency so canonical (non-raw) fet
   - Shell MCP → **pick one**:
     - `pipx install terminal-controller-mcp` **(recommended)**, or
     - build/install `mcp-shell`
-  - Docs → `npm i -g mcp-server-docy`
   - Memory → `pipx install basic-memory` (and/or `pipx install mcp-pif`)
   - Strata → `pipx install strata-mcp`
   - *(Tasks MCP deferred; schedule via 1mcp promotion once baseline stack is stable)*
@@ -86,7 +85,7 @@ Patch Docy’s readability path or pin its dependency so canonical (non-raw) fet
   - [x] Revisit the custom `scripts/stelae_search_mcp.py` shim once a bounded search/timeout strategy exists; until then rely solely on `mcp-grep`.
   - [x] Stand up a Streamable HTTP front-end (single `/mcp` POST/GET) that proxies into the existing SSE endpoints so ChatGPT’s connector wizard can complete.
   - [x] Keep the Cloudflare tunnel managed by PM2 (`cloudflared` process) to avoid 1033 errors when resolving `https://mcp.infotopology.xyz`.
-  - [ ] Patch Docy’s markdown extraction path so non-`raw` fetches stop failing when `readabilipy` invokes `ExtractArticle.js`.
+  - [ ] Finish the documentation catalog aggregate + fetch/RAG integration so canonical (non-`raw`) fetches succeed without Docy.
 
 - [x] **Wire proxy clients to essentials**
 
