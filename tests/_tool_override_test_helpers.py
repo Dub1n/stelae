@@ -7,7 +7,10 @@ from pathlib import Path
 from typing import Any, Dict, Mapping
 
 from stelae_lib import config_overlays
-from stelae_lib.integrator.tool_aggregations import load_tool_aggregation_config
+from stelae_lib.integrator.tool_aggregations import (
+    ToolAggregationConfig,
+    load_tool_aggregation_config,
+)
 from stelae_lib.integrator.tool_overrides import ToolOverridesStore
 
 
@@ -18,6 +21,8 @@ class AggregationFixture:
 
 
 _TOOL_OVERRIDES_CACHE: Dict[str, Any] | None = None
+_STARTER_BUNDLE_CACHE: Dict[str, Any] | None = None
+_STARTER_BUNDLE_AGGREGATIONS: ToolAggregationConfig | None = None
 
 
 def build_sample_runtime(tmp_path: Path) -> AggregationFixture:
@@ -153,6 +158,28 @@ def load_tool_overrides() -> Dict[str, Any]:
         path = Path("config/tool_overrides.json")
         _TOOL_OVERRIDES_CACHE = json.loads(path.read_text(encoding="utf-8"))
     return json.loads(json.dumps(_TOOL_OVERRIDES_CACHE, ensure_ascii=False))
+
+
+def _load_starter_bundle_payload() -> Dict[str, Any]:
+    global _STARTER_BUNDLE_CACHE
+    if _STARTER_BUNDLE_CACHE is None:
+        path = Path("config/bundles/starter_bundle.json")
+        _STARTER_BUNDLE_CACHE = json.loads(path.read_text(encoding="utf-8"))
+    return json.loads(json.dumps(_STARTER_BUNDLE_CACHE, ensure_ascii=False))
+
+
+def get_starter_bundle_aggregation(name: str):
+    global _STARTER_BUNDLE_AGGREGATIONS
+    if _STARTER_BUNDLE_AGGREGATIONS is None:
+        bundle = _load_starter_bundle_payload()
+        payload = bundle.get("toolAggregations")
+        if not isinstance(payload, Mapping):
+            raise KeyError("starter bundle missing toolAggregations payload")
+        _STARTER_BUNDLE_AGGREGATIONS = ToolAggregationConfig.from_data(payload)
+    for aggregation in _STARTER_BUNDLE_AGGREGATIONS.aggregations:
+        if aggregation.name == name:
+            return aggregation
+    raise KeyError(f"Aggregation '{name}' not found in starter bundle")
 
 
 def get_tool_schema(server: str, tool: str, *, schema_key: str = "outputSchema") -> Dict[str, Any]:

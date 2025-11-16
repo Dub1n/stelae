@@ -19,6 +19,7 @@ from stelae_lib.integrator.tool_overrides import ToolOverridesStore
 from tests._tool_override_test_helpers import (
     build_sample_from_schema,
     build_sample_runtime,
+    get_starter_bundle_aggregation,
     get_tool_schema,
 )
 
@@ -298,9 +299,9 @@ def test_overlay_only_excludes_defaults(monkeypatch, tmp_path: Path) -> None:
 
 
 def test_manage_docy_sources_decodes_structured_payload_to_match_schema() -> None:
-    config = load_tool_aggregation_config(Path("config/tool_aggregations.json"))
-    target = next(agg for agg in config.aggregations if agg.name == "manage_docy_sources")
-    schema = get_tool_schema(target.server, target.name)
+    target = get_starter_bundle_aggregation("manage_docy_sources")
+    schema = target.output_schema
+    assert isinstance(schema, dict)
     structured_sample = build_sample_from_schema(schema)
     serialized = json.dumps(structured_sample, ensure_ascii=False)
 

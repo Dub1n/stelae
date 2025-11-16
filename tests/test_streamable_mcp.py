@@ -11,10 +11,19 @@ import scripts.stelae_streamable_mcp as hub
 from tests._tool_override_test_helpers import (
     build_sample_from_schema,
     build_sample_runtime,
+    get_starter_bundle_aggregation,
     get_tool_schema,
 )
 
 jsonschema = pytest.importorskip("jsonschema")
+
+
+@pytest.fixture(autouse=True)
+def _run_manage_tool_inline(monkeypatch):
+    async def _inline_runner(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(hub, "_MANAGE_THREAD_RUNNER", _inline_runner)
 
 
 @pytest.mark.anyio("asyncio")
@@ -299,7 +308,9 @@ def test_manage_stelae_schema_output(monkeypatch):
 
 
 def test_manage_docy_sources_roundtrip_validates_schema(monkeypatch):
-    schema = get_tool_schema("tool_aggregator", "manage_docy_sources")
+    aggregation = get_starter_bundle_aggregation("manage_docy_sources")
+    schema = aggregation.output_schema
+    assert isinstance(schema, dict)
     structured_sample = build_sample_from_schema(schema)
 
     async def fake_proxy_jsonrpc(method, params=None, *, read_timeout=None):
@@ -307,9 +318,9 @@ def test_manage_docy_sources_roundtrip_validates_schema(monkeypatch):
             return {
                 "tools": [
                     {
-                        "name": "manage_docy_sources",
-                        "description": "Docy aggregate",
-                        "inputSchema": {"type": "object"},
+                        "name": aggregation.name,
+                        "description": aggregation.description,
+                        "inputSchema": aggregation.input_schema,
                         "outputSchema": schema,
                     }
                 ]
@@ -333,7 +344,7 @@ def test_manage_docy_sources_roundtrip_validates_schema(monkeypatch):
         monkeypatch.setattr(hub, "_proxy_jsonrpc", fake_proxy_jsonrpc)
 
         contents, structured = await hub.app.call_tool(
-            "manage_docy_sources",
+            aggregation.name,
             {"operation": "list_sources"},
         )
 

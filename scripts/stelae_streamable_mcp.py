@@ -163,6 +163,13 @@ _MANAGE_SERVICE: StelaeIntegratorService | None = None
 _MANAGE_TOOL_AVAILABLE = False
 
 
+async def _asyncio_to_thread(func, *args, **kwargs):
+    return await asyncio.to_thread(func, *args, **kwargs)
+
+
+_MANAGE_THREAD_RUNNER = _asyncio_to_thread
+
+
 def _configure_logger() -> logging.Logger:
     """Configure a file-backed logger for early process diagnostics."""
 
@@ -821,7 +828,7 @@ async def _call_manage_tool(arguments: Dict[str, Any]) -> tuple[Iterable[types.C
     params = arguments.get("params") or {}
     if params is not None and not isinstance(params, dict):
         raise RuntimeError("manage_stelae 'params' must be an object when provided")
-    payload = await asyncio.to_thread(_run_manage_operation, operation, params)
+    payload = await _MANAGE_THREAD_RUNNER(_run_manage_operation, operation, params)
     text = json.dumps(payload, indent=2, ensure_ascii=False)
     content = [types.TextContent(type="text", text=text)]
     return content, {"result": payload}
