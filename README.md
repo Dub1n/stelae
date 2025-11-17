@@ -220,6 +220,7 @@ Templates stay in `config/` (proxy, schemas), while writable data now lives only
 - Catalog data lives in `${STELAE_CONFIG_HOME}/catalog/*.json` (seeded via `scripts/setup_env.py --materialize-defaults`) plus bundle fragments under `${STELAE_CONFIG_HOME}/bundles/*/catalog.json`; `process_tool_aggregations.py` merges these into `${TOOL_OVERRIDES_PATH}`/`${INTENDED_CATALOG_PATH}` inside `${STELAE_STATE_HOME}`.
 - Other writable helpers (`tool_overrides.json`, `discovered_servers.json`, `custom_tools.json`, `tool_schema_status.json`) stay alongside the catalog directory in config-home. Renderers/helpers fail fast if these paths point outside `${STELAE_CONFIG_HOME}`/`${STELAE_STATE_HOME}`.
 - Runtime caches (`${STELAE_DISCOVERY_PATH}`) and generated artifacts (`${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${TOOL_SCHEMA_STATUS_PATH}`, `${INTENDED_CATALOG_PATH}`) live under `${STELAE_STATE_HOME}` so git remains clean even when the proxy or integrator writes back metadata.
+- Guardrail + baseline test: `require_home_path` enforces the config-home/state-home boundary for every mutable file. Keep `PYTHONPATH=. .venv/bin/pytest --ignore tests/test_e2e_clone_smoke.py` green (expected skips only) before shipping template/catalog changes.
 
 ### Hygiene Checks
 

@@ -18,18 +18,14 @@ Today our "catalog" exists in three forms: tracked overrides, their runtime copy
 
 | Artifact | Location | Written By | Primary Readers | Retention / Notes |
 | --- | --- | --- | --- | --- |
-| Tracked overrides (until config cleanup lands) | `config/tool_overrides.json` | Humans reviewing server descriptors | render scripts, docs | Transitional. Defaults are now embedded in code; once callers stop reading tracked files, delete this. |
-| Local override | `${STELAE_CONFIG_HOME}/tool_overrides.local.json` | Operators | render scripts | Optional overlay; deleting resets to embedded defaults. |
-| Aggregator templates (tracked) | `config/tool_aggregations*.json` | Humans | `process_tool_aggregations.py` | Transitional. Renderer now consumes embedded defaults + config-home/bundle catalogs; delete tracked templates after test/docs update. |
-| Config-home & bundle catalogs | `${STELAE_CONFIG_HOME}/catalog/*.json` and `${STELAE_CONFIG_HOME}/bundles/*/catalog.json` | Operators/bundle authors | `process_tool_aggregations.py` | Active inputs; renderer already uses these to build intended catalog. |
+| Config-home catalogs & bundles | `${STELAE_CONFIG_HOME}/catalog/*.json` and `${STELAE_CONFIG_HOME}/bundles/*/catalog.json` | Operators/bundle authors | `process_tool_aggregations.py` | Sole editable inputs post-untracked-config cleanup; renderer already uses these to build intended catalog. |
+| Tool overrides overlay | `${STELAE_CONFIG_HOME}/tool_overrides.json` | Operators/integrator | render scripts | Defaults embedded in code; deleting resets to embedded defaults. Guarded by `require_home_path` so it must live under config/state home. |
 | **Intended catalog** | `${STELAE_STATE_HOME}/intended_catalog.json` | `scripts/process_tool_aggregations.py` | CLI/tests/docs, proxy (once flipped) | Deterministic render output, hidden tools removed, aggregates expanded. Keep `*.prev.json` copy plus optional timestamped archives when `STELAE_INTENDED_HISTORY=keep`. |
 | **Live catalog** | `${STELAE_STATE_HOME}/live_catalog.json` and optional `live_catalog.YYYYmmdd-HHMMSS.json` | Go proxy after warm-up | Operators, diff tooling, tests (`--live`) | Always timestamp writes, keep `current + previous` by default, rotate extra history into `.state/archive/` capped by `STELAE_LIVE_HISTORY_COUNT` (default 5). |
 | **Live descriptors (new)** | `${STELAE_STATE_HOME}/live_descriptors.json` (+ timestamped archive) | Proxy whenever it loads/refreshes downstream servers | `process_tool_aggregations.py` (preferred input), diagnostics | Snapshot includes downstream schema hash and health state; render step refuses to run if snapshot missing or stale unless `--allow-stale-descriptors` is passed. |
 | Schema status cache | `${STELAE_STATE_HOME}/tool_schema_status.json` | Render + proxy adoption hooks | CLI/tests | Stores per-tool state (`pending`, `validated`, `failed`), attempt counters, last schema hash. Pruned when a schema has been stable for N renders (default 10). |
-| Discovery cache (runtime) | `${STELAE_STATE_HOME}/discovered_servers.json` | 1mcp agent / `manage_stelae discover_servers` | Integrator, operators | Defaults now embedded; tracked seed is a placeholder only. Fresh clones start empty; deleting resets discovery. |
+| Discovery cache (runtime) | `${STELAE_STATE_HOME}/discovered_servers.json` | 1mcp agent / `manage_stelae discover_servers` | Integrator, operators | Defaults embedded; fresh clones start empty; deleting resets discovery. Must live under config/state home. |
 | Drift log | `${STELAE_STATE_HOME}/live_catalog_drift.log` | Diff tool invoked during render/restart | Operators/CI | Appends timestamp + summary whenever intended≠live. Rotated with catalog snapshots. |
-
-> **Note:** Sections referencing tracked overrides/aggregations describe the current state. The `./intended-catalog-plan-untracked-configs.md` effort migrates those defaults into code and relies solely on config-home/bundle catalogs; once that lands, update this table to remove the “tracked” rows and treat the config-home entries as the only editable source.
 
 ## 4. Which File To Use When
 
@@ -154,4 +150,5 @@ With these guard rails, `intended_catalog.json` becomes the true synthesis of tr
 - Embedded defaults in code (overrides, aggregations, custom tools, discovery) and config-home scaffolding in place; intended/live catalogs now emitted at render/restart.
 - Folder-based bundles with install refs and catalog fragments supported/tested.
 - Visibility env flags `STELAE_ONE_MCP_VISIBLE` / `STELAE_FACADE_VISIBLE` hide those servers from tools/list while keeping them running.
-- Remaining cleanup: delete tracked JSON templates (overrides/aggregations/custom/discovery/schema) once scripts/tests/docs no longer reference them; align restart/render docs to config-home/state-only inputs; finalize proxy live snapshot rotation and drift logging per phases above.
+- Tracked mutable JSONs have been removed per `intended-catalog-plan-untracked-configs.md`; config/state home is the only writable surface, enforced by `require_home_path`, and `make verify-clean` passes with the new env expectations.
+- Remaining cleanup: finalize proxy live snapshot rotation and drift logging per phases above; wire drift diff helper/retention scripts into restart loop; promote `STELAE_USE_INTENDED_CATALOG` once live snapshots land.

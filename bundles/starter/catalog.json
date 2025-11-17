@@ -3483,7 +3483,16 @@
             "operation"
           ]
         },
-        "outputSchema": null,
+        "outputSchema": {
+          "type": [
+            "object",
+            "array",
+            "string",
+            "number",
+            "boolean",
+            "null"
+          ]
+        },
         "operations": [
           {
             "value": "list_allowed_directories",
@@ -4073,7 +4082,16 @@
             "operation"
           ]
         },
-        "outputSchema": null,
+        "outputSchema": {
+          "type": [
+            "object",
+            "array",
+            "string",
+            "number",
+            "boolean",
+            "null"
+          ]
+        },
         "operations": [
           {
             "value": "create_directory",
@@ -4407,7 +4425,16 @@
             "operation"
           ]
         },
-        "outputSchema": null,
+        "outputSchema": {
+          "type": [
+            "object",
+            "array",
+            "string",
+            "number",
+            "boolean",
+            "null"
+          ]
+        },
         "operations": [
           {
             "value": "execute_command",
@@ -4842,7 +4869,16 @@
             }
           }
         },
-        "outputSchema": null,
+        "outputSchema": {
+          "type": [
+            "object",
+            "array",
+            "string",
+            "number",
+            "boolean",
+            "null"
+          ]
+        },
         "operations": [
           {
             "value": "build_context",
@@ -5505,7 +5541,16 @@
             "operation"
           ]
         },
-        "outputSchema": null,
+        "outputSchema": {
+          "type": [
+            "object",
+            "array",
+            "string",
+            "number",
+            "boolean",
+            "null"
+          ]
+        },
         "operations": [
           {
             "value": "s_fetch_page",
@@ -5685,7 +5730,16 @@
             "operation"
           ]
         },
-        "outputSchema": null,
+        "outputSchema": {
+          "type": [
+            "object",
+            "array",
+            "string",
+            "number",
+            "boolean",
+            "null"
+          ]
+        },
         "operations": [
           {
             "value": "discover_server_actions",
