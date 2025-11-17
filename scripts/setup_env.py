@@ -9,13 +9,19 @@ import os
 import shutil
 import sys
 from pathlib import Path
+from typing import Mapping
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from stelae_lib.catalog_defaults import DEFAULT_CATALOG_FRAGMENT, DEFAULT_TOOL_AGGREGATIONS, DEFAULT_TOOL_OVERRIDES
-from stelae_lib.config_overlays import ensure_catalog_file, ensure_config_home_scaffold, ensure_overlay_from_defaults, write_json
+from stelae_lib.config_overlays import (
+    ensure_catalog_file,
+    ensure_config_home_scaffold,
+    validate_home_path,
+    write_json,
+)
 
 def repo_root() -> Path:
     return ROOT
@@ -67,18 +73,15 @@ def _move(src: Path, dest: Path) -> None:
 
 
 def _materialize_default_catalogs(*, repo_dir: Path, config_home: Path) -> None:
-    config_path = repo_dir / "config"
-    ensure_overlay_from_defaults(
-        config_path / "tool_overrides.json",
-        DEFAULT_TOOL_OVERRIDES,
-        root=repo_dir,
-        config_base=config_home,
+    _seed_from_defaults(
+        config_home / "tool_overrides.json",
+        default_payload=DEFAULT_TOOL_OVERRIDES,
+        legacy_candidates=[config_home / "tool_overrides.local.json"],
     )
-    ensure_overlay_from_defaults(
-        config_path / "tool_aggregations.json",
-        DEFAULT_TOOL_AGGREGATIONS,
-        root=repo_dir,
-        config_base=config_home,
+    _seed_from_defaults(
+        config_home / "tool_aggregations.json",
+        default_payload=DEFAULT_TOOL_AGGREGATIONS,
+        legacy_candidates=[config_home / "tool_aggregations.local.json"],
     )
     _seed_core_catalog(config_home=config_home)
 
@@ -94,6 +97,16 @@ def _seed_core_catalog(*, config_home: Path) -> None:
     write_json(core_path, DEFAULT_CATALOG_FRAGMENT)
 
 
+def _seed_from_defaults(target: Path, *, default_payload: Mapping[str, Any], legacy_candidates: list[Path]) -> None:
+    if target.exists():
+        return
+    for legacy in legacy_candidates:
+        if legacy.exists():
+            legacy.replace(target)
+            return
+    write_json(target, default_payload)
+
+
 def bootstrap_env(
     *,
     config_home: Path,
@@ -106,14 +119,38 @@ def bootstrap_env(
     """Ensure ${STELAE_CONFIG_HOME}/.env exists and repo/.env points to it."""
     repo_env = repo_dir / ".env"
     config_home = config_home.expanduser()
+    if not config_home.is_absolute():
+        raise SystemExit(f"[setup-env] STELAE_CONFIG_HOME must be absolute, got {config_home}")
     os.environ["STELAE_CONFIG_HOME"] = str(config_home)
-    config_home.mkdir(parents=True, exist_ok=True)
+    from stelae_lib import config_overlays as overlays
+
+    overlays.config_home.cache_clear()
+    overlays.state_home.cache_clear()
+    config_home = overlays.config_home()
+
+    state_root_candidate = Path(os.environ.get("STELAE_STATE_HOME") or (config_home / ".state")).expanduser()
+    try:
+        state_root = validate_home_path(state_root_candidate, label="STELAE_STATE_HOME", allow_config=True, allow_state=False)
+    except ValueError as exc:  # pragma: no cover - defensive
+        raise SystemExit(f"[setup-env] {exc}") from exc
+    os.environ["STELAE_STATE_HOME"] = str(state_root)
+    overlays.state_home.cache_clear()
+    state_root.mkdir(parents=True, exist_ok=True)
+
     env_file = env_file.expanduser()
+    try:
+        env_file = validate_home_path(env_file, label="STELAE_ENV_FILE", allow_config=True, allow_state=False)
+    except ValueError as exc:
+        raise SystemExit(f"[setup-env] {exc}") from exc
+    os.environ["STELAE_ENV_FILE"] = str(env_file)
 
     def _finalize() -> Path:
         ensure_config_home_scaffold(base=config_home)
         if materialize_defaults:
             _materialize_default_catalogs(repo_dir=repo_dir, config_home=config_home)
+        print(f"[setup-env] config_home={config_home}")
+        print(f"[setup-env] state_home={state_root}")
+        print(f"[setup-env] env_file={env_file}")
         return env_file
 
     if not example_path.exists():

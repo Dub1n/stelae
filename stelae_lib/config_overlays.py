@@ -22,11 +22,21 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def _is_under_root(target: Path, root: Path) -> bool:
+    try:
+        target.resolve().relative_to(root.resolve())
+        return True
+    except Exception:
+        return False
+
+
 @lru_cache(maxsize=1)
 def config_home() -> Path:
     env = os.getenv("STELAE_CONFIG_HOME")
     if env:
         base = Path(env).expanduser()
+        if not base.is_absolute():
+            raise ValueError(f"STELAE_CONFIG_HOME must be absolute, got {base}")
     else:
         xdg = os.getenv("XDG_CONFIG_HOME")
         base = Path(xdg).expanduser() if xdg else Path.home() / ".config"
@@ -37,7 +47,12 @@ def config_home() -> Path:
 
 @lru_cache(maxsize=1)
 def state_home() -> Path:
-    base = config_home() / ".state"
+    base_env = os.getenv("STELAE_STATE_HOME")
+    base = Path(base_env).expanduser() if base_env else config_home() / ".state"
+    if not base.is_absolute():
+        raise ValueError(f"STELAE_STATE_HOME must be absolute, got {base}")
+    if not _is_under_root(base, config_home()):
+        raise ValueError(f"STELAE_STATE_HOME must live under {config_home()}, got {base}")
     base.mkdir(parents=True, exist_ok=True)
     return base
 
@@ -178,7 +193,7 @@ def ensure_config_home_scaffold(*, base: Path | None = None, catalog_files: Sequ
     placeholder = bundles_dir / BUNDLE_PLACEHOLDER
     if not placeholder.exists():
         write_json(placeholder, {})
-    return {"config_home": home, "catalog_dir": catalog_dir, "bundles_dir": bundles_dir}
+    return {"config_home": home, "catalog_dir": catalog_dir, "bundles_dir": bundles_dir, "state_home": state_home()}
 
 
 def ensure_overlay_from_defaults(
@@ -198,6 +213,46 @@ def ensure_overlay_from_defaults(
     payload_copy = json.loads(json.dumps(default_payload, ensure_ascii=False))
     write_json(overlay, payload_copy)
     return overlay
+
+
+def validate_home_path(
+    path: Path,
+    *,
+    label: str | None = None,
+    allow_config: bool = True,
+    allow_state: bool = True,
+) -> Path:
+    target = path.expanduser()
+    if not target.is_absolute():
+        raise ValueError(f"{label or 'Path'} must be absolute, got {target}")
+    allowed_roots: list[Path] = []
+    if allow_config:
+        allowed_roots.append(config_home())
+    if allow_state:
+        allowed_roots.append(state_home())
+    if allowed_roots and not any(_is_under_root(target, root) or target == root for root in allowed_roots):
+        roots = ", ".join(str(root) for root in allowed_roots)
+        raise ValueError(f"{label or 'Path'} must live under {roots}: {target}")
+    return target
+
+
+def require_home_path(
+    var_name: str,
+    *,
+    default: Path | None = None,
+    allow_config: bool = True,
+    allow_state: bool = True,
+    description: str | None = None,
+    create: bool = False,
+) -> Path:
+    raw_value = os.getenv(var_name)
+    candidate = Path(raw_value).expanduser() if raw_value else default
+    if candidate is None:
+        raise ValueError(f"{description or var_name} is required; set {var_name}")
+    validated = validate_home_path(candidate, label=description or var_name, allow_config=allow_config, allow_state=allow_state)
+    if create:
+        validated.parent.mkdir(parents=True, exist_ok=True)
+    return validated
 
 
 def deep_merge(dest: Any, src: Any) -> Any:

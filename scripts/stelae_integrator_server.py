@@ -19,22 +19,23 @@ DEFAULT_ENV_FILE = ROOT / ".env"
 if not os.getenv("STELAE_ENV_FILE") and DEFAULT_ENV_FILE.exists():
     os.environ["STELAE_ENV_FILE"] = str(DEFAULT_ENV_FILE)
 
+from stelae_lib.config_overlays import config_home, require_home_path, runtime_path
 from stelae_lib.integrator import StelaeIntegratorService  # noqa: E402
 from stelae_lib.integrator.discovery import seed_discovery_cache  # noqa: E402
 
 
 def _default_discovery_path() -> Path:
-    env_path = os.getenv("STELAE_DISCOVERY_PATH")
-    if env_path:
-        path = Path(env_path)
-        seed_discovery_cache(path)
-        return path
-    state_home = Path(
-        os.getenv("STELAE_STATE_HOME")
-        or Path(os.getenv("STELAE_CONFIG_HOME", Path.home() / ".config" / "stelae")) / ".state"
-    )
-    state_home.mkdir(parents=True, exist_ok=True)
-    path = state_home / "discovered_servers.json"
+    try:
+        path = require_home_path(
+            "STELAE_DISCOVERY_PATH",
+            default=runtime_path("discovered_servers.json"),
+            description="Discovery cache",
+            allow_config=False,
+            allow_state=True,
+            create=True,
+        )
+    except ValueError as exc:
+        raise SystemExit(f"[integrator] {exc}") from exc
     seed_discovery_cache(path)
     return path
 
@@ -47,7 +48,18 @@ app = FastMCP(
 def _build_service() -> StelaeIntegratorService:
     discovery_path = _default_discovery_path()
     template_path = Path(os.getenv("STELAE_PROXY_TEMPLATE", ROOT / "config" / "proxy.template.json"))
-    overrides_path = Path(os.getenv("STELAE_TOOL_OVERRIDES", ROOT / "config" / "tool_overrides.json"))
+    overrides_default = Path(os.getenv("STELAE_TOOL_OVERRIDES") or (config_home() / "tool_overrides.json"))
+    try:
+        overrides_path = require_home_path(
+            "STELAE_TOOL_OVERRIDES",
+            default=overrides_default,
+            description="Tool overrides template",
+            allow_config=True,
+            allow_state=False,
+            create=True,
+        )
+    except ValueError as exc:
+        raise SystemExit(f"[integrator] {exc}") from exc
     return StelaeIntegratorService(
         root=ROOT,
         discovery_path=discovery_path,

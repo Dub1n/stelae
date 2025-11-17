@@ -74,6 +74,14 @@ def test_process_tool_aggregations_uses_embedded_defaults(monkeypatch, tmp_path:
     module = _load_process_tool_aggregations_module()
     config_root = tmp_path / "config-home"
     monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_root))
+    monkeypatch.setenv("STELAE_STATE_HOME", str(config_root / ".state"))
+    config_home.cache_clear()
+    state_home.cache_clear()
+    monkeypatch.setattr(sys, "argv", ["process_tool_aggregations.py", "--scope", "local"])
+    module.main()
+    runtime_output = state_home() / "tool_overrides.json"
+    assert runtime_output.exists()
+    assert json.loads(runtime_output.read_text(encoding="utf-8"))["schemaVersion"] == 2
     config_home.cache_clear()
     state_home.cache_clear()
 
@@ -109,12 +117,13 @@ def test_process_tool_aggregations_writes_intended_catalog(monkeypatch, tmp_path
         encoding="utf-8",
     )
 
-    overrides_path = tmp_path / "overrides.json"
-    runtime_path = tmp_path / "runtime.json"
-
     monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_root))
+    monkeypatch.setenv("STELAE_STATE_HOME", str(config_root / ".state"))
     config_home.cache_clear()
     state_home.cache_clear()
+
+    overrides_path = config_root / "overrides.json"
+    runtime_path = state_home() / "runtime.json"
 
     argv = [
         "process_tool_aggregations.py",
@@ -373,6 +382,7 @@ def test_overlay_only_excludes_defaults(monkeypatch, tmp_path: Path) -> None:
 
     config_home = tmp_path / "config_home"
     monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_home))
+    monkeypatch.setenv("STELAE_STATE_HOME", str(config_home / ".state"))
     overlay_path = overlay_path_for(base_path)
     overlay_path.parent.mkdir(parents=True, exist_ok=True)
     overlay_data = {
@@ -443,11 +453,13 @@ def test_process_tool_aggregations_handles_missing_overrides(monkeypatch, tmp_pa
         encoding="utf-8",
     )
 
-    overrides_path = tmp_path / "tool_overrides.json"
-    runtime_path = tmp_path / "runtime.json"
     monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_root))
+    monkeypatch.setenv("STELAE_STATE_HOME", str(config_root / ".state"))
     config_home.cache_clear()
     state_home.cache_clear()
+
+    overrides_path = config_root / "tool_overrides.json"
+    runtime_path = state_home() / "runtime.json"
 
     argv = [
         "process_tool_aggregations",

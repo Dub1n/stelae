@@ -98,5 +98,53 @@ This design leaves the repo pristine during operation, gives users and bundle au
 
 Open questions for follow-up
 
-- Do we want a small compatibility shim so `--scope default` reads embedded defaults when the tracked files no longer exist, or retire that scope entirely?
-- Should we preserve minimal stub JSONs for docs/examples, or remove them outright once tests are updated?
+- Do we want a small compatibility shim so `--scope default` reads embedded defaults when the tracked files no longer exist, or retire that scope entirely? Answer: We want as few moving parts as possible and don't need extra flags if they are not supposed to be changed at all once deployed.
+- Should we preserve minimal stub JSONs for docs/examples, or remove them outright once tests are updated? Answer: Remove them outright once that is possible.
+
+### Phased execution plan (entry/exit criteria and concrete steps)
+
+Phase 1 – Config path refactor (env-first, no fallbacks)
+
+- Entry: agreement to make `${STELAE_CONFIG_HOME}` / `${STELAE_STATE_HOME}` the only mutable roots; goal to stop reading tracked JSONs entirely.
+- Steps:
+  1. Add/confirm env variables for every mutable path (e.g., `CATALOG_STORE`, `TOOL_OVERRIDES_PATH`, `TOOL_SCHEMA_STATUS_PATH`, `STELAE_CUSTOM_TOOLS_CONFIG`, `STELAE_DISCOVERY_PATH`) in `.env.example`, pointing at `${STELAE_CONFIG_HOME}`/`${STELAE_STATE_HOME}`. Avoid `.local` naming for paths without tracked counterparts.
+  2. Update loaders to consume those env vars first and drop silent fallback to repo paths; fail fast if unset/missing.
+  3. Teach renderers/restart scripts to surface the required envs (messages or validation) so users know which vars must exist.
+- Exit: All mutable reads/writes flow through env-configured paths under config/state homes; no code path reads repo JSON for runtime data.
+
+Phase 2 – .local naming removal and template deletion
+
+- Entry: Phase 1 envs wired; code can operate without tracked JSON presence.
+- Steps:
+  1. Delete tracked mutable JSONs (`config/tool_overrides.json`, `config/tool_aggregations.json`, `config/custom_tools.json`, `config/discovered_servers.json`, `config/tool_schema_status.json`).
+  2. Rename any remaining `.local`-only filenames to plain names in `${STELAE_CONFIG_HOME}` (e.g., `tool_overrides.json` instead of `tool_overrides.local.json`) and adjust readers/writers/tests accordingly.
+  3. Update proxy template/env defaults to point at the new names and ensure renderers don’t recreate `.local` files.
+- Exit: Repo contains only schemas/templates that are truly read-only (e.g., `proxy.template.json`, schemas); config-home/state files use non-`.local` names and are the sole writable copies.
+
+Phase 3 – Loading and seeding alignment
+
+- Entry: File layout finalized (Phase 2).
+- Steps:
+  1. Update bootstrap/seeding helpers (`setup_env.py`, integrator, catalog store, aggregator server, discovery seeding, custom tools server) to create empty JSON stubs in config/state homes when missing, using env vars for paths.
+  2. Ensure catalog store merges embedded defaults with config-home fragments/bundles only; no repo reads.
+  3. Adjust bundle installer to write catalog fragments directly under `${STELAE_CONFIG_HOME}/bundles/<name>/catalog.json` without touching overlays.
+- Exit: Fresh clone + `python scripts/setup_env.py --materialize-defaults` (or restart flow) succeeds with no tracked JSON present; intended catalog emits from config/state content only.
+
+Phase 4 – Test and doc adaptation
+
+- Entry: Runtime behavior stable under new paths/names.
+- Steps:
+  1. Update pytest fixtures/expectations (`tests/test_repo_sanitized.py`, aggregation/overrides/custom-tools tests, bundle tests) to stop referencing deleted tracked files and to assert env-driven locations.
+  2. Refresh README/ARCHITECTURE/AGENTS to document the env-first paths, new filenames (no `.local`), and the deletion of tracked mutable JSONs.
+  3. Run `python scripts/process_tool_aggregations.py --scope default/local`, `make render-proxy`, `pytest`, `make verify-clean`; document any required new checks (e.g., env validation) in the release checklist.
+- Exit: Test suite and docs pass/read clean without tracked mutable JSONs; verify-clean stays empty after render/restart.
+
+Feasibility note
+
+- If all phases can be applied in one session (small code surface, limited test fallout), proceed end-to-end. If scope grows (e.g., pervasive path changes or test churn), split the work and delegate via codex-wrapper per docs/codex-wrapper-instructions.md, one phase at a time, keeping this task doc as the orchestrator plan.
+
+Progress log
+- Completed Phase 1: env-driven paths under config/state homes with fail-fast validation; loaders/renderers/integrator/aggregator/custom-tools/populate scripts updated; `.env.example` lists required paths.
+- Completed Phase 2: removed tracked mutable JSONs; config-home files use plain names (no `.local`); tests/docs/code updated to stop referencing tracked templates or `.local` names.
+- Remaining Phase 3: confirm bootstrap/bundle flows only create/read config-home/state files (no `.local` recreation) and that bundle installer writes catalog fragments directly under `${STELAE_CONFIG_HOME}/bundles/<name>/catalog.json`.
+- Remaining Phase 4: full doc sweep for any lingering `.local`/tracked-config mentions and optional restart/bundle smoke under the new layout; run `make render-proxy`/`make verify-clean` once ready.

@@ -25,6 +25,7 @@ from stelae_lib.config_overlays import (
     expand_env_values,
     overlay_path_for,
     parse_env_file,
+    require_home_path,
     runtime_path,
 )
 
@@ -32,14 +33,10 @@ ENV_PATTERN = re.compile(r"\{\{\s*([A-Z0-9_]+)\s*\}\}")
 
 
 def _default_env_files(root: Path) -> list[Path]:
-    files = [root / ".env.example"]
     override = os.environ.get("STELAE_ENV_FILE")
     if override:
-        files.append(Path(override).expanduser())
-    else:
-        files.append(config_home() / ".env")
-    files.append(root / ".env")
-    return files
+        return [Path(override).expanduser()]
+    return [config_home() / ".env"]
 
 
 @dataclass
@@ -92,13 +89,18 @@ class StelaeIntegratorService:
     ) -> None:
         self.root = root or Path(__file__).resolve().parents[2]
         self.config_home = config_home()
-        # Load env files (.env.example → .env → overlay) before wiring stores.
+        # Load env files (config-home .env + overlay) before wiring stores.
         default_env_files = _default_env_files(self.root)
         provided_envs = [Path(p) for p in env_files] if env_files else []
-        candidates = list(provided_envs or default_env_files)
+        base_candidates = list(provided_envs or default_env_files)
         self.env_overlay = self.config_home / ".env.local"
+        candidates = list(base_candidates)
         if self.env_overlay not in candidates:
             candidates.append(self.env_overlay)
+        if not any(path.exists() for path in base_candidates):
+            raise ValueError(
+                f"No env file found in {', '.join(str(path) for path in base_candidates)}; run scripts/setup_env.py"
+            )
 
         layered_values: Dict[str, str] = {}
         for candidate in candidates:
@@ -112,44 +114,68 @@ class StelaeIntegratorService:
         values.update(expanded_values)
         self.env_values = values
         self.env_file = provided_envs[-1] if provided_envs else self.env_overlay
-        discovery_template_path = self.root / "config" / "discovered_servers.json"
-        default_discovery_path = Path(
-            self.env_values.get("STELAE_DISCOVERY_PATH") or runtime_path("discovered_servers.json")
+        default_discovery_path = require_home_path(
+            "STELAE_DISCOVERY_PATH",
+            default=Path(self.env_values.get("STELAE_DISCOVERY_PATH") or runtime_path("discovered_servers.json")),
+            description="Discovery cache",
+            allow_config=False,
+            allow_state=True,
+            create=True,
         )
         if not default_discovery_path.exists():
             seed_discovery_cache(default_discovery_path)
-        if discovery_path:
-            discovery_overlay_path = Path(discovery_path)
-        else:
-            discovery_overlay_path = default_discovery_path
+        discovery_target = Path(discovery_path) if discovery_path else default_discovery_path
+        discovery_overlay_path = require_home_path(
+            "STELAE_DISCOVERY_PATH",
+            default=discovery_target,
+            description="Discovery cache",
+            allow_config=False,
+            allow_state=True,
+            create=True,
+        )
         discovery_base_path = discovery_overlay_path
         template_base_path = template_path or self.root / "config" / "proxy.template.json"
         template_overlay_path = template_path if template_path else overlay_path_for(template_base_path)
-        overrides_base_path = overrides_path or self.root / "config" / "tool_overrides.json"
-        overrides_overlay_path = overrides_path if overrides_path else overlay_path_for(overrides_base_path)
+        overrides_base_candidate = overrides_path or self.env_values.get("STELAE_TOOL_OVERRIDES") or (self.config_home / "tool_overrides.json")
+        overrides_base_path = require_home_path(
+            "STELAE_TOOL_OVERRIDES",
+            default=Path(overrides_base_candidate),
+            description="Tool overrides template",
+            allow_config=True,
+            allow_state=False,
+            create=True,
+        )
         self.discovery_path = discovery_overlay_path
         self.env_values.setdefault("STELAE_DISCOVERY_PATH", str(discovery_overlay_path))
         self._discovery_base_path = discovery_base_path
         self.template = ProxyTemplate(template_base_path, overlay_path=template_overlay_path)
         self._template_base_path = template_base_path
         self._template_overlay_path = template_overlay_path
-        tool_overrides_output = Path(
-            self.env_values.get("TOOL_OVERRIDES_PATH")
-            or runtime_path("tool_overrides.json")
+        tool_overrides_output = require_home_path(
+            "TOOL_OVERRIDES_PATH",
+            default=Path(self.env_values.get("TOOL_OVERRIDES_PATH") or runtime_path("tool_overrides.json")),
+            description="Tool overrides runtime output",
+            allow_config=False,
+            allow_state=True,
+            create=True,
         )
-        self.env_values.setdefault("TOOL_OVERRIDES_PATH", str(tool_overrides_output))
-        tool_schema_status_path = Path(
-            self.env_values.get("TOOL_SCHEMA_STATUS_PATH")
-            or runtime_path("tool_schema_status.json")
+        self.env_values["TOOL_OVERRIDES_PATH"] = str(tool_overrides_output)
+        tool_schema_status_path = require_home_path(
+            "TOOL_SCHEMA_STATUS_PATH",
+            default=Path(self.env_values.get("TOOL_SCHEMA_STATUS_PATH") or runtime_path("tool_schema_status.json")),
+            description="Tool schema status path",
+            allow_config=False,
+            allow_state=True,
+            create=True,
         )
-        self.env_values.setdefault("TOOL_SCHEMA_STATUS_PATH", str(tool_schema_status_path))
+        self.env_values["TOOL_SCHEMA_STATUS_PATH"] = str(tool_schema_status_path)
         self.overrides = ToolOverridesStore(
             overrides_base_path,
-            overlay_path=overrides_overlay_path,
+            overlay_path=overrides_base_path,
             runtime_path=tool_overrides_output,
         )
         self._overrides_base_path = overrides_base_path
-        self._overrides_overlay_path = overrides_overlay_path
+        self._overrides_overlay_path = overrides_base_path
         self._tool_overrides_output = tool_overrides_output
         self.discovery_store = DiscoveryStore(
             discovery_base_path,

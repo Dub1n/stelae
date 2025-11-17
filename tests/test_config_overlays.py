@@ -4,6 +4,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -17,6 +19,7 @@ from stelae_lib.config_overlays import (
     parse_env_file,
     server_enabled,
     state_home,
+    validate_home_path,
 )
 
 
@@ -76,6 +79,7 @@ def test_load_layered_env_allows_unresolved(tmp_path: Path) -> None:
 def test_ensure_config_scaffolding_creates_placeholders(monkeypatch, tmp_path: Path) -> None:
     config_root = tmp_path / "config-home"
     monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_root))
+    monkeypatch.setenv("STELAE_STATE_HOME", str(config_root / ".state"))
     config_home.cache_clear()
     state_home.cache_clear()
 
@@ -114,3 +118,14 @@ def test_server_enabled_uses_env(monkeypatch, tmp_path: Path) -> None:
     assert server_enabled("one_mcp") is False
     assert server_enabled("facade") is False
     assert server_enabled("integrator") is True
+
+
+def test_validate_home_path_rejects_outside_home(monkeypatch, tmp_path: Path) -> None:
+    config_root = tmp_path / "config-home"
+    monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_root))
+    config_home.cache_clear()
+    state_home.cache_clear()
+
+    outside = tmp_path / "other" / "file.json"
+    with pytest.raises(ValueError):
+        validate_home_path(outside, label="outside", allow_config=True, allow_state=True)

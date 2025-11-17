@@ -16,6 +16,10 @@ def test_env_example_has_no_provider_specific_variables() -> None:
     assert "STELAE_STATE_HOME=${STELAE_CONFIG_HOME}/.state" in content
     assert "STELAE_ENV_FILE=${STELAE_CONFIG_HOME}/.env" in content
     assert "PROXY_CONFIG=${STELAE_STATE_HOME}/proxy.json" in content
+    assert "STELAE_TOOL_OVERRIDES=${STELAE_CONFIG_HOME}/tool_overrides.json" in content
+    assert "STELAE_TOOL_AGGREGATIONS=${STELAE_CONFIG_HOME}/tool_aggregations.json" in content
+    assert "TOOL_OVERRIDES_PATH=${STELAE_STATE_HOME}/tool_overrides.json" in content
+    assert "TOOL_SCHEMA_STATUS_PATH=${STELAE_STATE_HOME}/tool_schema_status.json" in content
 
 
 def test_cloudflared_samples_are_placeholder_only() -> None:
@@ -27,34 +31,22 @@ def test_cloudflared_samples_are_placeholder_only() -> None:
 
 
 def test_tracked_configs_remain_placeholder_only() -> None:
-    tracked = (
-        "config/tool_overrides.json",
-        "config/tool_aggregations.json",
-        "config/proxy.template.json",
-    )
+    tracked = ("config/proxy.template.json",)
     for rel in tracked:
         text = _read(rel)
         assert "/home/" not in text, f"{rel} should not bake absolute paths"
+    removed = [
+        "config/tool_overrides.json",
+        "config/tool_aggregations.json",
+        "config/custom_tools.json",
+        "config/discovered_servers.json",
+        "config/tool_schema_status.json",
+    ]
+    for rel in removed:
+        assert not (ROOT / rel).exists(), f"{rel} should no longer be tracked"
 
 
 def test_proxy_template_only_lists_core_servers() -> None:
     data = json.loads(_read("config/proxy.template.json"))
     core = {"custom", "integrator", "one_mcp", "public_mcp_catalog", "tool_aggregator"}
     assert set(data["mcpServers"].keys()) == core
-
-
-def test_tool_aggregations_template_contains_defaults() -> None:
-    data = json.loads(_read("config/tool_aggregations.json"))
-    names = {entry["name"] for entry in data.get("aggregations", [])}
-    assert names == set()
-    hidden_servers = {item["server"] for item in data.get("hiddenTools", [])}
-    assert "facade" in hidden_servers
-
-
-def test_tool_overrides_only_core_servers() -> None:
-    data = json.loads(_read("config/tool_overrides.json"))
-    servers = set(data.get("servers", {}).keys())
-    expected = {"integrator", "one_mcp", "public_mcp_catalog", "tool_aggregator", "facade"}
-    assert servers == expected
-    agg_tools = set(data["servers"]["tool_aggregator"]["tools"].keys())
-    assert agg_tools == set()

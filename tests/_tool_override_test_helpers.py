@@ -12,6 +12,7 @@ from stelae_lib.integrator.tool_aggregations import (
     load_tool_aggregation_config,
 )
 from stelae_lib.integrator.tool_overrides import ToolOverridesStore
+from stelae_lib.catalog_defaults import DEFAULT_TOOL_OVERRIDES
 
 
 @dataclass(frozen=True)
@@ -155,8 +156,7 @@ def _aggregation_payload() -> Dict[str, Any]:
 def load_tool_overrides() -> Dict[str, Any]:
     global _TOOL_OVERRIDES_CACHE
     if _TOOL_OVERRIDES_CACHE is None:
-        path = Path("config/tool_overrides.json")
-        _TOOL_OVERRIDES_CACHE = json.loads(path.read_text(encoding="utf-8"))
+        _TOOL_OVERRIDES_CACHE = json.loads(json.dumps(DEFAULT_TOOL_OVERRIDES, ensure_ascii=False))
     return json.loads(json.dumps(_TOOL_OVERRIDES_CACHE, ensure_ascii=False))
 
 
@@ -194,7 +194,7 @@ def get_tool_schema(server: str, tool: str, *, schema_key: str = "outputSchema")
     if not isinstance(schema, dict):
         raise KeyError(
             f"Schema '{schema_key}' missing for {server}.{tool}. "
-            "Add one to config/tool_overrides.json so tests can validate structured responses."
+            "Add one to config_home/tool_overrides.json so tests can validate structured responses."
         )
     return json.loads(json.dumps(schema, ensure_ascii=False))
 

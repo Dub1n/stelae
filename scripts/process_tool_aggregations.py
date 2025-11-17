@@ -13,7 +13,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from stelae_lib.catalog.store import load_catalog_store, write_intended_catalog
-from stelae_lib.config_overlays import ensure_config_home_scaffold, overlay_path_for, runtime_path
+from stelae_lib.config_overlays import ensure_config_home_scaffold, require_home_path, runtime_path
 from stelae_lib.integrator.tool_aggregations import ToolAggregationConfig, validate_aggregation_schema
 from stelae_lib.integrator.tool_overrides import ToolOverridesStore
 
@@ -28,7 +28,6 @@ def main() -> None:
     )
     parser.add_argument(
         "--overrides",
-        default=ROOT / "config" / "tool_overrides.json",
         type=Path,
         help="Path to tool overrides file that should receive aggregation entries",
     )
@@ -52,8 +51,31 @@ def main() -> None:
 
     ensure_config_home_scaffold()
 
-    overlay_path = overlay_path_for(args.overrides)
+    overrides_base = args.overrides or Path(os.getenv("STELAE_TOOL_OVERRIDES") or (ensure_config_home_scaffold()["config_home"] / "tool_overrides.json"))
+    try:
+        overrides_base = require_home_path(
+            "STELAE_TOOL_OVERRIDES",
+            default=overrides_base,
+            description="Tool overrides template",
+            allow_config=True,
+            allow_state=False,
+            create=True,
+        )
+    except ValueError as exc:
+        raise SystemExit(f"[process-tool-aggregations] {exc}") from exc
+
     runtime_default = args.output or os.getenv("TOOL_OVERRIDES_PATH") or runtime_path("tool_overrides.json")
+    try:
+        runtime_path_value = require_home_path(
+            "TOOL_OVERRIDES_PATH",
+            default=Path(runtime_default),
+            description="Tool overrides runtime output",
+            allow_config=False,
+            allow_state=True,
+            create=True,
+        )
+    except ValueError as exc:
+        raise SystemExit(f"[process-tool-aggregations] {exc}") from exc
 
     schema_path = args.schema or (ROOT / "config" / "tool_aggregations.schema.json")
     catalog_filter = ["core"] if args.scope == "default" else None
@@ -71,9 +93,9 @@ def main() -> None:
         return
 
     store = ToolOverridesStore(
-        args.overrides,
-        overlay_path=overlay_path,
-        runtime_path=Path(runtime_default),
+        overrides_base,
+        overlay_path=overrides_base,
+        runtime_path=runtime_path_value,
         target=target,
     )
     changed = config.apply_overrides(store)
@@ -88,13 +110,24 @@ def main() -> None:
             store.export_runtime()
 
     if args.scope == "local":
-        intended_path = runtime_path("intended_catalog.json")
+        intended_default = os.getenv("INTENDED_CATALOG_PATH") or runtime_path("intended_catalog.json")
+        try:
+            intended_path = require_home_path(
+                "INTENDED_CATALOG_PATH",
+                default=Path(intended_default),
+                description="Intended catalog path",
+                allow_config=False,
+                allow_state=True,
+                create=True,
+            )
+        except ValueError as exc:
+            raise SystemExit(f"[process-tool-aggregations] {exc}") from exc
         write_intended_catalog(
             catalog_store,
             destination=intended_path,
-            runtime_overrides=Path(runtime_default),
+            runtime_overrides=runtime_path_value,
         )
-        print(f"Wrote intended catalog to {intended_path} ({len(catalog_store.fragments)} fragment(s)).")
+        print(f"[process-tool-aggregations] overrides_base={overrides_base} runtime={runtime_path_value} intended={intended_path} fragments={len(catalog_store.fragments)}")
 
 
 if __name__ == "__main__":

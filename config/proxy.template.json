@@ -71,7 +71,7 @@
         "{{STELAE_DIR}}/scripts/tool_aggregator_server.py"
       ],
       "env": {
-        "STELAE_TOOL_AGGREGATIONS": "{{STELAE_DIR}}/config/tool_aggregations.json"
+        "STELAE_TOOL_AGGREGATIONS": "{{STELAE_TOOL_AGGREGATIONS}}"
       }
     }
   }

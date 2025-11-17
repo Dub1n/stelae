@@ -37,14 +37,14 @@ Path placeholders expand from `.env`; see setup below.
 Whenever you modify tracked templates or add new aggregates, follow this loop so manifests stay deterministic and clone-safe:
 
 1. `python scripts/process_tool_aggregations.py --scope default` – refresh the tracked default aggregations before committing changes.
-2. `python scripts/process_tool_aggregations.py --scope local` – regenerate `${STELAE_CONFIG_HOME}/tool_aggregations.local.json` so local overlays match the new defaults.
+2. `python scripts/process_tool_aggregations.py --scope local` – regenerate `${TOOL_OVERRIDES_PATH}` and the intended catalog from config-home fragments/bundles.
 3. `make render-proxy` – re-render `${PROXY_CONFIG}` plus merged overrides inside `${STELAE_STATE_HOME}` (defaults to `${STELAE_CONFIG_HOME}/.state`).
 4. `pytest tests/test_repo_sanitized.py` – fails if renders leak host-specific paths or stop pointing runtime outputs at the config/state homes.
 5. `make verify-clean` (optional pre-commit step) – proves the render + restart helper leave `git status` empty.
 
-Keep hand-edited overlays (`*.local.json`, `.env.local`, discovery caches) in `${STELAE_CONFIG_HOME}` and let renderers write runtime JSON into `${STELAE_STATE_HOME}` so machines never drift apart. The consolidated smoke-readiness plan in `dev/tasks/stelae-smoke-readiness.md` depends on this workflow; update that doc when process changes.
+Keep hand-edited config (`*.json`, `.env.local`, discovery caches) in `${STELAE_CONFIG_HOME}` and let renderers write runtime JSON into `${STELAE_STATE_HOME}` so machines never drift apart. The consolidated smoke-readiness plan in `dev/tasks/stelae-smoke-readiness.md` depends on this workflow; update that doc when process changes.
 
-- Scrapling’s canonical schema lives in the overrides template (`config/tool_overrides.json`) under the `scrapling` server. Both `s_fetch_page` and `s_fetch_pattern` advertise `{metadata, content}` payloads in the merged runtime file `${TOOL_OVERRIDES_PATH}`, and the Go proxy’s call-path adapter keeps those overrides in sync whenever a server emits a new structure. If Scrapling’s upstream contract changes, update the template or your local overlay and rerun `make render-proxy` so manifests and tools/list remain truthful.
+- Scrapling’s canonical schema lives in your config-home overrides (`${STELAE_CONFIG_HOME}/tool_overrides.json`) under the `scrapling` server. Both `s_fetch_page` and `s_fetch_pattern` advertise `{metadata, content}` payloads in the merged runtime file `${TOOL_OVERRIDES_PATH}`, and the Go proxy’s call-path adapter keeps those overrides in sync whenever a server emits a new structure. If Scrapling’s upstream contract changes, update the config-home file and rerun `make render-proxy` so manifests and tools/list remain truthful.
 
 ---
 
@@ -68,14 +68,14 @@ Keep hand-edited overlays (`*.local.json`, `.env.local`, discovery caches) in `$
    - Project roots: `STELAE_DIR`, `APPS_DIR`, `PHOENIX_ROOT`, `SEARCH_ROOT`.
    - Binaries: `FILESYSTEM_BIN`, `RG_BIN`, `MEMORY_BIN`, `STRATA_BIN`, `ONE_MCP_BIN`, `LOCAL_BIN/mcp-server-fetch`, `NPX_BIN` (runs `mcp-server-commands`).
    - Public URLs: `PUBLIC_BASE_URL=https://mcp.infotopology.xyz`, `PUBLIC_SSE_URL=${PUBLIC_BASE_URL}/stream`.
-   - Local overlay home: `STELAE_CONFIG_HOME=${HOME}/.config/stelae`. User-editable overlays (`*.local.json`, `.env.local`, discovery caches) live here. Generated runtime artifacts (`${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${TOOL_SCHEMA_STATUS_PATH}`, etc.) now live under `STELAE_STATE_HOME=${STELAE_CONFIG_HOME}/.state`, keeping the repo and your overlays tidy—route any future runtime outputs there as well. Additional values appended by the integrator land in `${STELAE_CONFIG_HOME}/.env.local`; keep `${STELAE_ENV_FILE}` focused on human-edited keys.
+   - Local overlay home: `STELAE_CONFIG_HOME=${HOME}/.config/stelae`. User-edited config (`*.json`, `.env.local`, discovery caches) lives here. Generated runtime artifacts (`${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${TOOL_SCHEMA_STATUS_PATH}`, etc.) live under `STELAE_STATE_HOME=${STELAE_CONFIG_HOME}/.state`, keeping the repo tidy—route any future runtime outputs there as well. Additional values appended by the integrator land in `${STELAE_CONFIG_HOME}/.env.local`; keep `${STELAE_ENV_FILE}` focused on human-edited keys.
    - Ports: `PROXY_PORT` controls where `mcp-proxy` listens locally; `PUBLIC_PORT` defaults to the same value so tunnels/cloudflared point to the correct listener. The clone smoke harness randomizes `PROXY_PORT` per workspace to avoid colliding with your long-lived dev stack, so keep these fields in sync.
 3. Regenerate runtime config:
    \```bash
    make render-proxy
    \```
    This renders `${PROXY_CONFIG}` (defaults to `~/.config/stelae/.state/proxy.json`) from `config/proxy.template.json` plus `${STELAE_CONFIG_HOME}/proxy.template.local.json` if present. The renderer also merges `${STELAE_ENV_FILE}`, `.env.example`, and `${STELAE_CONFIG_HOME}/.env.local`, so placeholders such as `{{ PATH }}` resolve correctly without pulling in fragile shell state.
-4. (Optional) Tailor tool metadata with the overrides template (`config/tool_overrides.json`). The file is validated against `config/tool_overrides.schema.json`, carries an explicit `schemaVersion`, and supports per-tool `description`, aliasing via `name`, richer annotation fields (including `title`), plus full `inputSchema`/`outputSchema` overrides so manifests always describe the wrapped payloads we return. The merged runtime file lives at `${TOOL_OVERRIDES_PATH}`; personal tweaks stay in `${STELAE_CONFIG_HOME}/tool_overrides.local.json`, so keep the template focused on defaults that should ship with the repo:
+4. (Optional) Tailor tool metadata with the config-home overrides (`${STELAE_CONFIG_HOME}/tool_overrides.json`). The file is validated against `config/tool_overrides.schema.json`, carries an explicit `schemaVersion`, and supports per-tool `description`, aliasing via `name`, richer annotation fields (including `title`), plus full `inputSchema`/`outputSchema` overrides so manifests always describe the wrapped payloads we return. The merged runtime file lives at `${TOOL_OVERRIDES_PATH}`, so keep the config-home copy focused on defaults you want locally:
 
    ```json
    {
@@ -159,7 +159,7 @@ Keep hand-edited overlays (`*.local.json`, `.env.local`, discovery caches) in `$
    - The Go proxy adapts tool call results at response time. Chain: pass-through → declared (uses `${TOOL_OVERRIDES_PATH}` and inline heuristics when the declared schema implies it) → generic `{ "result": "..." }`.
    - On success, the proxy updates `${TOOL_OVERRIDES_PATH}` atomically when the used schema differs (e.g., persists generic when no declared exists). It tracks runtime state in `${TOOL_SCHEMA_STATUS_PATH}` (path set via `manifest.toolSchemaStatusPath`).
    - This works for both stdio and HTTP servers and avoids inserting per-server shims.
-5. Prime new servers’ schemas automatically: `scripts/restart_stelae.sh` now calls `scripts/populate_tool_overrides.py --proxy-url http://127.0.0.1:${PROXY_PORT}/mcp --quiet` after the local `tools/list` probe so freshly launched stacks immediately persist every tool’s `inputSchema`/`outputSchema` into `${STELAE_CONFIG_HOME}/tool_overrides.local.json` plus the merged `${TOOL_OVERRIDES_PATH}`. For ad-hoc use (e.g., focusing on a single stdio server), you can still run `PYTHONPATH=$STELAE_DIR ~/.venvs/stelae-bridge/bin/python scripts/populate_tool_overrides.py --servers fs` to launch that server directly, or hit any MCP endpoint with `--proxy-url` to reuse its catalog without re-spawning processes; append `--quiet` to either mode to suppress per-tool logs. When debugging and you truly need to skip the automatic write-back, pass `--skip-populate-overrides` to `scripts/run_restart_stelae.sh`.
+5. Prime new servers’ schemas automatically: `scripts/restart_stelae.sh` now calls `scripts/populate_tool_overrides.py --proxy-url http://127.0.0.1:${PROXY_PORT}/mcp --quiet` after the local `tools/list` probe so freshly launched stacks immediately persist every tool’s `inputSchema`/`outputSchema` into `${STELAE_CONFIG_HOME}/tool_overrides.json` plus the merged `${TOOL_OVERRIDES_PATH}`. For ad-hoc use (e.g., focusing on a single stdio server), you can still run `PYTHONPATH=$STELAE_DIR ~/.venvs/stelae-bridge/bin/python scripts/populate_tool_overrides.py --servers fs` to launch that server directly, or hit any MCP endpoint with `--proxy-url` to reuse its catalog without re-spawning processes; append `--quiet` to either mode to suppress per-tool logs. When debugging and you truly need to skip the automatic write-back, pass `--skip-populate-overrides` to `scripts/run_restart_stelae.sh`.
 
 6. Ensure the FastMCP bridge virtualenv (`.venv/` by default) includes `mcp`, `fastmcp`, `anyio`, and `httpx`:
    \```bash
@@ -215,12 +215,12 @@ Rerun the installer after pulling template updates or whenever you delete your l
 
 ### Two-layer overlays
 
-Every config file tracked in this repo is a template. Any local edits made via `manage_stelae`, the restart scripts, or manual tweaks are written to `${STELAE_CONFIG_HOME}` instead:
+Templates still live in `config/` (proxy, schemas), but all mutable JSON now lives under `${STELAE_CONFIG_HOME}` without `.local` suffixes. Any local edits made via `manage_stelae`, the restart scripts, or manual tweaks are written to `${STELAE_CONFIG_HOME}` instead:
 
 - `${STELAE_CONFIG_HOME}/.env.local` receives hydrated secrets and generated values so `${STELAE_ENV_FILE}` stays portable.
-- `${STELAE_CONFIG_HOME}/*.local.json` mirrors the repo files (e.g., `proxy.template.local.json`, `tool_overrides.local.json`, `tool_aggregations.local.json`) and contains only your deviations.
-- Renderers merge template → overlay → runtime (`${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${STELAE_CONFIG_HOME}/cloudflared.yml`, ...). Delete a `*.local.*` file and rerun the matching command to reset it.
-- Runtime caches such as `${STELAE_DISCOVERY_PATH}` stay under `${STELAE_CONFIG_HOME}`, while generated artifacts (`${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${TOOL_SCHEMA_STATUS_PATH}`) live under `${STELAE_STATE_HOME}`. Git remains clean even when the proxy or integrator writes back metadata.
+- `${STELAE_CONFIG_HOME}/tool_overrides.json`, `tool_aggregations.json`, `discovered_servers.json`, `custom_tools.json`, and `tool_schema_status.json` are the editable copies; renderers and helpers fail fast if these paths point outside `${STELAE_CONFIG_HOME}`/`${STELAE_STATE_HOME}`.
+- Renderers merge template → config-home files → runtime (`${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${STELAE_CONFIG_HOME}/cloudflared.yml`, ...). Delete the config-home copy and rerun the matching command to reset it to embedded defaults.
+- Runtime caches such as `${STELAE_DISCOVERY_PATH}` stay under `${STELAE_CONFIG_HOME}`, while generated artifacts (`${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${TOOL_SCHEMA_STATUS_PATH}`, `${INTENDED_CATALOG_PATH}`) live under `${STELAE_STATE_HOME}`. Git remains clean even when the proxy or integrator writes back metadata.
 
 ### Hygiene Checks
 
@@ -259,7 +259,7 @@ Every config file tracked in this repo is a template. Any local edits made via `
   ```
 
 - After editing `${STELAE_CONFIG_HOME}/custom_tools.json`, rerun `make render-proxy` and restart the proxy via PM2 so the manifest reflects the new tools.
-- Legacy connector-only fallbacks (`search`, `fetch`) are disabled via the overrides template/overlay pair (`config/tool_overrides.json` + `${STELAE_CONFIG_HOME}/tool_overrides.local.json`), keeping the catalog limited to real servers and your custom scripts.
+- Legacy connector-only fallbacks (`search`, `fetch`) are disabled via the config-home overrides file `${STELAE_CONFIG_HOME}/tool_overrides.json`, keeping the catalog limited to real servers and your custom scripts.
 
 ### Declarative Tool Aggregations
 

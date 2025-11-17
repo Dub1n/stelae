@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from stelae_lib.catalog_defaults import DEFAULT_CATALOG_FRAGMENT
+from stelae_lib.catalog_defaults import DEFAULT_CATALOG_FRAGMENT, DEFAULT_TOOL_AGGREGATIONS, DEFAULT_TOOL_OVERRIDES
 
 
 def _load_setup_module():
@@ -24,6 +24,8 @@ def _load_setup_module():
 
 def test_bootstrap_copies_example_and_symlinks(tmp_path: Path) -> None:
     module = _load_setup_module()
+    os.environ.pop("STELAE_STATE_HOME", None)
+    os.environ.pop("STELAE_CONFIG_HOME", None)
     repo = tmp_path / "repo"
     repo.mkdir()
     example = repo / ".env.example"
@@ -49,6 +51,8 @@ def test_bootstrap_copies_example_and_symlinks(tmp_path: Path) -> None:
 
 def test_bootstrap_migrates_existing_repo_env(tmp_path: Path) -> None:
     module = _load_setup_module()
+    os.environ.pop("STELAE_STATE_HOME", None)
+    os.environ.pop("STELAE_CONFIG_HOME", None)
     repo = tmp_path / "repo"
     repo.mkdir()
     example = repo / ".env.example"
@@ -76,6 +80,8 @@ def test_bootstrap_migrates_existing_repo_env(tmp_path: Path) -> None:
 
 def test_bootstrap_scaffolds_catalog_and_bundles(tmp_path: Path) -> None:
     module = _load_setup_module()
+    os.environ.pop("STELAE_STATE_HOME", None)
+    os.environ.pop("STELAE_CONFIG_HOME", None)
     repo = tmp_path / "repo"
     repo.mkdir()
     example = repo / ".env.example"
@@ -98,6 +104,8 @@ def test_bootstrap_scaffolds_catalog_and_bundles(tmp_path: Path) -> None:
 
 def test_bootstrap_materializes_embedded_defaults(tmp_path: Path) -> None:
     module = _load_setup_module()
+    os.environ.pop("STELAE_STATE_HOME", None)
+    os.environ.pop("STELAE_CONFIG_HOME", None)
     repo = tmp_path / "repo"
     repo.mkdir()
     (repo / "config").mkdir(parents=True)
@@ -114,15 +122,15 @@ def test_bootstrap_materializes_embedded_defaults(tmp_path: Path) -> None:
         materialize_defaults=True,
     )
 
-    overrides_overlay = config_home / "tool_overrides.local.json"
-    aggregations_overlay = config_home / "tool_aggregations.local.json"
-    assert overrides_overlay.exists()
-    assert aggregations_overlay.exists()
+    overrides_path = config_home / "tool_overrides.json"
+    aggregations_path = config_home / "tool_aggregations.json"
+    assert overrides_path.exists()
+    assert aggregations_path.exists()
 
-    overrides = json.loads(overrides_overlay.read_text(encoding="utf-8"))
-    aggregations = json.loads(aggregations_overlay.read_text(encoding="utf-8"))
-    assert overrides["servers"]["integrator"]["enabled"] is True
-    assert aggregations["defaults"]["serverName"] == "tool_aggregator"
+    overrides = json.loads(overrides_path.read_text(encoding="utf-8"))
+    aggregations = json.loads(aggregations_path.read_text(encoding="utf-8"))
+    assert overrides == DEFAULT_TOOL_OVERRIDES
+    assert aggregations == DEFAULT_TOOL_AGGREGATIONS
 
     catalog_core = json.loads((config_home / "catalog" / "core.json").read_text(encoding="utf-8"))
     assert catalog_core == DEFAULT_CATALOG_FRAGMENT

@@ -19,9 +19,7 @@ from typing import Any, Dict, Iterable, List, Tuple
 from mcp.server import FastMCP
 
 from stelae_lib.catalog_defaults import DEFAULT_CUSTOM_TOOLS
-from stelae_lib.config_overlays import config_home
-
-ROOT = Path(__file__).resolve().parents[1]
+from stelae_lib.config_overlays import config_home, require_home_path, write_json
 DEFAULT_FILENAME = "custom_tools.json"
 LEGACY_OVERLAY = "custom_tools.local.json"
 
@@ -130,10 +128,18 @@ def main() -> None:
 
 
 def _config_path() -> Path:
-    env_path = os.getenv("STELAE_CUSTOM_TOOLS_CONFIG")
-    if env_path:
-        return Path(env_path).expanduser()
-    destination = config_home() / DEFAULT_FILENAME
+    default_path = Path(os.getenv("STELAE_CUSTOM_TOOLS_CONFIG") or (config_home() / DEFAULT_FILENAME))
+    try:
+        destination = require_home_path(
+            "STELAE_CUSTOM_TOOLS_CONFIG",
+            default=default_path,
+            description="Custom tools config",
+            allow_config=True,
+            allow_state=False,
+            create=True,
+        )
+    except ValueError as exc:
+        raise SystemExit(f"[custom-tools] {exc}") from exc
     if not destination.exists():
         _seed_config_home(destination)
     return destination
@@ -141,15 +147,11 @@ def _config_path() -> Path:
 
 def _seed_config_home(target: Path) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
-    legacy_path = config_home() / LEGACY_OVERLAY
+    legacy_path = target.parent / LEGACY_OVERLAY
     if legacy_path.exists():
         target.write_text(legacy_path.read_text(encoding="utf-8"), encoding="utf-8")
         return
-    tracked = ROOT / "config" / DEFAULT_FILENAME
-    if tracked.exists():
-        target.write_text(tracked.read_text(encoding="utf-8"), encoding="utf-8")
-        return
-    target.write_text(json.dumps(DEFAULT_CUSTOM_TOOLS, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    write_json(target, DEFAULT_CUSTOM_TOOLS)
 
 
 if __name__ == "__main__":

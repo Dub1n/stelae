@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from stelae_lib.config_overlays import config_home, require_home_path, state_home
 from stelae_lib.integrator.stateful_runner import StatefulAggregatedToolRunner
 from stelae_lib.integrator.tool_aggregations import (
     AggregatedToolDefinition,
@@ -42,16 +43,24 @@ app = FastMCP(
     instructions="Expose composite MCP tools backed by downstream proxy calls.",
 )
 
-_CONFIG_PATH = Path(os.getenv("STELAE_TOOL_AGGREGATIONS", ROOT / "config" / "tool_aggregations.json"))
+try:
+    _CONFIG_PATH = require_home_path(
+        "STELAE_TOOL_AGGREGATIONS",
+        default=config_home() / "tool_aggregations.json",
+        description="Tool aggregation config",
+        allow_config=True,
+        allow_state=False,
+        create=True,
+    )
+except ValueError as exc:
+    raise SystemExit(f"[tool-aggregator] {exc}") from exc
 _SCHEMA_PATH = Path(
     os.getenv("STELAE_TOOL_AGGREGATIONS_SCHEMA", _CONFIG_PATH.with_name("tool_aggregations.schema.json"))
 )
 _PROXY_BASE_ENV = os.getenv("STELAE_PROXY_BASE")
 _DEFAULT_PROXY = "http://127.0.0.1:9090"
 _WORKSPACE_ROOT = Path(os.getenv("STELAE_DIR", ROOT)).resolve()
-_STATE_HOME = Path(
-    os.getenv("STELAE_STATE_HOME", Path.home() / ".config" / "stelae" / ".state")
-).resolve()
+_STATE_HOME = state_home()
 _STATE_CONTEXT = {
     "STELAE_DIR": str(_WORKSPACE_ROOT),
     "STELAE_STATE_HOME": str(_STATE_HOME),
@@ -127,9 +136,7 @@ class ProxyCaller:
 
 
 def _load_config() -> ToolAggregationConfig:
-    if not _CONFIG_PATH.exists():
-        raise SystemExit(f"Aggregation config not found: {_CONFIG_PATH}")
-    return load_tool_aggregation_config(_CONFIG_PATH, schema_path=_SCHEMA_PATH)
+    return load_tool_aggregation_config(_CONFIG_PATH, schema_path=_SCHEMA_PATH, include_overlay=False)
 
 
 def _proxy_base_for(aggregation_base: str | None, config: ToolAggregationConfig) -> str:

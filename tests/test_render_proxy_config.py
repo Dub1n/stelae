@@ -13,6 +13,7 @@ def test_render_proxy_config_disables_servers(tmp_path, monkeypatch) -> None:
     config_home = tmp_path / "config-home"
     config_home.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_home))
+    monkeypatch.setenv("STELAE_STATE_HOME", str(config_home / ".state"))
     monkeypatch.setenv("STELAE_ONE_MCP_VISIBLE", "false")
     monkeypatch.setenv("STELAE_FACADE_VISIBLE", "0")
 
@@ -21,7 +22,7 @@ def test_render_proxy_config_disables_servers(tmp_path, monkeypatch) -> None:
         f"STELAE_CONFIG_HOME={config_home}\nSTELAE_STATE_HOME={config_home}/.state\n",
         encoding="utf-8",
     )
-    output = tmp_path / "proxy.json"
+    output = config_home / ".state" / "proxy.json"
 
     subprocess.check_call(
         [

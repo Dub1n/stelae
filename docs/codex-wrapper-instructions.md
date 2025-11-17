@@ -15,6 +15,7 @@ Use this file whenever another repo needs to drive Codex missions over HTTP with
 
 2. Ensure the Codex CLI is authenticated locally (`codex login`). The wrapper copies `auth.json` into each worker’s isolated `state/workers/<label>/codex-home` on startup.
 3. Create or edit `wrapper.toml` with at least one worker definition (see `wrapper.example.toml`).
+4. Create a new folder under `logs/<session-name>` and have all the agents write their response output to a file in there with filename `<timestamp>-<session-name>.md` so that progress is captured in case of discontinuation.
 
 ## Launching the SSE Server
 

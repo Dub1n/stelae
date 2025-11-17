@@ -22,9 +22,19 @@ elif [ -f "$REPO_ENV_FILE" ]; then
   source "$REPO_ENV_FILE"
   set +a
   ENV_SOURCED="$REPO_ENV_FILE"
+else
+  err "Env file not found (looked for ${ENV_FILE_CANDIDATE} and ${REPO_ENV_FILE}); run scripts/setup_env.py first."
+  exit 1
 fi
 
-STELAE_CONFIG_HOME="${STELAE_CONFIG_HOME:-$DEFAULT_CONFIG_HOME}"
+if [ -z "${STELAE_CONFIG_HOME:-}" ]; then
+  err "Missing STELAE_CONFIG_HOME in ${ENV_SOURCED}; run scripts/setup_env.py."
+  exit 1
+fi
+if [ -z "${STELAE_STATE_HOME:-}" ]; then
+  err "Missing STELAE_STATE_HOME in ${ENV_SOURCED}; run scripts/setup_env.py."
+  exit 1
+fi
 STELAE_ENV_FILE="${STELAE_ENV_FILE:-${STELAE_CONFIG_HOME}/.env}"
 export STELAE_ENV_FILE
 
@@ -54,11 +64,17 @@ trap on_exit EXIT
 
 if [ -n "$ENV_SOURCED" ]; then
   log "Loaded environment variables from $ENV_SOURCED"
-else
-  warn "No env file found. Proceeding with defaults; run scripts/setup_env.py if values are missing."
 fi
 
 # --- paths & config -----------------------------------------------------------
+case "$STELAE_CONFIG_HOME" in
+  /*) ;;
+  *) err "STELAE_CONFIG_HOME must be absolute (got $STELAE_CONFIG_HOME)"; exit 1;;
+esac
+case "$STELAE_STATE_HOME" in
+  "$STELAE_CONFIG_HOME"/*) ;;
+  *) err "STELAE_STATE_HOME must live under $STELAE_CONFIG_HOME (got $STELAE_STATE_HOME)"; exit 1;;
+esac
 STELAE_DIR="${STELAE_DIR:-$REPO_ROOT}"
 APPS_DIR="${APPS_DIR:-$HOME_DIR/apps}"
 STELAE_STATE_HOME="${STELAE_STATE_HOME:-$STELAE_CONFIG_HOME/.state}"
@@ -74,6 +90,17 @@ PYTHON_BIN="${PYTHON:-$HOME_DIR/.venvs/stelae-bridge/bin/python}"
 
 PROXY_PORT="${PROXY_PORT:-9090}"                   # proxy listens here
 export PROXY_CONFIG="$PROXY_JSON"
+
+REQUIRED_ENV_VARS=("TOOL_OVERRIDES_PATH" "TOOL_SCHEMA_STATUS_PATH" "STELAE_CUSTOM_TOOLS_CONFIG" "STELAE_DISCOVERY_PATH" "INTENDED_CATALOG_PATH" "LIVE_CATALOG_PATH")
+for var in "${REQUIRED_ENV_VARS[@]}"; do
+  if [ -z "${!var:-}" ]; then
+    err "Missing required env ${var}; set it in ${ENV_SOURCED}."
+    exit 1
+  fi
+done
+log "Paths: config_home=${STELAE_CONFIG_HOME} state_home=${STELAE_STATE_HOME} env_file=${STELAE_ENV_FILE}"
+log "Runtime: proxy_config=${PROXY_JSON} overrides=${TOOL_OVERRIDES_PATH} schema_status=${TOOL_SCHEMA_STATUS_PATH} discovery=${STELAE_DISCOVERY_PATH}"
+log "Catalog: intended=${INTENDED_CATALOG_PATH} live=${LIVE_CATALOG_PATH}"
 
 # cloudflared (named tunnel w/ config)
 CLOUDFLARED_BIN="${CLOUDFLARED:-$HOME_DIR/.nvm/versions/node/v22.19.0/bin/cloudflared}"

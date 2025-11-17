@@ -16,10 +16,10 @@ from mcp import types
 from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from stelae_lib.integrator.tool_overrides import ToolOverridesStore
-from stelae_lib.config_overlays import overlay_path_for, runtime_path
+from stelae_lib.config_overlays import config_home, require_home_path, runtime_path
 
 DEFAULT_PROXY_PATH = runtime_path("proxy.json")
-DEFAULT_OVERRIDES_PATH = Path("config/tool_overrides.json")
+DEFAULT_OVERRIDES_PATH = config_home() / "tool_overrides.json"
 DEFAULT_PROXY_TIMEOUT = 15.0
 
 
@@ -162,23 +162,31 @@ async def main() -> None:
     )
     parser.add_argument("--proxy-url", help="Optional MCP endpoint (e.g. http://127.0.0.1:9090/mcp) to reuse an existing tools/list result")
     parser.add_argument("--proxy-timeout", type=float, default=DEFAULT_PROXY_TIMEOUT, help="Timeout (seconds) for proxy HTTP requests")
-    parser.add_argument("--overrides", default=str(DEFAULT_OVERRIDES_PATH), help="Path to config/tool_overrides.json")
+    parser.add_argument("--overrides", default=str(DEFAULT_OVERRIDES_PATH), help="Path to tool_overrides.json under config home")
     parser.add_argument("--output", help="Merged overrides destination (defaults to ${TOOL_OVERRIDES_PATH} or ~/.config/stelae/.state/tool_overrides.json)")
     parser.add_argument("--servers", nargs="*", help="Optional subset of server names to scan")
     parser.add_argument("--dry-run", action="store_true", help="Show planned changes without writing")
     parser.add_argument("--quiet", action="store_true", help="Suppress per-tool update logs; still prints the final summary")
     args = parser.parse_args()
 
-    base_overrides_path = Path(args.overrides)
-    overlay_path = overlay_path_for(base_overrides_path)
-    runtime_default = Path(
-        args.output
-        or os.getenv("TOOL_OVERRIDES_PATH")
-        or runtime_path("tool_overrides.json")
+    base_overrides_path = require_home_path(
+        "STELAE_TOOL_OVERRIDES",
+        default=Path(args.overrides),
+        description="Tool overrides template",
+        allow_config=True,
+        allow_state=False,
+        create=True,
+    )
+    runtime_default = require_home_path(
+        "TOOL_OVERRIDES_PATH",
+        default=Path(args.output or os.getenv("TOOL_OVERRIDES_PATH") or runtime_path("tool_overrides.json")),
+        description="Tool overrides runtime output",
+        allow_config=False,
+        allow_state=True,
+        create=True,
     )
     overrides = ToolOverridesStore(
         base_overrides_path,
-        overlay_path=overlay_path,
         runtime_path=runtime_default,
     )
     keys: Sequence[str] = ("inputSchema", "outputSchema")

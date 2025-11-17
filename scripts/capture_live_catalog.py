@@ -23,7 +23,7 @@ _DEFAULT_CONFIG_HOME = Path(
 DEFAULT_STATE_HOME = Path(
     os.environ.get("STELAE_STATE_HOME", _DEFAULT_CONFIG_HOME / ".state")
 )
-DEFAULT_OUTPUT = DEFAULT_STATE_HOME / "live_catalog.json"
+DEFAULT_OUTPUT = Path(os.environ.get("LIVE_CATALOG_PATH", DEFAULT_STATE_HOME / "live_catalog.json"))
 DEFAULT_TIMEOUT = float(os.environ.get("STELAE_LIVE_CAPTURE_TIMEOUT", "20"))
 
 JsonType = Dict[str, Any]

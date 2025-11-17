@@ -34,3 +34,6 @@ logs/
 # Package manager caches
 .npm/
 .pnpm-store/
+
+# User extras
+notes.md

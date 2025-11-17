@@ -6,7 +6,7 @@ Stelae combines a Go-based MCP aggregation proxy, a fleet of downstream MCP serv
 
 ### Config overlays
 
-Templates live under `config/` in this repo; all machine-specific state is written to `${STELAE_CONFIG_HOME}` (default `~/.config/stelae`). Each template gains a `*.local.*` companion file the first time you edit it via `manage_stelae`/renderers. Runtime artifacts such as `${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, and `${TOOL_SCHEMA_STATUS_PATH}` are emitted into `${STELAE_STATE_HOME}` (defaults to `${STELAE_CONFIG_HOME}/.state`), while overlays (`*.local.json`, discovery caches, `.env.local`) stay alongside the config home. Route any future generated files into `.state` to keep the overlay directory human-editable. Deleting the corresponding `.local` file is enough to reset a config back to the tracked default. Environment values obey the same layering: `.env.example` stays generic, `${STELAE_ENV_FILE}` (default `${STELAE_CONFIG_HOME}/.env`) is human-edited, and `${STELAE_CONFIG_HOME}/.env.local` (or the last env file provided to the integrator) receives hydrated defaults so git remains clean even when overrides introduce new variables. Run `python scripts/setup_env.py` after cloning to seed `${STELAE_ENV_FILE}` and keep `repo/.env` pointing at the config-home copy.
+Templates live under `config/` in this repo; all machine-specific state is written to `${STELAE_CONFIG_HOME}` (default `~/.config/stelae`). Mutable JSON (overrides, aggregations, discovery, custom tools, schema status) now lives directly under `${STELAE_CONFIG_HOME}` without `.local` suffixes, and renderers/helpers fail fast if paths point outside `${STELAE_CONFIG_HOME}`/`${STELAE_STATE_HOME}`. Runtime artifacts such as `${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, and `${TOOL_SCHEMA_STATUS_PATH}` are emitted into `${STELAE_STATE_HOME}` (defaults to `${STELAE_CONFIG_HOME}/.state`). Environment values obey the same layering: `.env.example` stays generic, `${STELAE_ENV_FILE}` (default `${STELAE_CONFIG_HOME}/.env`) is human-edited, and `${STELAE_CONFIG_HOME}/.env.local` (or the last env file provided to the integrator) receives hydrated defaults so git remains clean even when overrides introduce new variables. Run `python scripts/setup_env.py` after cloning to seed `${STELAE_ENV_FILE}` and keep `repo/.env` pointing at the config-home copy.
 
 Hygiene guardrail: `pytest tests/test_repo_sanitized.py` fails if tracked templates reintroduce absolute `/home/...` paths or if `.env.example` stops pointing runtime outputs at `${STELAE_CONFIG_HOME}`. Run it after touching configs to ensure `make render-proxy` followed by normal stack usage leaves `git status` clean.
 
@@ -54,17 +54,19 @@ Templates remain read-only; every renderer merges the tracked default with the w
 
 ## Catalog Aggregation & Overrides
 
+> Note: tracked mutable templates (`config/tool_overrides.json`, `config/tool_aggregations.json`, `config/custom_tools.json`, `config/discovered_servers.json`, `config/tool_schema_status.json`) have been removed. The config-home copies (`${STELAE_CONFIG_HOME}/tool_overrides.json`, etc.) are the editable sources; runtime artifacts live under `${STELAE_STATE_HOME}`.
+
 ```mermaid
 flowchart LR
     subgraph "Repo (git)"
-        TO["config/tool_overrides.json"]
-        TA["config/tool_aggregations.json"]
+        TO["Embedded tool_overrides defaults<br>(catalog_defaults.py)"]
+        TA["Embedded tool_aggregations defaults<br>(catalog_defaults.py)"]
         MT["manifest.toolOverrides<br>(config/proxy.template.json)"]
     end
 
     subgraph "Overlays (${STELAE_CONFIG_HOME})"
-        LO["tool_overrides.local.json"]
-        LA["tool_aggregations.local.json"]
+        LO["tool_overrides.json"]
+        LA["tool_aggregations.json"]
     end
 
     subgraph "Scripts & Helpers"

@@ -39,15 +39,15 @@ def test_migrates_legacy_local_copy(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 
 
 def test_env_override_respected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    custom_path = tmp_path / "custom.json"
+    config_home = tmp_path / "config-home"
+    custom_path = config_home / "custom.json"
     payload = {"tools": [{"name": "hello", "description": "Hello", "command": "echo"}]}
+    custom_path.parent.mkdir(parents=True, exist_ok=True)
     custom_path.write_text(json.dumps(payload), encoding="utf-8")
     monkeypatch.setenv("STELAE_CUSTOM_TOOLS_CONFIG", str(custom_path))
-    server = _reload_server(monkeypatch, tmp_path / "config-home")
+    server = _reload_server(monkeypatch, config_home)
     config_path = server._config_path()
     assert config_path == custom_path
-    config_home_copy = Path(os.environ["STELAE_CONFIG_HOME"]) / "custom_tools.json"
-    assert not config_home_copy.exists()
     loaded_path, specs = server._load_specs()
     assert loaded_path == custom_path
     assert len(specs) == 1
