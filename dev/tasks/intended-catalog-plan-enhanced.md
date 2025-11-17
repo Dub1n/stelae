@@ -135,20 +135,19 @@ Retention helpers run as part of `make render-proxy` and `scripts/run_restart_st
 
 ## 11. Immediate Work Items
 
-1. **Config cleanup prerequisite** – execute `./intended-catalog-plan-untracked-configs.md` (remove reliance on tracked overrides/aggregations/custom/discovery/schema templates now that defaults are embedded; rely on config-home/bundle catalogs; keep discovery cache in state home only) so the renderer/proxy paths described above have a single editable source.
-2. **Renderer updates** – extend `process_tool_aggregations.py` with `--verify`, descriptor ingestion, drift logging, schema status states, and `downstreamSchemaRef` metadata.
-3. **Proxy enhancements** – emit live descriptors + catalog snapshots with rotation, include adoption telemetry, optionally expose `/diagnostics/catalog` endpoint, respect `STELAE_USE_INTENDED_CATALOG`.
-4. **CLI/test refactor** – centralize catalog IO helper, add `--live/--diff` flags, and update pytest fixtures + smoke harness to assert parity.
-5. **Diff helper + retention scripts** – implement `scripts/diff_catalog_snapshots.py` + rotation utilities invoked from `make render-proxy` and restart scripts.
-6. **Docs** – update README, docs/ARCHITECTURE.md, and AGENTS instructions with the "Which file to use when" table, feature flags, and migration chronology.
-7. **Telemetry hooks** – wire adoption counters into logs/metrics, ensure `make verify-clean`/CI fail loudly on schema adoption failures or persistent drift.
+1. **Config cleanup prerequisite** – execute `./intended-catalog-plan-untracked-configs.md` (remove reliance on tracked overrides/aggregations/custom/discovery/schema templates now that defaults are embedded; rely on config-home/bundle catalogs; keep discovery cache in state home only) so the renderer/proxy paths described above have a single editable source. ✅ pre-existing.
+2. **Renderer updates** – extend `process_tool_aggregations.py` with `--verify`, live descriptor ingestion, drift logging, schema status states, and `downstreamSchemaRef` metadata. ✅ done: renderer now prefers `${STELAE_STATE_HOME}/live_descriptors.json`, fails fast unless `--allow-stale-descriptors` is set, appends drift summaries to `live_catalog_drift.log`, attaches downstream schema refs, and updates `tool_schema_status.json` only when live descriptors are present; `--verify` fails on missing live catalog or downstream descriptors unless drift is explicitly allowed.
+3. **Proxy enhancements** – emit live descriptors + catalog snapshots with rotation, include adoption telemetry, optionally expose `/diagnostics/catalog` endpoint, respect `STELAE_USE_INTENDED_CATALOG`. ⏩ queued.
+4. **CLI/test refactor** – centralize catalog IO helper, add `--live/--diff` flags, and update pytest fixtures + smoke harness to assert parity. ⏩ queued.
+5. **Diff helper + retention scripts** – implement `scripts/diff_catalog_snapshots.py` + rotation utilities invoked from `make render-proxy` and restart scripts. ⏩ queued.
+6. **Docs** – update README, docs/ARCHITECTURE.md, and AGENTS instructions with the "Which file to use when" table, feature flags, and migration chronology. ✅ this pass updates current renderer state; proxy/CLI changes still pending.
+7. **Telemetry hooks** – wire adoption counters into logs/metrics, ensure `make verify-clean`/CI fail loudly on schema adoption failures or persistent drift. ⏩ queued.
 
 With these guard rails, `intended_catalog.json` becomes the true synthesis of tracked config + real descriptors, while `live_catalog.json` plus its diffs provide the operational feedback loop needed to keep automation trustworthy.
 
-## Status Snapshot (2025-11-17)
+## Status Snapshot (2025-03-14)
 
-- Embedded defaults in code (overrides, aggregations, custom tools, discovery) and config-home scaffolding in place; intended/live catalogs now emitted at render/restart.
-- Folder-based bundles with install refs and catalog fragments supported/tested.
-- Visibility env flags `STELAE_ONE_MCP_VISIBLE` / `STELAE_FACADE_VISIBLE` hide those servers from tools/list while keeping them running.
-- Tracked mutable JSONs have been removed per `intended-catalog-plan-untracked-configs.md`; config/state home is the only writable surface, enforced by `require_home_path`, and `make verify-clean` passes with the new env expectations.
-- Remaining cleanup: finalize proxy live snapshot rotation and drift logging per phases above; wire drift diff helper/retention scripts into restart loop; promote `STELAE_USE_INTENDED_CATALOG` once live snapshots land.
+- Renderer now consumes `live_descriptors.json` by default, fails when missing/stale unless `--allow-stale-descriptors` is set, annotates downstream schema refs, writes drift summaries to `live_catalog_drift.log`, and updates `tool_schema_status.json` only when live descriptors are present.
+- `--verify` mode fails on missing live catalog or missing downstream descriptors unless drift is explicitly allowed; drift deltas are appended to `live_catalog_drift.log`.
+- Embedded defaults in code (overrides, aggregations, custom tools, discovery) and config-home scaffolding remain; starter bundle support unchanged. Tracked mutable JSONs stay removed per `intended-catalog-plan-untracked-configs.md`; `require_home_path` still guards writes.
+- Next focus: Go proxy live snapshot/rotation + diagnostics, CLI/test helpers, diff/retention utilities, and telemetry hooks before flipping `STELAE_USE_INTENDED_CATALOG`.

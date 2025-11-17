@@ -38,6 +38,31 @@ def _load_process_tool_aggregations_module():
     return module
 
 
+def _write_live_descriptors(target: Path | None = None, payload: dict[str, Any] | None = None) -> Path:
+    path = target or state_home() / "live_descriptors.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            payload
+            or {
+                "servers": {
+                    "demo": {
+                        "tools": {
+                            "alpha": {
+                                "schemaVersion": 1,
+                                "outputSchema": {"type": "object"},
+                            }
+                        }
+                    }
+                }
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
 STARTER_AGGREGATION_CASES = [
     ("workspace_fs_read", {"operation": "list_allowed_directories"}),
     ("workspace_fs_write", {"operation": "create_directory", "path": "docs/new-directory"}),
@@ -77,6 +102,7 @@ def test_process_tool_aggregations_uses_embedded_defaults(monkeypatch, tmp_path:
     monkeypatch.setenv("STELAE_STATE_HOME", str(config_root / ".state"))
     config_home.cache_clear()
     state_home.cache_clear()
+    _write_live_descriptors()
     monkeypatch.setattr(sys, "argv", ["process_tool_aggregations.py", "--scope", "local"])
     module.main()
     runtime_output = state_home() / "tool_overrides.json"
@@ -121,6 +147,7 @@ def test_process_tool_aggregations_writes_intended_catalog(monkeypatch, tmp_path
     monkeypatch.setenv("STELAE_STATE_HOME", str(config_root / ".state"))
     config_home.cache_clear()
     state_home.cache_clear()
+    _write_live_descriptors()
 
     overrides_path = config_root / "overrides.json"
     runtime_path = state_home() / "runtime.json"
@@ -144,6 +171,42 @@ def test_process_tool_aggregations_writes_intended_catalog(monkeypatch, tmp_path
     assert overrides["servers"]["demo"]["tools"]["alpha"]["enabled"] is False
     assert any(fragment["kind"] == "catalog" for fragment in payload["fragments"])
 
+    config_home.cache_clear()
+    state_home.cache_clear()
+
+
+def test_process_tool_aggregations_allows_stale_descriptors_with_verify(monkeypatch, tmp_path: Path) -> None:
+    module = _load_process_tool_aggregations_module()
+    config_root = tmp_path / "config-home"
+    monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_root))
+    monkeypatch.setenv("STELAE_STATE_HOME", str(config_root / ".state"))
+    config_home.cache_clear()
+    state_home.cache_clear()
+    # Provide stale/empty descriptors and allow fallback to overrides.
+    _write_live_descriptors(payload={"servers": {}})
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["process_tool_aggregations.py", "--scope", "local", "--verify", "--allow-stale-descriptors"],
+    )
+    module.main()
+    config_home.cache_clear()
+    state_home.cache_clear()
+
+
+def test_process_tool_aggregations_fails_when_live_catalog_missing(monkeypatch, tmp_path: Path) -> None:
+    module = _load_process_tool_aggregations_module()
+    config_root = tmp_path / "config-home"
+    monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_root))
+    monkeypatch.setenv("STELAE_STATE_HOME", str(config_root / ".state"))
+    config_home.cache_clear()
+    state_home.cache_clear()
+    _write_live_descriptors()
+
+    argv = ["process_tool_aggregations.py", "--scope", "local", "--verify"]
+    monkeypatch.setattr(sys, "argv", argv)
+    with pytest.raises(SystemExit):
+        module.main()
     config_home.cache_clear()
     state_home.cache_clear()
 
@@ -457,6 +520,7 @@ def test_process_tool_aggregations_handles_missing_overrides(monkeypatch, tmp_pa
     monkeypatch.setenv("STELAE_STATE_HOME", str(config_root / ".state"))
     config_home.cache_clear()
     state_home.cache_clear()
+    _write_live_descriptors()
 
     overrides_path = config_root / "tool_overrides.json"
     runtime_path = state_home() / "runtime.json"
