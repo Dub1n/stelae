@@ -656,7 +656,7 @@ class CloneSmokeHarness:
                 sys.executable,
                 "scripts/install_stelae_bundle.py",
                 "--bundle",
-                "config/bundles/starter_bundle.json",
+                "bundles/starter",
                 "--no-restart",
             ],
             cwd=self.clone_dir,

@@ -92,6 +92,7 @@ def test_install_bundle_updates_overlays_and_runs_commands(tmp_path, monkeypatch
     assert "docs" in data.get("servers", {})
     assert runner.commands == bundles.DEFAULT_RESTART_COMMANDS
     assert service.force_flags == [False, False]
+    assert summary["installRefs"] == {"registered": [], "skipped": []}
 
 
 def test_install_bundle_respects_filters_and_dry_run(tmp_path, monkeypatch):
@@ -130,3 +131,85 @@ def test_install_bundle_can_force_integrator(tmp_path, monkeypatch):
     )
     assert summary["errors"] == []
     assert service.force_flags == [True, True]
+
+
+def test_install_bundle_registers_install_refs_when_catalog_fragment_provided(tmp_path):
+    install_state = bundles.InstallRefState(
+        path=tmp_path / "bundle_installs.json",
+        payload={"schemaVersion": 1, "installs": {}},
+    )
+    bundle = {
+        "name": "starter",
+        "servers": [
+            {
+                "name": "docs",
+                "transport": "stdio",
+                "command": "python",
+                "installRef": "bundle:starter:docs",
+            }
+        ],
+    }
+    service = FakeService()
+    runner = FakeRunner()
+    summary = bundles.install_bundle(
+        bundle,
+        service_factory=lambda: service,
+        install_state=install_state,
+        catalog_fragment_path=tmp_path / "config" / "bundles" / "starter" / "catalog.json",
+        bundle_name="starter",
+        bundle_source=tmp_path / "bundle-src",
+        command_runner=runner,
+        restart=False,
+    )
+    assert summary["overlays"] == []
+    assert summary["installRefs"]["registered"] == ["bundle:starter:docs"]
+    assert install_state.payload["installs"]["bundle:starter:docs"]["bundle"] == "starter"
+
+
+def test_install_bundle_reuses_existing_install_refs(tmp_path):
+    path = tmp_path / "bundle_installs.json"
+    payload = {
+        "schemaVersion": 1,
+        "installs": {
+            "bundle:starter:docs": {"bundle": "starter"},
+        },
+    }
+    install_state = bundles.InstallRefState(path=path, payload=payload)
+    bundle = {
+        "name": "starter",
+        "servers": [
+            {
+                "name": "docs",
+                "transport": "stdio",
+                "command": "python",
+                "installRef": "bundle:starter:docs",
+            }
+        ],
+    }
+    service = FakeService()
+    runner = FakeRunner()
+    summary = bundles.install_bundle(
+        bundle,
+        service_factory=lambda: service,
+        install_state=install_state,
+        catalog_fragment_path=tmp_path / "config" / "bundles" / "starter" / "catalog.json",
+        bundle_name="starter",
+        command_runner=runner,
+        restart=False,
+    )
+    assert summary["installRefs"]["registered"] == []
+    assert summary["installRefs"]["skipped"] == ["bundle:starter:docs"]
+
+
+def test_sync_bundle_folder_copies_payload(tmp_path, monkeypatch):
+    monkeypatch.setenv("STELAE_CONFIG_HOME", str(tmp_path / "config_home"))
+    config_overlays.config_home.cache_clear()
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "catalog.json").write_text("{}", encoding="utf-8")
+    result = bundles.sync_bundle_folder(source, "starter")
+    assert result.changed is True
+    expected = tmp_path / "config_home" / "bundles" / "starter"
+    assert result.destination == expected
+    assert (expected / "catalog.json").exists()
+    config_overlays.config_home.cache_clear()

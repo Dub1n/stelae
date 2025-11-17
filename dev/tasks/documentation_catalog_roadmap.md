@@ -16,7 +16,7 @@ Tags: `#infra` `#docs`
 
 - Code:
   - Legacy documentation manager/renderers/catalog templates (already removed) plus the new documentation catalog state helpers.
-  - `config/bundles/starter_bundle.json` (ensure documentation/catalog servers remain optional and clean).
+  - `bundles/starter/catalog.json` (ensure documentation/catalog servers remain optional and clean).
   - `scripts/tool_aggregator_server.py`, `stelae_lib/integrator/tool_aggregations.py`, `stelae_lib/integrator/stateful_runner.py` (ensure state helpers cover new aggregate fields).
   - `README.md`, `docs/ARCHITECTURE.md`, tests covering the documentation catalog aggregate and fetch suite (now replacing the legacy stack).
 - Tests:

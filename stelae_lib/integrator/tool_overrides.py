@@ -4,15 +4,10 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Iterable, Sequence
 
+from stelae_lib.catalog_defaults import DEFAULT_TOOL_OVERRIDES
 from stelae_lib.config_overlays import deep_merge
 from stelae_lib.fileio import atomic_write
 from .discovery import ToolInfo
-
-DEFAULT_OVERRIDES = {
-    "schemaVersion": 2,
-    "master": {"tools": {"*": {"annotations": {}}}},
-    "servers": {},
-}
 
 
 class ToolOverridesStore:
@@ -37,7 +32,7 @@ class ToolOverridesStore:
         base_text = (
             self.base_path.read_text(encoding="utf-8")
             if self.base_path.exists()
-            else json.dumps(DEFAULT_OVERRIDES, indent=2, ensure_ascii=False) + "\n"
+            else json.dumps(DEFAULT_TOOL_OVERRIDES, indent=2, ensure_ascii=False) + "\n"
         )
         self._base_data = self._load_payload(base_text)
         overlay_text = (
@@ -303,7 +298,23 @@ class ToolOverridesStore:
     def _merged_payload(self) -> Dict[str, Any]:
         merged = deep_merge(self._base_data, self._overlay_data)
         sanitized = _dedupe_schema_arrays(merged)
+        self._prune_empty_servers(sanitized)
         return json.loads(json.dumps(sanitized, ensure_ascii=False))
+
+    def _prune_empty_servers(self, payload: Dict[str, Any]) -> None:
+        servers = payload.get("servers")
+        if not isinstance(servers, dict):
+            return
+        empty: list[str] = []
+        for name, fragment in servers.items():
+            if not isinstance(fragment, dict):
+                empty.append(name)
+                continue
+            tools = fragment.get("tools")
+            if not isinstance(tools, dict) or not tools:
+                empty.append(name)
+        for name in empty:
+            servers.pop(name, None)
 
     def snapshot(self) -> Dict[str, Any]:
         return json.loads(json.dumps(self._data, ensure_ascii=False))

@@ -69,3 +69,34 @@ For `one_mcp` and `facade`, expose enable/disable toggles in `${STELAE_CONFIG_HO
 7. Split bundle validation/UX improvements into a follow-up task so catalog/state cleanup can land independently.
 
 This design leaves the repo pristine during operation, gives users and bundle authors a clear "drop-in/out" workflow, and retains the benefits of the intended/live catalog pipeline without requiring any tracked JSON overlays.
+
+## Status – 2025-11-17
+
+### What’s implemented so far
+
+- Embedded defaults: tool overrides/aggregations, custom tools, discovered servers now live in code (no reliance on tracked JSON to bootstrap) and seed `${STELAE_CONFIG_HOME}`/`${STELAE_STATE_HOME}` when missing.
+- Config-home scaffolding: `ensure_config_home_scaffold` creates catalog/bundle placeholders only; no defaults file is written.
+- Intended/live catalogs: `scripts/process_tool_aggregations.py` emits `${STELAE_STATE_HOME}/intended_catalog.json`; `scripts/capture_live_catalog.py` + restart hook capture `${STELAE_STATE_HOME}/live_catalog.json`.
+- Bundle folders: loaders/tests support folder-based bundles with install refs and catalog fragments.
+- Visibility toggles: `STELAE_ONE_MCP_VISIBLE` / `STELAE_FACADE_VISIBLE` mark those servers disabled in the intended catalog (hidden from tools/list) while keeping them running for internal consumers.
+- Safety tests: coverage added around catalog store, defaults seeding, custom tools seeding, live catalog capture, bundle install, and proxy render visibility handling.
+
+### What remains / follow-up guidance
+
+1) Remove tracked JSON templates once callers stop reading them:
+   - `config/tool_overrides.json`, `config/tool_aggregations.json`: adjust `scripts/process_tool_aggregations.py --scope default` and related tests (`tests/test_repo_sanitized.py`, aggregator tests) to use embedded defaults or config-home seeds instead of tracked files.
+   - `config/custom_tools.json`, `config/discovered_servers.json`: ensure no bootstrap path copies these tracked files; switch any remaining code to embedded defaults/config-home and update docs/tests accordingly.
+   - `config/tool_schema_status.json`: point defaults/env to the state path only and update docs/tests so the tracked placeholder can be deleted.
+2) Renderer/restart alignment:
+   - Confirm restart/proxy wiring uses intended/live catalogs exclusively and no longer references tracked overrides/aggregations paths.
+   - Update README/ARCHITECTURE to reflect “no tracked JSON needed” once the above deletions land.
+3) Tests/docs cleanup:
+   - Revise `tests/test_repo_sanitized.py` expectations once tracked JSONs are removed.
+   - Add a short note in README on the visibility env vars (done) and ensure any CLI guidance reflects config-home/state-only sources.
+4) Verify-clean path:
+   - After deleting tracked JSONs, rerun `python scripts/process_tool_aggregations.py --scope default/local`, `make render-proxy`, `pytest`, and `make verify-clean` to ensure the render/restart loop stays idempotent with the new sources.
+
+Open questions for follow-up
+
+- Do we want a small compatibility shim so `--scope default` reads embedded defaults when the tracked files no longer exist, or retire that scope entirely?
+- Should we preserve minimal stub JSONs for docs/examples, or remove them outright once tests are updated?

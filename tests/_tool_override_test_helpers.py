@@ -163,7 +163,7 @@ def load_tool_overrides() -> Dict[str, Any]:
 def _load_starter_bundle_payload() -> Dict[str, Any]:
     global _STARTER_BUNDLE_CACHE
     if _STARTER_BUNDLE_CACHE is None:
-        path = Path("config/bundles/starter_bundle.json")
+        path = Path("bundles/starter/catalog.json")
         _STARTER_BUNDLE_CACHE = json.loads(path.read_text(encoding="utf-8"))
     return json.loads(json.dumps(_STARTER_BUNDLE_CACHE, ensure_ascii=False))
 

@@ -1,8 +1,23 @@
 from __future__ import annotations
 
+import json
+import sys
 from pathlib import Path
 
-from stelae_lib.config_overlays import load_layered_env, parse_env_file
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from stelae_lib.config_overlays import (
+    config_home,
+    ensure_bundle_catalog,
+    ensure_config_home_scaffold,
+    ensure_overlay_from_defaults,
+    load_layered_env,
+    parse_env_file,
+    server_enabled,
+    state_home,
+)
 
 
 def test_parse_env_file_handles_missing(tmp_path: Path) -> None:
@@ -56,3 +71,46 @@ def test_load_layered_env_allows_unresolved(tmp_path: Path) -> None:
 
     assert values["CF_PUBLIC_HOSTNAME"] == ""
     assert values["CF_TUNNEL_UUID"] == ""
+
+
+def test_ensure_config_scaffolding_creates_placeholders(monkeypatch, tmp_path: Path) -> None:
+    config_root = tmp_path / "config-home"
+    monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_root))
+    config_home.cache_clear()
+    state_home.cache_clear()
+
+    ensure_config_home_scaffold()
+    catalog_core = config_root / "catalog" / "core.json"
+    bundles_placeholder = config_root / "bundles" / ".placeholder.json"
+    assert json.loads(catalog_core.read_text(encoding="utf-8")) == {}
+    assert json.loads(bundles_placeholder.read_text(encoding="utf-8")) == {}
+
+    bundle_stub = ensure_bundle_catalog("starter_bundle")
+    assert bundle_stub == config_root / "bundles" / "starter_bundle" / "catalog.json"
+    assert json.loads(bundle_stub.read_text(encoding="utf-8")) == {}
+
+    config_home.cache_clear()
+    state_home.cache_clear()
+
+
+def test_materialize_overlay_from_defaults(monkeypatch, tmp_path: Path) -> None:
+    config_root = tmp_path / "config-home"
+    monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_root))
+    config_home.cache_clear()
+    state_home.cache_clear()
+
+    target = ensure_overlay_from_defaults(Path("config/demo.json"), {"value": 1})
+    assert target == config_root / "demo.local.json"
+    assert json.loads(target.read_text(encoding="utf-8")) == {"value": 1}
+
+    target.write_text(json.dumps({"value": 2}), encoding="utf-8")
+    ensure_overlay_from_defaults(Path("config/demo.json"), {"value": 3})
+    assert json.loads(target.read_text(encoding="utf-8")) == {"value": 2}
+
+
+def test_server_enabled_uses_env(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("STELAE_ONE_MCP_VISIBLE", "false")
+    monkeypatch.setenv("STELAE_FACADE_VISIBLE", "0")
+    assert server_enabled("one_mcp") is False
+    assert server_enabled("facade") is False
+    assert server_enabled("integrator") is True

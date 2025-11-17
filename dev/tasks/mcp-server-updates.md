@@ -16,7 +16,7 @@ Tags: `#infra`, `#maintenance`
 
 ## References
 
-- Code: `config/bundles/starter_bundle.json`, `config/proxy.template.json`, `config/tool_overrides.json`, `scripts/install_stelae_bundle.py`, `scripts/stelae_integrator_server.py`.
+- Code: `bundles/starter/catalog.json`, `config/proxy.template.json`, `config/tool_overrides.json`, `scripts/install_stelae_bundle.py`, `scripts/stelae_integrator_server.py`.
 - Tests: `tests/test_repo_sanitized.py`, `tests/test_install_stelae_bundle.py`, relevant server-specific tests (e.g., documentation catalog manager, integrator).
 - Docs: `README.md`, `AGENTS.md`, `docs/ARCHITECTURE.md` (call out any behavioral changes).
 

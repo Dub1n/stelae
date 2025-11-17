@@ -1,14 +1,20 @@
 import asyncio
+import importlib.util
 import json
+import sys
 from pathlib import Path
 from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 import pytest
 
 from mcp import types
 jsonschema = pytest.importorskip("jsonschema")
 
-from stelae_lib.config_overlays import overlay_path_for
+from stelae_lib.config_overlays import config_home, overlay_path_for, state_home
 from stelae_lib.integrator.tool_aggregations import (
     AggregatedToolRunner,
     ToolAggregationConfig,
@@ -22,6 +28,14 @@ from tests._tool_override_test_helpers import (
     get_starter_bundle_aggregation,
     get_tool_schema,
 )
+
+
+def _load_process_tool_aggregations_module():
+    spec = importlib.util.spec_from_file_location("process_tool_aggregations", ROOT / "scripts" / "process_tool_aggregations.py")
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)  # type: ignore[attr-defined]
+    return module
 
 
 STARTER_AGGREGATION_CASES = [
@@ -39,6 +53,90 @@ STARTER_AGGREGATION_CASES = [
         },
     ),
 ]
+
+
+def test_tool_overrides_store_embedded_defaults(tmp_path: Path) -> None:
+    runtime_path = tmp_path / "runtime.json"
+    store = ToolOverridesStore(
+        tmp_path / "tool_overrides.json",
+        runtime_path=runtime_path,
+        target="runtime",
+    )
+    snapshot = store.snapshot()
+    integrator = snapshot["servers"]["integrator"]["tools"]["manage_stelae"]
+    assert integrator["enabled"] is True
+    catalog_tools = snapshot["servers"]["public_mcp_catalog"]["tools"]
+    assert catalog_tools["deep_search"]["enabled"] is True
+    assert "tool_aggregator" not in snapshot["servers"]
+
+
+def test_process_tool_aggregations_uses_embedded_defaults(monkeypatch, tmp_path: Path) -> None:
+    module = _load_process_tool_aggregations_module()
+    config_root = tmp_path / "config-home"
+    monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_root))
+    config_home.cache_clear()
+    state_home.cache_clear()
+
+
+def test_process_tool_aggregations_writes_intended_catalog(monkeypatch, tmp_path: Path) -> None:
+    module = _load_process_tool_aggregations_module()
+    config_root = tmp_path / "config-home"
+    catalog_dir = config_root / "catalog"
+    catalog_dir.mkdir(parents=True)
+    catalog_path = catalog_dir / "core.json"
+    catalog_path.write_text(
+        json.dumps(
+            {
+                "tool_overrides": {"servers": {"demo": {"tools": {"alpha": {"enabled": False}}}}},
+                "tool_aggregations": {
+                    "aggregations": [
+                        {
+                            "name": "wrapped_tool",
+                            "description": "Wrapped",
+                            "inputSchema": {"type": "object"},
+                            "operations": [
+                                {
+                                    "value": "status",
+                                    "downstreamTool": "alpha_status",
+                                    "argumentMappings": [{"target": "operation", "value": "status"}],
+                                }
+                            ],
+                        }
+                    ],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    overrides_path = tmp_path / "overrides.json"
+    runtime_path = tmp_path / "runtime.json"
+
+    monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_root))
+    config_home.cache_clear()
+    state_home.cache_clear()
+
+    argv = [
+        "process_tool_aggregations.py",
+        "--overrides",
+        str(overrides_path),
+        "--output",
+        str(runtime_path),
+        "--scope",
+        "local",
+    ]
+    monkeypatch.setattr(sys, "argv", argv)
+    module.main()
+
+    intended_path = state_home() / "intended_catalog.json"
+    assert intended_path.exists()
+    payload = json.loads(intended_path.read_text(encoding="utf-8"))
+    overrides = payload["catalog"]["toolOverrides"]
+    assert overrides["servers"]["demo"]["tools"]["alpha"]["enabled"] is False
+    assert any(fragment["kind"] == "catalog" for fragment in payload["fragments"])
+
+    config_home.cache_clear()
+    state_home.cache_clear()
 
 
 @pytest.fixture()
@@ -313,6 +411,62 @@ def test_overlay_only_excludes_defaults(monkeypatch, tmp_path: Path) -> None:
     hidden = config.hidden_tools
     assert len(hidden) == 1
     assert hidden[0].server == "mem"
+
+
+
+def test_process_tool_aggregations_handles_missing_overrides(monkeypatch, tmp_path: Path) -> None:
+    module = _load_process_tool_aggregations_module()
+    config_root = tmp_path / "config-home"
+    catalog_dir = config_root / "catalog"
+    catalog_dir.mkdir(parents=True)
+    (catalog_dir / "core.json").write_text(
+        json.dumps(
+            {
+                "tool_aggregations": {
+                    "aggregations": [
+                        {
+                            "name": "docs_suite",
+                            "description": "Docs",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {"operation": {"type": "string"}},
+                                "required": ["operation"],
+                            },
+                            "operations": [
+                                {"value": "fetch", "downstreamTool": "docs.fetch"},
+                            ],
+                        }
+                    ],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    overrides_path = tmp_path / "tool_overrides.json"
+    runtime_path = tmp_path / "runtime.json"
+    monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_root))
+    config_home.cache_clear()
+    state_home.cache_clear()
+
+    argv = [
+        "process_tool_aggregations",
+        "--overrides",
+        str(overrides_path),
+        "--output",
+        str(runtime_path),
+        "--scope",
+        "local",
+    ]
+    monkeypatch.setattr(sys, "argv", argv)
+    module.main()
+
+    runtime_payload = json.loads(runtime_path.read_text(encoding="utf-8"))
+    aggregator_tools = runtime_payload["servers"]["tool_aggregator"]["tools"]
+    assert "docs_suite" in aggregator_tools
+
+    config_home.cache_clear()
+    state_home.cache_clear()
 
 
 

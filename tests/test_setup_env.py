@@ -1,10 +1,17 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from stelae_lib.catalog_defaults import DEFAULT_CATALOG_FRAGMENT
 
 
 def _load_setup_module():
@@ -65,3 +72,57 @@ def test_bootstrap_migrates_existing_repo_env(tmp_path: Path) -> None:
         assert os.path.samefile(migrated_repo_env, env_file)
     else:
         assert migrated_repo_env.read_text(encoding="utf-8") == "CUSTOM=42\n"
+
+
+def test_bootstrap_scaffolds_catalog_and_bundles(tmp_path: Path) -> None:
+    module = _load_setup_module()
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    example = repo / ".env.example"
+    example.write_text("A=1\n", encoding="utf-8")
+    config_home = tmp_path / "config-home"
+    env_file = config_home / ".env"
+
+    module.bootstrap_env(
+        config_home=config_home,
+        repo_dir=repo,
+        env_file=env_file,
+        example_path=example,
+    )
+
+    catalog_core = config_home / "catalog" / "core.json"
+    bundles_placeholder = config_home / "bundles" / ".placeholder.json"
+    assert json.loads(catalog_core.read_text(encoding="utf-8")) == {}
+    assert json.loads(bundles_placeholder.read_text(encoding="utf-8")) == {}
+
+
+def test_bootstrap_materializes_embedded_defaults(tmp_path: Path) -> None:
+    module = _load_setup_module()
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "config").mkdir(parents=True)
+    example = repo / ".env.example"
+    example.write_text("A=1\n", encoding="utf-8")
+    config_home = tmp_path / "config-home"
+    env_file = config_home / ".env"
+
+    module.bootstrap_env(
+        config_home=config_home,
+        repo_dir=repo,
+        env_file=env_file,
+        example_path=example,
+        materialize_defaults=True,
+    )
+
+    overrides_overlay = config_home / "tool_overrides.local.json"
+    aggregations_overlay = config_home / "tool_aggregations.local.json"
+    assert overrides_overlay.exists()
+    assert aggregations_overlay.exists()
+
+    overrides = json.loads(overrides_overlay.read_text(encoding="utf-8"))
+    aggregations = json.loads(aggregations_overlay.read_text(encoding="utf-8"))
+    assert overrides["servers"]["integrator"]["enabled"] is True
+    assert aggregations["defaults"]["serverName"] == "tool_aggregator"
+
+    catalog_core = json.loads((config_home / "catalog" / "core.json").read_text(encoding="utf-8"))
+    assert catalog_core == DEFAULT_CATALOG_FRAGMENT

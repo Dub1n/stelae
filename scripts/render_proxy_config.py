@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from stelae_lib.config_overlays import config_home, deep_merge, load_layered_env, overlay_path_for
+from stelae_lib.config_overlays import config_home, deep_merge, load_layered_env, overlay_path_for, server_enabled
 
 TEMPLATE_PATTERN = re.compile(r"\{\{\s*([A-Z0-9_]+)\s*\}\}")
 
@@ -86,9 +86,11 @@ def main() -> None:
     rendered = render(template_text, env_values)
 
     try:
-        json.loads(rendered)
+        rendered_data = json.loads(rendered)
     except Exception as exc:
         raise SystemExit(f"Rendered JSON invalid: {exc}") from exc
+
+    rendered = json.dumps(rendered_data, indent=2, ensure_ascii=False)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(rendered + "\n", encoding="utf-8")

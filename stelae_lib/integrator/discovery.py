@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
+from stelae_lib.catalog_defaults import DEFAULT_DISCOVERED_SERVERS
 from stelae_lib.fileio import atomic_write, load_json
 
 VALID_TRANSPORTS = {"stdio", "http", "streamable-http", "metadata"}
@@ -15,6 +16,15 @@ TRANSPORT_ALIASES = {
     "streamable": "streamable-http",
     "meta": "metadata",
 }
+
+
+def seed_discovery_cache(path: Path, entries: List[Dict[str, Any]] | None = None) -> bool:
+    if path.exists():
+        return False
+    payload = entries if entries is not None else DEFAULT_DISCOVERED_SERVERS
+    rendered = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+    atomic_write(path, rendered)
+    return True
 
 
 def _normalize_transport(value: str) -> str:

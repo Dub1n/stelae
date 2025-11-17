@@ -25,6 +25,11 @@ DEFAULT_DISCOVERY = Path(
 )
 DEFAULT_UV = os.getenv("ONE_MCP_BIN", "uv")
 
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from stelae_lib.integrator.discovery import seed_discovery_cache  # noqa: E402
+
 
 def _run(command: list[str], cwd: Path | None = None) -> None:
     printable = " ".join(command)
@@ -59,11 +64,7 @@ def _uv_sync(path: Path, uv_bin: str, *, skip: bool) -> bool:
 
 
 def _ensure_discovery(path: Path) -> bool:
-    if path.exists():
-        return False
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("[]\n", encoding="utf-8")
-    return True
+    return seed_discovery_cache(path)
 
 
 def _write_config(path: Path, uv_bin: str, repo: Path, discovery: Path) -> bool:

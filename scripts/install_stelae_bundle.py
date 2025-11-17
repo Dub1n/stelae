@@ -12,7 +12,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from stelae_lib.bundles import install_bundle, load_bundle  # noqa: E402
+from stelae_lib.bundles import (  # noqa: E402
+    install_bundle,
+    load_bundle,
+    load_install_state,
+    sync_bundle_folder,
+)
 
 
 def _log_progress(message: str) -> None:
@@ -24,8 +29,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--bundle",
         type=Path,
-        default=ROOT / "config" / "bundles" / "starter_bundle.json",
-        help="Path to the bundle JSON (default: config/bundles/starter_bundle.json)",
+        default=ROOT / "bundles" / "starter",
+        help="Path to the bundle folder (legacy JSON is still supported)",
     )
     parser.add_argument(
         "--server",
@@ -53,16 +58,36 @@ def _print_list(label: str, items: Sequence[str]) -> None:
 def main() -> None:
     args = _parse_args()
     bundle_path = args.bundle if args.bundle.is_absolute() else (ROOT / args.bundle)
-    bundle = load_bundle(bundle_path)
+    artifact = load_bundle(bundle_path)
+    install_state = load_install_state()
+    catalog_fragment = None
+    bundle_files_changed = False
+    if artifact.source_dir:
+        sync_result = sync_bundle_folder(
+            artifact.source_dir,
+            artifact.name,
+            dry_run=args.dry_run,
+        )
+        catalog_fragment = sync_result.destination / "catalog.json"
+        bundle_files_changed = sync_result.changed
+        action = "Would sync" if args.dry_run else "Synced"
+        _log_progress(f"{action} bundle '{artifact.name}' → {sync_result.destination}")
     summary = install_bundle(
-        bundle,
+        artifact.payload,
         server_filter=args.servers,
         dry_run=args.dry_run,
         restart=not args.no_restart,
         force=args.force,
         log=_log_progress,
+        catalog_fragment_path=catalog_fragment,
+        bundle_files_changed=bundle_files_changed,
+        install_state=install_state,
+        install_manifest=artifact.install_manifest,
+        bundle_name=artifact.name,
+        bundle_source=artifact.source_dir,
     )
-    print(f"Bundle '{bundle.get('name', bundle_path.name)}' ({bundle_path})")
+    install_state.flush(dry_run=args.dry_run)
+    print(f"Bundle '{artifact.name}' ({bundle_path})")
     if args.servers:
         _print_list("Filtered servers", [srv for srv in args.servers if srv])
     _print_list("Installed", summary["installed"])
@@ -73,6 +98,9 @@ def main() -> None:
         _print_list(f"{prefix} overlays", overlay_paths)
     if summary["commands"]:
         _print_list("Ran commands", [" ".join(cmd) for cmd in summary["commands"]])
+    refs = summary.get("installRefs") or {}
+    _print_list("Install refs registered", refs.get("registered", []))
+    _print_list("Install refs reused", refs.get("skipped", []))
     if summary["errors"]:
         print("Errors:")
         for err in summary["errors"]:

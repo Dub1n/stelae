@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate tool aggregation config and update overrides."""
+"""Validate tool aggregation config, update overrides, and emit the intended catalog."""
 
 from __future__ import annotations
 
@@ -12,19 +12,14 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from stelae_lib.config_overlays import overlay_path_for, runtime_path
-from stelae_lib.integrator.tool_aggregations import load_tool_aggregation_config
+from stelae_lib.catalog.store import load_catalog_store, write_intended_catalog
+from stelae_lib.config_overlays import ensure_config_home_scaffold, overlay_path_for, runtime_path
+from stelae_lib.integrator.tool_aggregations import ToolAggregationConfig, validate_aggregation_schema
 from stelae_lib.integrator.tool_overrides import ToolOverridesStore
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Validate tool aggregation config and update overrides")
-    parser.add_argument(
-        "--config",
-        default=ROOT / "config" / "tool_aggregations.json",
-        type=Path,
-        help="Path to tool aggregation config",
-    )
     parser.add_argument(
         "--schema",
         default=None,
@@ -55,27 +50,23 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    ensure_config_home_scaffold()
+
     overlay_path = overlay_path_for(args.overrides)
     runtime_default = args.output or os.getenv("TOOL_OVERRIDES_PATH") or runtime_path("tool_overrides.json")
 
-    if args.scope == "default":
-        config = load_tool_aggregation_config(
-            args.config,
-            schema_path=args.schema,
-            include_overlay=False,
-        )
-        target = "base"
-    else:
-        config = load_tool_aggregation_config(
-            args.config,
-            schema_path=args.schema,
-            overlay_only=True,
-        )
-        target = "overlay"
+    schema_path = args.schema or (ROOT / "config" / "tool_aggregations.schema.json")
+    catalog_filter = ["core"] if args.scope == "default" else None
+    include_bundles = args.scope != "default"
+    catalog_store = load_catalog_store(catalog_filenames=catalog_filter, include_bundles=include_bundles)
+    validate_aggregation_schema(catalog_store.tool_aggregations, schema_path)
+    config = ToolAggregationConfig.from_data(catalog_store.tool_aggregations)
+    target = "base" if args.scope == "default" else "overlay"
 
     if args.check_only:
+        fragment_count = len(catalog_store.fragments)
         print(
-            f"Validated {args.config} with {len(config.aggregations)} aggregations and {len(config.all_hidden_tools())} hidden tools."
+            f"Validated merged catalog from {fragment_count} fragment(s) with {len(config.aggregations)} aggregations and {len(config.all_hidden_tools())} hidden tools."
         )
         return
 
@@ -95,6 +86,15 @@ def main() -> None:
         print("Aggregation overrides already up to date.")
         if target != "runtime":
             store.export_runtime()
+
+    if args.scope == "local":
+        intended_path = runtime_path("intended_catalog.json")
+        write_intended_catalog(
+            catalog_store,
+            destination=intended_path,
+            runtime_overrides=Path(runtime_default),
+        )
+        print(f"Wrote intended catalog to {intended_path} ({len(catalog_store.fragments)} fragment(s)).")
 
 
 if __name__ == "__main__":

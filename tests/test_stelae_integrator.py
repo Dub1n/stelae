@@ -5,6 +5,7 @@ import pytest
 
 import stelae_lib.integrator.core as core_module
 import stelae_lib.config_overlays as config_overlays
+from stelae_lib.catalog_defaults import DEFAULT_DISCOVERED_SERVERS
 from stelae_lib.config_overlays import overlay_path_for
 from stelae_lib.integrator.core import StelaeIntegratorService
 from stelae_lib.integrator.one_mcp import DiscoveryResult
@@ -106,6 +107,39 @@ class DummyDiscovery:
 
     def search(self, query, limit=25, min_score=None):
         return self._results
+
+
+def test_seeds_discovery_cache_from_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config_home = tmp_path / "config-home"
+    state_home = tmp_path / "config-home" / ".state"
+    monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_home))
+    monkeypatch.setenv("STELAE_STATE_HOME", str(state_home))
+    config_overlays.config_home.cache_clear()
+    config_overlays.state_home.cache_clear()
+    root = tmp_path / "repo"
+    template = root / "config" / "proxy.template.json"
+    overrides = root / "config" / "tool_overrides.json"
+    template.parent.mkdir(parents=True, exist_ok=True)
+    _write_json(template, {"mcpServers": {}})
+    _write_json(
+        overrides,
+        {
+            "schemaVersion": 2,
+            "master": {"tools": {"*": {"annotations": {}}}},
+            "servers": {},
+        },
+    )
+    env_file = root / ".env"
+    env_file.write_text("", encoding="utf-8")
+    service = StelaeIntegratorService(
+        root=root,
+        env_files=[env_file],
+        template_path=template,
+        overrides_path=overrides,
+    )
+    discovery_path = Path(state_home) / "discovered_servers.json"
+    assert service.discovery_path == discovery_path
+    assert json.loads(discovery_path.read_text(encoding="utf-8")) == DEFAULT_DISCOVERED_SERVERS
 
 
 def test_list_discovered_servers(integrator_workspace):

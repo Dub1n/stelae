@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Sequence
 
 from .catalog_overrides import hydrate_descriptor
-from .discovery import DiscoveryEntry, DiscoveryStore
+from .discovery import DiscoveryEntry, DiscoveryStore, seed_discovery_cache
 from .one_mcp import OneMCPDiscovery, OneMCPDiscoveryError
 from .proxy_template import ProxyTemplate
 from .runner import CommandFailed, CommandRunner
@@ -116,12 +116,8 @@ class StelaeIntegratorService:
         default_discovery_path = Path(
             self.env_values.get("STELAE_DISCOVERY_PATH") or runtime_path("discovered_servers.json")
         )
-        if not default_discovery_path.exists() and discovery_template_path.exists():
-            ensure_parent(default_discovery_path)
-            default_discovery_path.write_text(
-                discovery_template_path.read_text(encoding="utf-8"),
-                encoding="utf-8",
-            )
+        if not default_discovery_path.exists():
+            seed_discovery_cache(default_discovery_path)
         if discovery_path:
             discovery_overlay_path = Path(discovery_path)
         else:

@@ -450,6 +450,15 @@ wait_tools_ready
 log "Syncing tool overrides via proxy catalog"
 populate_overrides_via_proxy "http://127.0.0.1:${PROXY_PORT}/mcp"
 
+log "Capturing live catalog snapshot"
+if STELAE_STATE_HOME="$STELAE_STATE_HOME" \
+   STELAE_PROXY_BASE="http://127.0.0.1:${PROXY_PORT}" \
+   python3 "$STELAE_DIR/scripts/capture_live_catalog.py"; then
+  :
+else
+  warn "Live catalog capture failed (continuing)."
+fi
+
 log "Local probe: tools/list → names (first 40)"
 curl --max-time "$CURL_MAX_TIME" -s "http://127.0.0.1:${PROXY_PORT}/mcp" -H 'Content-Type: application/json' \
   --data '{"jsonrpc":"2.0","id":"T","method":"tools/list"}' \

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from stelae_lib.fileio import atomic_write
+from stelae_lib.integrator.discovery import seed_discovery_cache
 from stelae_lib.integrator.one_mcp import OneMCPDiscovery, OneMCPDiscoveryError
 
 _DEFAULT_STATE_HOME = Path(
@@ -21,6 +22,8 @@ DEFAULT_OUTPUT = Path(
     os.getenv("STELAE_DISCOVERY_PATH")
     or (_DEFAULT_STATE_HOME / "discovered_servers.json")
 )
+
+seed_discovery_cache(DEFAULT_OUTPUT)
 
 
 def load_existing(path: Path) -> List[Dict[str, Any]]:

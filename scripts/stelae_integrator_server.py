@@ -20,18 +20,23 @@ if not os.getenv("STELAE_ENV_FILE") and DEFAULT_ENV_FILE.exists():
     os.environ["STELAE_ENV_FILE"] = str(DEFAULT_ENV_FILE)
 
 from stelae_lib.integrator import StelaeIntegratorService  # noqa: E402
+from stelae_lib.integrator.discovery import seed_discovery_cache  # noqa: E402
 
 
 def _default_discovery_path() -> Path:
     env_path = os.getenv("STELAE_DISCOVERY_PATH")
     if env_path:
-        return Path(env_path)
+        path = Path(env_path)
+        seed_discovery_cache(path)
+        return path
     state_home = Path(
         os.getenv("STELAE_STATE_HOME")
         or Path(os.getenv("STELAE_CONFIG_HOME", Path.home() / ".config" / "stelae")) / ".state"
     )
     state_home.mkdir(parents=True, exist_ok=True)
-    return state_home / "discovered_servers.json"
+    path = state_home / "discovered_servers.json"
+    seed_discovery_cache(path)
+    return path
 
 app = FastMCP(
     name="stelae-integrator",

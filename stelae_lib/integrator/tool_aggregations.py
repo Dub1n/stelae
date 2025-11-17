@@ -11,6 +11,7 @@ from typing import Any, Awaitable, Callable, Dict, Literal, Mapping, MutableMapp
 
 from mcp import types
 
+from stelae_lib.catalog_defaults import DEFAULT_TOOL_AGGREGATIONS
 from stelae_lib.config_overlays import deep_merge, overlay_path_for
 from stelae_lib.integrator.tool_overrides import ToolOverridesStore
 
@@ -844,7 +845,10 @@ def load_tool_aggregation_config(
     include_overlay: bool = True,
     overlay_only: bool = False,
 ) -> ToolAggregationConfig:
-    base_data = json.loads(path.read_text(encoding="utf-8"))
+    if path.exists():
+        base_data = json.loads(path.read_text(encoding="utf-8"))
+    else:
+        base_data = json.loads(json.dumps(DEFAULT_TOOL_AGGREGATIONS, ensure_ascii=False))
     overlay_data: dict[str, Any] | None = None
     overlay_path = overlay_path_for(path)
     if overlay_path.exists():
@@ -853,15 +857,15 @@ def load_tool_aggregation_config(
     if overlay_only:
         data = _overlay_delta(base_data, overlay_data)
     elif include_overlay and overlay_data:
-        data = _merge_aggregation_payload(base_data, overlay_data)
+        data = merge_aggregation_payload(base_data, overlay_data)
     else:
         data = base_data
     schema_candidate = schema_path or path.with_name("tool_aggregations.schema.json")
-    _validate_schema(data, schema_candidate)
+    validate_aggregation_schema(data, schema_candidate)
     return ToolAggregationConfig.from_data(data)
 
 
-def _merge_aggregation_payload(base: Any, overlay: Any) -> Any:
+def merge_aggregation_payload(base: Any, overlay: Any) -> Any:
     if not isinstance(base, dict) or not isinstance(overlay, dict):
         return overlay
     result = json.loads(json.dumps(base, ensure_ascii=False))
@@ -1031,7 +1035,7 @@ def _normalize_schema(raw: Any, *, allow_empty: bool = False) -> Dict[str, Any] 
     return {"type": "object"}
 
 
-def _validate_schema(data: Any, schema_path: Path) -> None:
+def validate_aggregation_schema(data: Any, schema_path: Path) -> None:
     if not schema_path.exists():
         return
     try:

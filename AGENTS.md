@@ -19,8 +19,35 @@
 ## Runtime, Build, and Dev Commands
 
 - Environment: run `python scripts/setup_env.py`, edit `${STELAE_ENV_FILE}` (defaults to `${STELAE_CONFIG_HOME}/.env`) to update path/binary variables, then run `make render-proxy`. Keep `${STELAE_ENV_FILE}` local; renderers inject values for PM2.
-- Core stack = mcp-proxy, custom tools, the Stelae integrator, the tool aggregator helper, the 1mcp stdio agent, the public 1mcp catalog bridge, and the FastMCP bridge. The starter bundle (Basic Memory, Strata, Fetch, Scrapling, filesystem/ripgrep/terminal helpers) lives in `config/bundles/starter_bundle.json`; install or update it via `python scripts/install_stelae_bundle.py [--server name...]` so the extras stay in `${STELAE_CONFIG_HOME}` overlays instead of git, and keep the Cloudflare tunnel/worker opt-in. The Codex MCP wrapper is intentionally excluded from this bundle—build the release via `~/dev/codex-mcp-wrapper/scripts/build_release.py`, copy it into `${STELAE_CONFIG_HOME}/codex-mcp-wrapper/releases/<version>`, and then run the manual `manage_stelae install_server` flow documented in `README.md` when you explicitly want the wrapper.
+- Core stack = mcp-proxy, custom tools, the Stelae integrator, the tool aggregator helper, the 1mcp stdio agent, the public 1mcp catalog bridge, and the FastMCP bridge. The starter bundle (Basic Memory, Strata, Fetch, Scrapling, filesystem/ripgrep/terminal helpers) ships as the folder `bundles/starter/`; install or update it via `python scripts/install_stelae_bundle.py [--server name...]` so the folder copies into `${STELAE_CONFIG_HOME}/bundles/` and registers install refs without touching tracked overlays. The Codex MCP wrapper is intentionally excluded from this bundle—build the release via `~/dev/codex-mcp-wrapper/scripts/build_release.py`, copy it into `${STELAE_CONFIG_HOME}/codex-mcp-wrapper/releases/<version>`, and then run the manual `manage_stelae install_server` flow documented in `README.md` when you explicitly want the wrapper.
 - Overlay workflow (docs/ARCHITECTURE.md + README): whenever you touch tracked templates or aggregations run `python scripts/process_tool_aggregations.py --scope default`, then `python scripts/process_tool_aggregations.py --scope local`, followed by `make render-proxy` and `pytest tests/test_repo_sanitized.py`; wrap up with `make verify-clean` (or `./scripts/verify_clean_repo.sh --skip-restart`) to confirm render/restart automation keeps `git status` empty. The catalog layering is actively being reworked per `dev/intended-catalog-plan.md`, so expect follow-up patches that change how `tool_overrides*.json` feed into the synthesized catalog (`intended_catalog.json` / `live_catalog.json`) and treat current commands as provisional.
+
+### Codex MCP wrapper (dev) usage
+
+- Use the MCP tool `mcp__codex-wrapper-dev__batch` when you need Codex to run scripted checks. Provide a `mission` payload with a unique `mission_id`, an explicit `workspace_root` (default to `/home/gabri/dev/stelae` if unsure), and at least one task describing the Codex MCP prompt (`prompt`, `cwd`, `sandbox`, `approval_policy`, per-task `timeout_sec`, optional `env`/`preferred_worker`). Keep sandboxes `read-only` unless the mission explicitly requires writes.
+- Example payload:
+
+  ```json
+  {
+    "mission": {
+      "mission_id": "stelae-demo-batch",
+      "workspace_root": "/home/gabri/dev/stelae",
+      "tasks": [
+        {
+          "prompt": "Run `date`.",
+          "cwd": ".",
+          "sandbox": "read-only",
+          "approval_policy": "never",
+          "timeout_sec": 120
+        }
+      ]
+    }
+  }
+  ```
+
+  Responses include one entry per `task_index` with `status`, `worker`, `stdout`, and any artifact metadata. Surface these results directly in your final answer.
+- The companion reply tool (`mcp__codex-wrapper-dev__reply`) is currently unavailable because Codex is not returning `conversationId` values for our missions. Treat each batch task as standalone and note in your summary if a follow-up reply would have been helpful so we can revisit the workflow once Codex exposes conversation ids.
+
 - PM2 lifecycle (`source ~/.nvm/nvm.sh` first):
   - `make up` / `make down` – start or stop the fleet described in `ecosystem.config.js`.
   - `make restart-proxy`, `make logs`, `make status` – restart, tail logs, or inspect process table.
@@ -76,7 +103,7 @@
 - Aggregated suites (`workspace_fs_*`, `workspace_shell_control`, `memory_suite`, `scrapling_fetch_suite`, `strata_ops_suite`, etc.) live in `${STELAE_CONFIG_HOME}` so tracked templates stay lean. When adding or updating aggregates, run the overlay workflow above so `${STELAE_CONFIG_HOME}` captures the optional suites without mutating tracked JSON.
 - If new generators or discovery runs create files, write them to `${STELAE_STATE_HOME}` (runtime artifacts) or `${STELAE_CONFIG_HOME}` (human-edited overlays) and never directly to tracked templates; tearing down the `.local` variant should always reset to the repo defaults. The intended/live catalog proposal means aggregated descriptors may soon be sourced from `intended_catalog.json` rather than the current runtime overrides—flag any assumptions about catalog persistence when modifying these flows.
 
-## Agent Workflow & Communication
+## Agent Workflow
 
 - **Command Tool**: default to `["bash","-lc","…"]` for terminal operations; switch shells only when explicitly required.
 - **MCP Invocation**: never assume the manifest is authoritative. Always attempt the requested MCP tool (e.g., `stelae.manage_stelae`) even if it is absent from the prompt roster, and report the exact response or error instead of substituting other mechanisms.
@@ -84,4 +111,12 @@
 - **DRY & Modular Design**: remove duplicate logic via helpers, keep modules interchangeable, and respect manager/coordinator patterns (e.g., keep business logic out of view models).
 - **TDD & Coverage**: prefer tests first, maintain ≥80% coverage, and document missing tests when encountered.
 - **SOLID + Warning Signs**: watch for behavior-flipping booleans, deep inheritance, or parameter-heavy methods; refactor toward cohesive interfaces.
-- **Communication**: respond concisely, mirror the user’s tone, surface risks/assumptions, and propose natural follow-up work (tests/docs) when it reinforces the change. If tooling prevents edits after three attempts, share the intended diff in chat and ask for manual application.
+- When introducing new interfaces or adapters, confirm DI seams remain substitutable and document mitigation if any SOLID rule is at risk.
+
+## Communication
+
+- User prefers **collegial** communication: they would like it to be *clear, helpful, and easy to scan* without sounding clipped; reinforce user reasoning and flag risks or blockers.
+- User prefers reference to **filenames only**; they say to supply the full path only when more than one file shares that name, and would rather you **omit line numbers** or git-status rundowns unless specifically requested.
+- User has decided that providing full file paths and line numbers is unhelpful to them.
+- Complete immediate follow-up work (tests, quality checks, documentation, related updates) without additional prompting; confirm with the user before starting sizable or risky follow-ups.
+- Provide right-sized implementation context, and when the user signals confusion, explain the relevant systems and approach in an instructive, task-aligned way that builds their understanding.

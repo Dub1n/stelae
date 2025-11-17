@@ -16,7 +16,7 @@ Tags: `#infra` `#docs`
 
 - Code:
   - `scripts/docy_manager_server.py`, `scripts/render_docy_sources.py`, `config/docy_sources.json`, `.docy.urls` (to delete/relocate).
-  - `config/bundles/starter_bundle.json` (remove docy servers + aggregates, add new aggregate definition later).
+  - `bundles/starter/catalog.json` (remove docy servers + aggregates, add new aggregate definition later).
   - `scripts/tool_aggregator_server.py`, `stelae_lib/integrator/tool_aggregations.py`, `stelae_lib/integrator/stateful_runner.py` (ensure state helper covers new aggregate fields).
   - `README.md`, `docs/ARCHITECTURE.md`, `tests/test_docy_manager.py`, `tests/test_docy_sources.py`, `tests/test_tool_aggregations.py` (Docy-specific cases to retire or rewrite).
 - Tests:

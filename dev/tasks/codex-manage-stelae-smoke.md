@@ -11,7 +11,7 @@ Scenario: prove Codex CLI can run the full discovery → install flow using only
    python scripts/bootstrap_one_mcp.py
    ```
 
-   This guarantees `~/apps/vendor/1mcpserver` exists, `uv sync` ran, `config/discovered_servers.json` is tracked, and `~/.config/1mcp/mcp.json` points at the vendored repo.
+   This guarantees `~/apps/vendor/1mcpserver` exists, `uv sync` ran, `${STELAE_DISCOVERY_PATH}` (defaults to `${STELAE_STATE_HOME}/discovered_servers.json`) is seeded, and `~/.config/1mcp/mcp.json` points at the vendored repo.
 3. Ensure the stack is healthy: `make render-proxy && make restart-proxy` (or `scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --full`).
 4. Launch Codex CLI pointing at the streamable proxy (`codex --profile stelae`). Confirm `tools/list` shows the synthetic `manage_stelae` entry.
 
@@ -81,7 +81,7 @@ Scenario: prove Codex CLI can run the full discovery → install flow using only
 - `discover_servers` now applies a catalog override for the `qdrant` slug. Returned descriptors include `transport: "stdio"`, `command: "uvx"`, and args/env placeholders (`COLLECTION_NAME`, `QDRANT_LOCAL_PATH`, `EMBEDDING_MODEL`). The overrides are tracked in `stelae_lib/integrator/catalog_overrides.py`, with new `.env` defaults for the placeholders.
 - Codex MCP runs (all via `mcp__stelae__manage_stelae`):
   1. **Discover (dry-run)** – confirmed hydrated descriptor surfaced in `details.servers[*].descriptor` (qdrant shows stdio + command/args/env). `files_updated` stayed `dryRun:true`.
-  2. **Discover (real)** – same payload with `"dry_run": false` persisted the hydrated entry to `config/discovered_servers.json`.
+  2. **Discover (real)** – same payload with `"dry_run": false` persisted the hydrated entry to `${STELAE_DISCOVERY_PATH}`.
   3. **Install (dry-run)** – `{"operation":"install_server","params":{"name":"qdrant","dry_run":true}}` produced the expected diffs for `config/proxy.template.json` and `config/tool_overrides.json`.
   4. **Install (real)** – the first execution completed server-side (logs show `qdrant` tools registering) but the MCP response dropped when `run_restart_stelae.sh` restarted the proxy. A follow-up install (no changes, so no restart) returned `status: ok` to capture the final state.
   5. **Remove (dry-run + real)** – verified diffs, then removed the server. As with install, the real removal restarts the stack and drops the in-flight response; after the restart we brought `mcp-proxy` back via pm2 and confirmed the template/overrides were clean.

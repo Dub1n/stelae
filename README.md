@@ -20,7 +20,7 @@ A WSL-native deployment of [mcp-proxy](https://github.com/TBXark/mcp-proxy) that
 | Scrapling MCP | local | stdio | `uvx scrapling-fetch-mcp --stdio` | Scrapling fetcher (basic/stealth/max-stealth), adapted by the Go proxy at call time. |
 | FastMCP bridge | default | streamable HTTP (`/mcp`) / stdio | `python -m scripts.stelae_streamable_mcp` | Exposes the full proxy catalog to desktop agents; falls back to local search/fetch if the proxy is unavailable. Automatically loads `.env` / `.env.local` so MCP adapters inherit the same runtime paths as pm2. |
 | 1mcp agent | default | stdio | `${ONE_MCP_BIN} --transport stdio` | Discovers nearby MCP servers and writes `${STELAE_DISCOVERY_PATH}` (defaults to `${STELAE_STATE_HOME}/discovered_servers.json`) for the integrator. |
-| Custom tools MCP | default | stdio | `${PYTHON} ${STELAE_DIR}/scripts/custom_tools_server.py` | Config-driven wrapper that exposes scripts listed in `config/custom_tools.json`. |
+| Custom tools MCP | default | stdio | `${PYTHON} ${STELAE_DIR}/scripts/custom_tools_server.py` | Config-driven wrapper that exposes scripts listed in `${STELAE_CONFIG_HOME}/custom_tools.json`. |
 
 > The Go proxy we ship and test against lives in the [`Dub1n/mcp-proxy`](https://github.com/Dub1n/mcp-proxy) fork, which adds the streamable `/mcp` facade (HEAD/GET/POST) used by the restart script and smoke harness. Set `STELAE_PROXY_SOURCE` or pass `--proxy-source` if you need to pin a different remote; otherwise automation clones that fork automatically.
 
@@ -29,8 +29,8 @@ Path placeholders expand from `.env`; see setup below.
 ### Core vs Optional Stack
 
 - **Core template:** the repo now ships only the self-management essentials (custom tools, the Stelae integrator, the tool aggregator helper, the 1mcp stdio agent, and the public 1mcp catalog bridge) plus the Go proxy and FastMCP bridge. Optional suites (workspace filesystem helpers, memory, fetch, etc.) appear only after installing the starter bundle so fresh clones stay lean.
-- **Starter bundle:** Basic Memory, Strata, Fetch, Scrapling, filesystem/ripgrep/commands runners, and other developer-quality-of-life servers live in `config/bundles/starter_bundle.json`. Install them (and their overrides/aggregations) with `python scripts/install_stelae_bundle.py` after cloning. Use `--server` to pick individual entries, `--dry-run` to preview without touching overlays, or `--force` to overwrite an existing server entry when you rerun the installer. This pass is what writes the `workspace_fs_*`, `memory_suite`, `scrapling_fetch_suite`, and `strata_ops_suite` aggregations into `${STELAE_CONFIG_HOME}`, so run it whenever you want those high-level tools to appear.
-- **Overlays only:** the installer writes to `${STELAE_CONFIG_HOME}/*.local.json` (no nested subdirectories), so optional services never reappear in tracked templates. Delete a `.local` file to return to the lean core stack, or rerun the installer if you need to rehydrate the bundle later.
+- **Starter bundle:** Basic Memory, Strata, Fetch, Scrapling, filesystem/ripgrep/commands runners, and other developer-quality-of-life servers now live in the folder-based `bundles/starter/` package. `python scripts/install_stelae_bundle.py` copies that folder into `${STELAE_CONFIG_HOME}/bundles/starter/`, registers each server’s `installRef`, and runs `manage_stelae install_server` so catalog data flows through the bundle fragment instead of overlay files. Use `--server` to pick individual entries, `--dry-run` to preview the copy/install steps, or `--force` to overwrite an existing server entry when you rerun the installer.
+- **Overlays only:** bundle installs no longer touch `${STELAE_CONFIG_HOME}/*.local.json`; the tracked folder is the source of truth and uninstalling is as simple as removing `${STELAE_CONFIG_HOME}/bundles/<name>/`. Delete a `.local` file only when you want to reset manual edits, or remove the bundle folder entirely to return to the lean core stack.
 
 ### Overlay workflow & guardrails
 
@@ -63,7 +63,7 @@ Keep hand-edited overlays (`*.local.json`, `.env.local`, discovery caches) in `$
    ```bash
    python scripts/setup_env.py
    ```
-   The helper copies `.env.example` into `${STELAE_ENV_FILE}` on first run and replaces `repo/.env` with a symlink (or copy when symlinks are unavailable) for backward compatibility.
+   The helper copies `.env.example` into `${STELAE_ENV_FILE}` on first run, replaces `repo/.env` with a symlink (or copy when symlinks are unavailable) for backward compatibility, and with `--materialize-defaults` seeds `${STELAE_CONFIG_HOME}/catalog/core.json` using the embedded defaults so fresh clones immediately have a catalog fragment to edit.
 2. Edit `${STELAE_ENV_FILE}` and update absolute paths:
    - Project roots: `STELAE_DIR`, `APPS_DIR`, `PHOENIX_ROOT`, `SEARCH_ROOT`.
    - Binaries: `FILESYSTEM_BIN`, `RG_BIN`, `MEMORY_BIN`, `STRATA_BIN`, `ONE_MCP_BIN`, `LOCAL_BIN/mcp-server-fetch`, `NPX_BIN` (runs `mcp-server-commands`).
@@ -133,7 +133,15 @@ Keep hand-edited overlays (`*.local.json`, `.env.local`, discovery caches) in `$
 
    Aliases defined via `name` automatically flow through manifests, `initialize`, `tools/list`, and `tools/call`. Client requests using the alias are resolved back to the original downstream tool, while the original name remains available as a fallback for compatibility. The proxy annotates every `tools/list` entry with `"x-stelae": {"servers": [...], "primaryServer": "..."}` so automation (and the override population script) can map schemas back to the correct server without guessing.
 
-  Declarative tool aggregations live in `config/tool_aggregations.json` (schema in `config/tool_aggregations.schema.json`). The tracked template intentionally ships empty so optional suites never leak into git; `${STELAE_CONFIG_HOME}/tool_aggregations.local.json` carries everything installed via bundles (filesystem wrappers, memory helpers, Scrapling suite, Strata ops, etc.). `scripts/process_tool_aggregations.py --scope local` (default) validates just the overlay layer and writes the merged descriptors into `${TOOL_OVERRIDES_PATH}` so wrapped tools disappear from manifests without polluting `tool_overrides.local.json`. When you intentionally change the tracked defaults, rerun `python scripts/process_tool_aggregations.py --scope default` and commit the resulting `config/tool_overrides.json`. `make render-proxy` and `scripts/run_restart_stelae.sh` run the local scope automatically, and you can lint changes manually with `python scripts/process_tool_aggregations.py --check-only`. The stdio server `scripts/tool_aggregator_server.py` loads the merged config (defaults + optional locals) at runtime, bypasses FastMCP’s argument/output coercion so downstream payloads pass through unchanged, and now decodes JSON-in-a-string responses so `structuredContent` stays a real object while the text block mirrors the downstream summary. The end result is a concise manifest whose aggregates deliver the exact structured data that Codex (and the proxy) expect.
+  Declarative catalog fragments now live under `${STELAE_CONFIG_HOME}/catalog/*.json` plus `${STELAE_CONFIG_HOME}/bundles/*/catalog.json`. `scripts/process_tool_aggregations.py --scope local` (default) merges every fragment with the embedded defaults from `stelae_lib/catalog_defaults.py`, validates the merged payload against `config/tool_aggregations.schema.json`, writes `${TOOL_OVERRIDES_PATH}` just like before, **and** emits `${STELAE_STATE_HOME}/intended_catalog.json` with a timestamp and fragment metadata. That intended catalog is the single “what we expect the proxy to serve” view for downstream tooling. When you intentionally change the tracked defaults, rerun `python scripts/process_tool_aggregations.py --scope default`—that scope only reads `catalog/core.json` so your local overlays never bleed back into git. `make render-proxy` and `scripts/run_restart_stelae.sh` run the local scope automatically, and you can lint changes manually with `python scripts/process_tool_aggregations.py --check-only`. The stdio server `scripts/tool_aggregator_server.py` loads the merged catalog at runtime, bypasses FastMCP’s argument/output coercion so downstream payloads pass through unchanged, and now decodes JSON-in-a-string responses so `structuredContent` stays a real object while the text block mirrors the downstream summary. The end result is a concise manifest whose aggregates deliver the exact structured data that Codex (and the proxy) expect.
+
+  After the proxy restarts and reports itself healthy, `scripts/restart_stelae.sh` invokes `scripts/capture_live_catalog.py` to snapshot the actual `/mcp tools/list` response into `${STELAE_STATE_HOME}/live_catalog.json`. The helper records the ISO8601 timestamp, proxy base, tool count, and the raw JSON-RPC payload so you can diff the intended catalog against what the proxy really advertised. Run it manually any time you need an updated snapshot (for example, after enabling a single stdio server) with:
+
+  ```bash
+  python scripts/capture_live_catalog.py --proxy-base http://127.0.0.1:9090
+  ```
+
+  Pass `--output` to capture into alternate files (handy for diffs) or set `STELAE_STATE_HOME`/`STELAE_PROXY_BASE` before invoking the script. The restart/verify automation already handles this, so `${STELAE_STATE_HOME}/live_catalog.json` is refreshed after every successful stack restart.
 
    After you install the starter bundle, the aggregator exposes these optional suites via your local overlay:
    - `workspace_fs_read` – Read-only filesystem helpers (`list_*`, `read_*`, `find_*`, `search_*`, `get_file_info`, `calculate_directory_size`).
@@ -173,9 +181,9 @@ The tracked templates stay lean on purpose. When you want Memory, Strata, Fetch,
 python scripts/install_stelae_bundle.py
 ```
 
-- Add `--server docs --server fetch` to target specific servers, or omit `--server` to install everything described in `config/bundles/starter_bundle.json`.
-- Use `--dry-run` to preview the changes; `--no-restart` writes overlays without touching PM2 (handy if the stack is already running elsewhere).
-- The script merges `tool_overrides.local.json` and `tool_aggregations.local.json`, then runs `make render-proxy` + `scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --no-cloudflared` once so the new catalog is live immediately.
+- Add `--server docs --server fetch` to target specific servers, or omit `--server` to install everything described in `bundles/starter/`.
+- Use `--dry-run` to preview the changes; `--no-restart` copies the bundle folder without touching PM2 (handy if the stack is already running elsewhere).
+- The script copies `bundles/<name>/` into `${STELAE_CONFIG_HOME}/bundles/<name>/`, records install refs in `${STELAE_CONFIG_HOME}/bundle_installs.json`, ensures the bundle’s `catalog.json` fragment participates in the catalog merge, and then runs `make render-proxy` + `scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --no-cloudflared` once so the new catalog is live immediately.
 - **Codex MCP wrapper install (manual opt-in):**
   1. Build the wrapper release via `~/dev/codex-mcp-wrapper/scripts/build_release.py` and copy it into `${STELAE_CONFIG_HOME}/codex-mcp-wrapper/releases/<version>` so `.env` can reference `CODEX_WRAPPER_BIN`/`CODEX_WRAPPER_CONFIG`.
   2. Save the descriptor below (update the `name` if you want a different label) as `/tmp/codex-wrapper.json`:
@@ -201,7 +209,7 @@ python scripts/install_stelae_bundle.py
        --params-file /tmp/codex-wrapper.json
      ```
 
-  Keeping the wrapper out of `starter_bundle.json` prevents it from leaking into the default manifest; only run the steps above when you explicitly need the Codex automation stack.
+  Keeping the wrapper out of `bundles/starter/catalog.json` prevents it from leaking into the default manifest; only run the steps above when you explicitly need the Codex automation stack.
 
 Rerun the installer after pulling template updates or whenever you delete your local overlays. Removing `${STELAE_CONFIG_HOME}/proxy.template.local.json` reverts back to the five-server core automatically.
 
@@ -231,7 +239,7 @@ Every config file tracked in this repo is a template. Any local edits made via `
 
 ### Custom Script Tools
 
-- `scripts/custom_tools_server.py` loads `config/custom_tools.json` (override with `STELAE_CUSTOM_TOOLS_CONFIG`) and registers each entry as part of the `custom` stdio server now declared in `config/proxy.template.json`.
+- `scripts/custom_tools_server.py` loads `${STELAE_CONFIG_HOME}/custom_tools.json` (override with `STELAE_CUSTOM_TOOLS_CONFIG`) and registers each entry as part of the `custom` stdio server now declared in `config/proxy.template.json`.
 - Every tool definition can include `name`, `description`, `command`, optional `args`, `cwd`, `env`, `timeout`, and `inputMode` (`json` to send arguments on stdin/`STELAE_TOOL_ARGS`, or `none` for fire-and-forget scripts).
 - Sample config:
 
@@ -250,7 +258,7 @@ Every config file tracked in this repo is a template. Any local edits made via `
   }
   ```
 
-- After editing `config/custom_tools.json`, rerun `make render-proxy` and restart the proxy via PM2 so the manifest reflects the new tools.
+- After editing `${STELAE_CONFIG_HOME}/custom_tools.json`, rerun `make render-proxy` and restart the proxy via PM2 so the manifest reflects the new tools.
 - Legacy connector-only fallbacks (`search`, `fetch`) are disabled via the overrides template/overlay pair (`config/tool_overrides.json` + `${STELAE_CONFIG_HOME}/tool_overrides.local.json`), keeping the catalog limited to real servers and your custom scripts.
 
 ### Declarative Tool Aggregations
@@ -261,7 +269,7 @@ Every config file tracked in this repo is a template. Any local edits made via `
 - Aggregated tools return a tuple of downstream `content` blocks plus the preserved `structuredContent`. The runner skips FastMCP’s conversion layer (via a custom `FuncMetadata` shim) and unwraps JSON-like strings before replying, so Codex no longer sees serialized JSON blobs in the `structuredContent.result` field.
 - To add another aggregate tool:
 
-1. Copy the target block inside `config/bundles/starter_bundle.json` (or your `${STELAE_CONFIG_HOME}/tool_aggregations.local.json`) and adjust the manifest metadata, `operations`, `argumentMappings`, `responseMappings`, and `hideTools` list for the downstream tool(s) you want to wrap.
+1. Copy the target block inside `bundles/starter/catalog.json` (or your `${STELAE_CONFIG_HOME}/tool_aggregations.local.json`) and adjust the manifest metadata, `operations`, `argumentMappings`, `responseMappings`, and `hideTools` list for the downstream tool(s) you want to wrap.
  2. (Optional) Run `python scripts/process_tool_aggregations.py --check-only` to validate the JSON/schema without mutating overrides.
  3. Run `make render-proxy` (or `scripts/run_restart_stelae.sh`) so the helper refreshes `${TOOL_OVERRIDES_PATH}`, disables the wrapped tools, and restarts the `tool_aggregator` stdio server.
  4. Call the new MCP tool as normal (e.g., `tools/call name="documentation_catalog" arguments={...}` once it exists); arguments are validated per the rules you encode, then forwarded through the proxy to the downstream tool, and the downstream result is returned unchanged.
@@ -319,7 +327,7 @@ Every config file tracked in this repo is a template. Any local edits made via `
   - `list_discovered_servers` – Normalized entries + validation issues, helpful when vetting 1mcp output.
   - `install_server` – Accepts `name` (from discovery) or a full `descriptor` payload, optional `dry_run`, `force`, `target_name`, `options`, and `force_restart`.
   - `remove_server` – Removes template + override entries and restarts the stack (with `dry_run` previews available).
-  - `refresh_discovery` – Copies `${ONE_MCP_DIR}/discovered_servers.json` (or a supplied `source_path`) into the tracked cache, returning a diff so you can see what changed.
+  - `refresh_discovery` – Copies `${ONE_MCP_DIR}/discovered_servers.json` (or a supplied `source_path`) into `${STELAE_DISCOVERY_PATH}`, returning a diff so you can see what changed.
   - `run_reconciler` – Re-runs `make render-proxy` + the restart script without touching configs; handy after manual template edits.
 - For terminal-first workflows set the env overrides inline and call `make discover-servers`, e.g. `DISCOVER_QUERY="vector search" DISCOVER_LIMIT=5 DISCOVER_DRY_RUN=1 make discover-servers`. Supported env knobs mirror the MCP payload (`DISCOVER_QUERY`, `DISCOVER_TAGS`, `DISCOVER_PRESET`, `DISCOVER_LIMIT`, `DISCOVER_MIN_SCORE`, `DISCOVER_APPEND`, `DISCOVER_DRY_RUN`).
 - `manage_stelae` now ships in the proxy manifest like any other downstream server; the streamable bridge only injects a local fallback descriptor if the proxy catalog is missing the tool (for example during restart). Codex sessions keep working, but once the proxy is healthy all calls flow through the canonical manifest entry.

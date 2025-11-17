@@ -7,8 +7,14 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-
 VAR_PATTERN = re.compile(r"\$\{([A-Z0-9_]+)\}")
+CATALOG_DIRNAME = "catalog"
+BUNDLES_DIRNAME = "bundles"
+BUNDLE_PLACEHOLDER = ".placeholder.json"
+SERVER_FLAG_VARS = {
+    "one_mcp": "STELAE_ONE_MCP_VISIBLE",
+    "facade": "STELAE_FACADE_VISIBLE",
+}
 
 
 @lru_cache(maxsize=1)
@@ -70,19 +76,20 @@ def _with_local_suffix(filename: str) -> str:
     return f"{prefix}.local{suffix}"
 
 
-def overlay_path_for(base_path: Path, *, root: Path | None = None) -> Path:
+def overlay_path_for(base_path: Path, *, root: Path | None = None, config_base: Path | None = None) -> Path:
     root = root or repo_root()
+    home = (config_base or config_home()).expanduser()
     absolute = base_path if base_path.is_absolute() else (root / base_path)
     try:
         relative = absolute.relative_to(root)
     except ValueError:
         relative = Path(absolute.name)
     overlay_name = _with_local_suffix(relative.name)
-    destination = config_home() / overlay_name
+    destination = home / overlay_name
 
     legacy_path: Path | None = None
     if relative.parent != Path("."):
-        legacy_candidate = config_home() / relative.parent / overlay_name
+        legacy_candidate = home / relative.parent / overlay_name
         if legacy_candidate != destination:
             legacy_path = legacy_candidate
     if legacy_path and legacy_path.exists() and not destination.exists():
@@ -100,6 +107,97 @@ def overlay_path_for(base_path: Path, *, root: Path | None = None) -> Path:
 
 def ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _normalize_json_name(name: str, *, default: str | None = None) -> str:
+    trimmed = str(name or "").strip()
+    if not trimmed and default:
+        trimmed = default
+    if not trimmed:
+        raise ValueError("JSON filename must be non-empty")
+    return trimmed if trimmed.endswith(".json") else f"{trimmed}.json"
+
+
+def ensure_catalog_file(name: str = "core.json", *, base: Path | None = None) -> Path:
+    home = (base or config_home()).expanduser()
+    catalog_dir = home / CATALOG_DIRNAME
+    catalog_dir.mkdir(parents=True, exist_ok=True)
+    filename = _normalize_json_name(name, default="core.json")
+    path = catalog_dir / filename
+    if not path.exists():
+        write_json(path, {})
+    return path
+
+
+def ensure_bundle_catalog(bundle_name: str, *, base: Path | None = None, filename: str = "catalog.json") -> Path:
+    normalized_bundle = str(bundle_name or "").strip()
+    if not normalized_bundle:
+        raise ValueError("Bundle name must be non-empty")
+    home = (base or config_home()).expanduser()
+    bundle_dir = home / BUNDLES_DIRNAME / normalized_bundle
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    target = bundle_dir / _normalize_json_name(filename, default="catalog.json")
+    if not target.exists():
+        write_json(target, {})
+    return target
+
+
+def _coerce_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "y", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "n", "off"}:
+            return False
+    return None
+
+
+def server_enabled(name: str) -> bool:
+    env_var = SERVER_FLAG_VARS.get(name)
+    if env_var:
+        overridden = _coerce_bool(os.environ.get(env_var))
+        if overridden is not None:
+            return overridden
+    return True
+
+
+def ensure_config_home_scaffold(*, base: Path | None = None, catalog_files: Sequence[str] | None = None) -> dict[str, Path]:
+    home = (base or config_home()).expanduser()
+    home.mkdir(parents=True, exist_ok=True)
+    names = list(catalog_files or ["core.json"])
+    first_name = names[0] if names else "core.json"
+    catalog_dir = ensure_catalog_file(first_name, base=home).parent
+    for name in names[1:]:
+        ensure_catalog_file(name, base=home)
+    bundles_dir = home / BUNDLES_DIRNAME
+    bundles_dir.mkdir(parents=True, exist_ok=True)
+    placeholder = bundles_dir / BUNDLE_PLACEHOLDER
+    if not placeholder.exists():
+        write_json(placeholder, {})
+    return {"config_home": home, "catalog_dir": catalog_dir, "bundles_dir": bundles_dir}
+
+
+def ensure_overlay_from_defaults(
+    base_path: Path,
+    default_payload: Mapping[str, Any],
+    *,
+    root: Path | None = None,
+    config_base: Path | None = None,
+    overwrite: bool = False,
+) -> Path:
+    """Write an overlay file seeded from embedded defaults, if missing."""
+
+    overlay = overlay_path_for(base_path, root=root, config_base=config_base)
+    if overlay.exists() and not overwrite:
+        return overlay
+    ensure_parent(overlay)
+    payload_copy = json.loads(json.dumps(default_payload, ensure_ascii=False))
+    write_json(overlay, payload_copy)
+    return overlay
 
 
 def deep_merge(dest: Any, src: Any) -> Any:

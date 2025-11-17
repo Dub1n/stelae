@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "notes": "Starter bundle servers are managed via manage_stelae install_server and do not need additional package installs.",
+  "installRefs": [
+    {"ref": "bundle:starter:fetch", "description": "Fetch HTTP MCP server"},
+    {"ref": "bundle:starter:mem", "description": "Basic Memory MCP server"},
+    {"ref": "bundle:starter:scrapling", "description": "Scrapling Fetch MCP bridge"},
+    {"ref": "bundle:starter:strata", "description": "Strata CLI MCP server"},
+    {"ref": "bundle:starter:fs", "description": "Filesystem helper"},
+    {"ref": "bundle:starter:rg", "description": "Ripgrep helper"},
+    {"ref": "bundle:starter:sh", "description": "Commands helper"}
+  ]
+}

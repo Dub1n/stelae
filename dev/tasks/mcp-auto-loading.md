@@ -17,7 +17,7 @@ The workflow should also cover manual JSON blobs and provide guardrails (dry-run
 
 ## Checklist
 
-- [x] Define the interface for discovery ingestion (JSON schema sourced from 1mcp, stored under `config/discovered_servers.json`).
+- [x] Define the interface for discovery ingestion (JSON schema sourced from 1mcp, stored under `${STELAE_DISCOVERY_PATH}`).
 - [x] Implement the MCP server:
   - Expose a single tool, `manage_stelae`, with an `operation` enum (`list_discovered_servers`, `install_server`, `refresh_discovery`, `run_reconciler`, etc.) and operation-specific `params` validated via a discriminated union schema.
   - Optional operations cover `remove_server`, `dry_run_install`, or future reconciler automation.
@@ -45,7 +45,7 @@ The workflow should also cover manual JSON blobs and provide guardrails (dry-run
 
 ### Discovery Cache
 
-- Expect 1mcp to write `config/discovered_servers.json` (one array of entries).
+- Expect 1mcp to write `${STELAE_DISCOVERY_PATH}` (one array of entries).
 - Each entry should include: `name`, `transport`, `command` or `url`, optional `args`, `env`, `description`, `source` (Git repo / manifest URL), `tools` (names/descriptions if known), `requiresAuth` flag.
 - The integrator should gracefully handle missing fields and mark entries as “incomplete”.
 
@@ -107,7 +107,7 @@ The workflow should also cover manual JSON blobs and provide guardrails (dry-run
 ## Status
 
 - `scripts/stelae_integrator_server.py` exposes the `manage_stelae` MCP/CLI tool backed by `stelae_lib.integrator.*` helpers (discovery store, proxy template merger, tool override seeder, command runner).
-- Discovery descriptors now live in `config/discovered_servers.json`; installs validate transports, binaries, and `.env` placeholders before editing templates.
+- Discovery descriptors now live in `${STELAE_DISCOVERY_PATH}`; installs validate transports, binaries, and `.env` placeholders before editing templates.
 - The integrator seeds overrides, writes sorted template entries, and reruns `make render-proxy` + `scripts/run_restart_stelae.sh --full`, returning diffs and command transcripts (with dry-run previews).
 - Regression coverage: `tests/test_stelae_integrator.py` exercises list/install/remove/refresh flows plus the mock command runner.
 - README + `docs/ARCHITECTURE.md` describe the workflow (“Installing servers discovered by 1mcp” + “Discovery & Auto-Loading Pipeline”), and `dev/progress.md` marks the requirement complete.
@@ -115,7 +115,7 @@ The workflow should also cover manual JSON blobs and provide guardrails (dry-run
 ## Follow-on Tasks
 
 - [x] **Managed 1mcp discovery operation** – `discover_servers` now lives inside `StelaeIntegratorService`, feeds `details.servers[*].descriptor`, and has regression coverage in `tests/test_stelae_integrator.py`.
-- [x] **Self-contained 1mcp bootstrap** – `scripts/bootstrap_one_mcp.py` clones/syncs `~/apps/vendor/1mcpserver`, seeds `config/discovered_servers.json`, and writes `~/.config/1mcp/mcp.json`. README documents the workflow.
+- [x] **Self-contained 1mcp bootstrap** – `scripts/bootstrap_one_mcp.py` clones/syncs `~/apps/vendor/1mcpserver`, seeds `${STELAE_DISCOVERY_PATH}`, and writes `~/.config/1mcp/mcp.json`. README documents the workflow.
 - [x] **CI/automation hooks** – `make discover-servers` shells into `scripts/discover_servers_cli.py`, allowing env-driven queries (`DISCOVER_QUERY`, `DISCOVER_TAGS`, etc.) without leaving the terminal. The target doubles as the dry-run smoke test when you set `DISCOVER_DRY_RUN=1`.
 - [x] **Codex CLI end-to-end smoke test** – `dev/tasks/stelae-smoke-readiness.md#codex-orchestration` captures the full golden path (discover → dry-run install → install → reconciler) with ready-to-paste payloads plus validation commands (`curl` + CLI fallbacks).
 
