@@ -43,11 +43,13 @@ def _write_json(path: Path, payload) -> None:
 
 @pytest.fixture()
 def integrator_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    config_dir = tmp_path / "config"
-    config_dir.mkdir()
-    template_path = config_dir / "proxy.template.json"
-    overrides_path = config_dir / "tool_overrides.json"
-    discovery_path = config_dir / "discovered_servers.json"
+    config_home = tmp_path / ".stelae-config"
+    state_home = config_home / ".state"
+    config_home.mkdir()
+    state_home.mkdir()
+    template_path = config_home / "proxy.template.json"
+    overrides_path = config_home / "tool_overrides.json"
+    discovery_path = state_home / "discovered_servers.json"
     _write_json(template_path, {"mcpServers": {}})
     _write_json(
         overrides_path,
@@ -58,7 +60,7 @@ def integrator_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         },
     )
     _write_json(discovery_path, [SAMPLE_DISCOVERY])
-    env_file = tmp_path / ".env"
+    env_file = config_home / ".env"
     (tmp_path / "one_mcp").mkdir()
     _write_json(tmp_path / "one_mcp" / "discovered_servers.json", [SAMPLE_DISCOVERY | {"name": "refreshed"}])
     env_file.write_text(
@@ -66,8 +68,12 @@ def integrator_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         f"STELAE_DISCOVERY_PATH={discovery_path}\n",
         encoding="utf-8",
     )
-    config_home = tmp_path / ".stelae-config"
     monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_home))
+    monkeypatch.setenv("STELAE_STATE_HOME", str(state_home))
+    monkeypatch.setenv("STELAE_DISCOVERY_PATH", str(discovery_path))
+    monkeypatch.setenv("STELAE_TOOL_OVERRIDES", str(overrides_path))
+    monkeypatch.setenv("TOOL_OVERRIDES_PATH", str(state_home / "tool_overrides.json"))
+    monkeypatch.setenv("TOOL_SCHEMA_STATUS_PATH", str(state_home / "tool_schema_status.json"))
     config_overlays.config_home.cache_clear()
     config_overlays.state_home.cache_clear()
     return {
@@ -117,8 +123,8 @@ def test_seeds_discovery_cache_from_defaults(tmp_path: Path, monkeypatch: pytest
     config_overlays.config_home.cache_clear()
     config_overlays.state_home.cache_clear()
     root = tmp_path / "repo"
-    template = root / "config" / "proxy.template.json"
-    overrides = root / "config" / "tool_overrides.json"
+    template = config_home / "proxy.template.json"
+    overrides = config_home / "tool_overrides.json"
     template.parent.mkdir(parents=True, exist_ok=True)
     _write_json(template, {"mcpServers": {}})
     _write_json(
@@ -129,6 +135,7 @@ def test_seeds_discovery_cache_from_defaults(tmp_path: Path, monkeypatch: pytest
             "servers": {},
         },
     )
+    root.mkdir(exist_ok=True)
     env_file = root / ".env"
     env_file.write_text("", encoding="utf-8")
     service = StelaeIntegratorService(
@@ -184,10 +191,7 @@ def test_install_server_writes_overlay_when_not_overridden(integrator_workspace)
     overlay_data = json.loads(overlay_template_path.read_text(encoding="utf-8"))
     assert "demo_server" in overlay_data["mcpServers"]
     base_overrides = json.loads(integrator_workspace["overrides"].read_text(encoding="utf-8"))
-    assert "demo_server" not in base_overrides["servers"]
-    overlay_overrides_path = overlay_path_for(integrator_workspace["overrides"])
-    overlay_overrides = json.loads(overlay_overrides_path.read_text(encoding="utf-8"))
-    assert "demo_server" in overlay_overrides["servers"]
+    assert "demo_server" in base_overrides["servers"]
 
 
 def test_install_server_waits_for_readiness(integrator_workspace):

@@ -1,44 +1,15 @@
 from __future__ import annotations
 
-from stelae_lib.bundles import _merge_named_entries
+from stelae_lib.bundles import _write_catalog_fragment
 
 
-def test_merge_named_entries_prefers_additions() -> None:
-    existing = [
-        {"name": "scrapling_fetch_suite", "description": "old"},
-        {"name": "custom_suite", "description": "custom"},
-    ]
-    additions = [
-        {"name": "scrapling_fetch_suite", "description": "new"},
-        {"name": "memory_suite", "description": "memory"},
-    ]
-
-    merged = _merge_named_entries(existing, additions, key_func=lambda entry: entry.get("name"))
-
-    assert [entry["name"] for entry in merged] == [
-        "scrapling_fetch_suite",
-        "memory_suite",
-        "custom_suite",
-    ]
-    assert merged[0]["description"] == "new"
-
-
-def test_merge_named_entries_handles_hidden_tools() -> None:
-    existing = [
-        {"server": "docs", "tool": "fetch_document_links", "reason": "old"},
-    ]
-    additions = [
-        {"server": "docs", "tool": "fetch_document_links", "reason": "new"},
-        {"server": "mem", "tool": "legacy", "reason": "custom"},
-    ]
-
-    merged = _merge_named_entries(
-        existing,
-        additions,
-        key_func=lambda entry: f"{entry.get('server')}::{entry.get('tool')}"
-        if entry.get("server") and entry.get("tool")
-        else None,
-    )
-
-    assert merged[0]["reason"] == "new"
-    assert merged[1]["server"] == "mem"
+def test_write_catalog_fragment_updates_only_when_changed(tmp_path) -> None:
+    target = tmp_path / "bundles" / "starter" / "catalog.json"
+    payload = {"name": "starter", "servers": []}
+    # First write should report changed.
+    assert _write_catalog_fragment(target, payload, dry_run=False) is True
+    # Second write with identical payload should be a no-op.
+    assert _write_catalog_fragment(target, payload, dry_run=False) is False
+    # Changing payload triggers a write.
+    payload["servers"] = [{"name": "docs"}]
+    assert _write_catalog_fragment(target, payload, dry_run=False) is True

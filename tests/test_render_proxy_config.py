@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -24,6 +25,10 @@ def test_render_proxy_config_disables_servers(tmp_path, monkeypatch) -> None:
     )
     output = config_home / ".state" / "proxy.json"
 
+    env = os.environ.copy()
+    env["STELAE_CONFIG_HOME"] = str(config_home)
+    env["STELAE_STATE_HOME"] = str(config_home / ".state")
+    env["PROXY_CONFIG"] = str(output)
     subprocess.check_call(
         [
             sys.executable,
@@ -40,6 +45,7 @@ def test_render_proxy_config_disables_servers(tmp_path, monkeypatch) -> None:
             str(overlay_env),
         ],
         cwd=ROOT,
+        env=env,
     )
 
     data = json.loads(output.read_text(encoding="utf-8"))

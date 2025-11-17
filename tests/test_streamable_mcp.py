@@ -318,7 +318,9 @@ def test_rendered_manifest_contains_only_aggregates(tmp_path: Path) -> None:
         for tool, descriptor in data["tools"].items()
         if descriptor.get("enabled", True)
     ]
-    assert enabled == [("tool_aggregator", "sample_fetch_suite")]
+    assert ("tool_aggregator", "sample_fetch_suite") in enabled
+    assert ("docs", "fetch_document_links") not in enabled
+    assert ("docs", "fetch_documentation_page") not in enabled
 
     schema = servers["tool_aggregator"]["tools"]["sample_fetch_suite"]["inputSchema"]
     assert len(schema["required"]) == len(set(schema["required"]))

@@ -12,6 +12,11 @@ from stelae_lib.catalog_defaults import DEFAULT_CUSTOM_TOOLS
 
 def _reload_server(monkeypatch: pytest.MonkeyPatch, config_home: Path) -> object:
     monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_home))
+    monkeypatch.setenv("STELAE_STATE_HOME", str(config_home / ".state"))
+    existing = os.getenv("STELAE_CUSTOM_TOOLS_CONFIG")
+    default_path = config_home / "custom_tools.json"
+    if not existing or not str(existing).startswith(str(config_home)):
+        monkeypatch.setenv("STELAE_CUSTOM_TOOLS_CONFIG", str(default_path))
     config_overlays.config_home.cache_clear()
     config_overlays.state_home.cache_clear()
     sys.modules.pop("scripts.custom_tools_server", None)
