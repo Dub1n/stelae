@@ -486,6 +486,19 @@ else
   warn "Live catalog capture failed (continuing)."
 fi
 
+if command -v python3 >/dev/null 2>&1; then
+  catalog_diff_out=$(python3 "$STELAE_DIR/scripts/diff_catalog_snapshots.py" --fail-on-drift 2>/dev/null || true)
+  if [ -n "$catalog_diff_out" ]; then
+    log "Catalog diff (intended vs live):"
+    printf '%s\n' "$catalog_diff_out"
+  fi
+  catalog_metrics_out=$(python3 "$STELAE_DIR/scripts/catalog_metrics.py" 2>/dev/null || true)
+  if [ -n "$catalog_metrics_out" ]; then
+    log "Catalog metrics:"
+    printf '%s\n' "$catalog_metrics_out"
+  fi
+fi
+
 log "Local probe: tools/list → names (first 40)"
 curl --max-time "$CURL_MAX_TIME" -s "http://127.0.0.1:${PROXY_PORT}/mcp" -H 'Content-Type: application/json' \
   --data '{"jsonrpc":"2.0","id":"T","method":"tools/list"}' \

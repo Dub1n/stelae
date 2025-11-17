@@ -81,6 +81,20 @@ else
   echo "==> Skipping restart step"
 fi
 
+if [[ "${STELAE_ALLOW_LIVE_DRIFT:-0}" =~ ^(1|true|yes|on)$ ]]; then
+  echo "==> Skipping catalog drift enforcement (STELAE_ALLOW_LIVE_DRIFT set)"
+else
+  if command -v python3 >/dev/null 2>&1; then
+    echo "==> Checking catalog drift (intended vs live)"
+    if ! (cd "$REPO_ROOT" && python3 scripts/diff_catalog_snapshots.py --fail-on-drift); then
+      echo "verify-clean: catalog drift detected. Set STELAE_ALLOW_LIVE_DRIFT=1 to bypass." >&2
+      exit 1
+    fi
+  else
+    echo "==> python3 not available; skipping catalog drift check"
+  fi
+fi
+
 git -C "$REPO_ROOT" status --porcelain > "$after_status"
 if ! cmp -s "$before_status" "$after_status"; then
   echo "verify-clean: tracked files changed after automation." >&2

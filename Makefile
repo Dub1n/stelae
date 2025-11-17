@@ -52,7 +52,7 @@ render-cloudflared:
 up-with-tunnel: render-proxy render-cloudflared up
 	@echo "Cloudflared config ready. Ensure CF_CONF points to $(CF_OUTPUT) before pm2 start --only cloudflared."
 
-.PHONY: up down restart-proxy logs status render-proxy help discover-servers verify-clean
+.PHONY: up down restart-proxy logs status render-proxy help discover-servers verify-clean check-catalog-drift
 
 help:
 	@echo "Targets:"
@@ -109,3 +109,6 @@ discover-servers:
 
 verify-clean:
 	@./scripts/verify_clean_repo.sh
+
+check-catalog-drift:
+	@$(PYTHON) scripts/diff_catalog_snapshots.py --fail-on-drift
