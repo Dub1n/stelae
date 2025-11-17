@@ -497,6 +497,10 @@ if command -v python3 >/dev/null 2>&1; then
     log "Catalog metrics:"
     printf '%s\n' "$catalog_metrics_out"
   fi
+  prune_out=$(python3 "$STELAE_DIR/scripts/prune_catalog_history.py" 2>/dev/null || true)
+  if [ -n "$prune_out" ]; then
+    log "Catalog history prune: $prune_out"
+  fi
 fi
 
 log "Local probe: tools/list → names (first 40)"

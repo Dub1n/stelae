@@ -1,4 +1,5 @@
 import json
+import os
 import socket
 import subprocess
 import time
@@ -100,9 +101,13 @@ def test_manifest_and_tools_list_respect_overrides(tmp_path: Path) -> None:
     config_path = tmp_path / "config.json"
     config_path.write_text(json.dumps(config), encoding="utf-8")
 
+    env = os.environ.copy()
+    env["STELAE_CONFIG_HOME"] = str(tmp_path)
+    env["STELAE_STATE_HOME"] = str(tmp_path / ".state")
     process = subprocess.Popen(
         [str(binary_path), "--config", str(config_path)],
         cwd=repo_root,
+        env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
