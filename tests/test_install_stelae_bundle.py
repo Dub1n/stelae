@@ -68,11 +68,14 @@ def _sample_bundle() -> dict[str, Any]:
     }
 
 
-def test_install_bundle_updates_overlays_and_runs_commands(tmp_path, monkeypatch):
+def test_install_bundle_installs_servers_and_runs_commands(tmp_path, monkeypatch):
     monkeypatch.setenv("STELAE_CONFIG_HOME", str(tmp_path / "config_home"))
     config_overlays.config_home.cache_clear()
     config_dir = config_overlays.config_home()
     assert config_dir == tmp_path / "config_home"
+    catalog_fragment = config_dir / "bundles" / "starter" / "catalog.json"
+    catalog_fragment.parent.mkdir(parents=True, exist_ok=True)
+    catalog_fragment.write_text(json.dumps(_sample_bundle()), encoding="utf-8")
     bundle = _sample_bundle()
     service = FakeService()
     runner = FakeRunner()
@@ -80,16 +83,14 @@ def test_install_bundle_updates_overlays_and_runs_commands(tmp_path, monkeypatch
         bundle,
         service_factory=lambda: service,
         command_runner=runner,
+        catalog_fragment_path=catalog_fragment,
+        bundle_files_changed=True,
     )
     assert summary["errors"] == []
     assert summary["installed"] == ["docs", "fs"]
-    assert len(summary["overlays"]) == 2
-    overrides_overlay = config_dir / "tool_overrides.local.json"
-    aggregations_overlay = config_dir / "tool_aggregations.local.json"
-    assert overrides_overlay.exists()
-    assert aggregations_overlay.exists()
-    data = json.loads(overrides_overlay.read_text())
-    assert "docs" in data.get("servers", {})
+    assert summary["overlays"] == []
+    assert catalog_fragment.exists()
+    assert service.calls == ["docs", "fs"]
     assert runner.commands == bundles.DEFAULT_RESTART_COMMANDS
     assert service.force_flags == [False, False]
     assert summary["installRefs"] == {"registered": [], "skipped": []}
@@ -107,14 +108,13 @@ def test_install_bundle_respects_filters_and_dry_run(tmp_path, monkeypatch):
         server_filter=["docs"],
         dry_run=True,
         service_factory=lambda: service,
+        catalog_fragment_path=config_dir / "bundles" / "starter" / "catalog.json",
     )
     assert summary["dryRun"] is True
     assert summary["installed"] == []
     assert summary["skipped"] == ["docs"]
     assert not summary["commands"]
     assert summary["errors"] == []
-    overrides_overlay = config_dir / "tool_overrides.local.json"
-    assert not overrides_overlay.exists()
     assert service.force_flags == [False]
 
 
@@ -164,6 +164,8 @@ def test_install_bundle_registers_install_refs_when_catalog_fragment_provided(tm
     assert summary["overlays"] == []
     assert summary["installRefs"]["registered"] == ["bundle:starter:docs"]
     assert install_state.payload["installs"]["bundle:starter:docs"]["bundle"] == "starter"
+    assert summary["commands"] == []
+    assert (tmp_path / "config" / "bundles" / "starter" / "catalog.json").exists()
 
 
 def test_install_bundle_reuses_existing_install_refs(tmp_path):
@@ -212,4 +214,26 @@ def test_sync_bundle_folder_copies_payload(tmp_path, monkeypatch):
     expected = tmp_path / "config_home" / "bundles" / "starter"
     assert result.destination == expected
     assert (expected / "catalog.json").exists()
+    config_overlays.config_home.cache_clear()
+
+
+def test_install_bundle_writes_catalog_into_config_home(tmp_path, monkeypatch):
+    monkeypatch.setenv("STELAE_CONFIG_HOME", str(tmp_path / "config_home"))
+    config_overlays.config_home.cache_clear()
+    bundle = _sample_bundle()
+    service = FakeService()
+    runner = FakeRunner()
+
+    summary = bundles.install_bundle(
+        bundle,
+        service_factory=lambda: service,
+        command_runner=runner,
+        restart=False,
+    )
+
+    fragment = tmp_path / "config_home" / "bundles" / "starter" / "catalog.json"
+    assert fragment.exists()
+    assert summary["errors"] == []
+    assert ".local" not in fragment.name
+    assert not any("local" in path.name for path in fragment.parent.glob("*.json") if path != fragment)
     config_overlays.config_home.cache_clear()

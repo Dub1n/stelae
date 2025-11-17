@@ -7,10 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, Mapping
 
 from stelae_lib import config_overlays
-from stelae_lib.integrator.tool_aggregations import (
-    ToolAggregationConfig,
-    load_tool_aggregation_config,
-)
+from stelae_lib.integrator.tool_aggregations import ToolAggregationConfig
 from stelae_lib.integrator.tool_overrides import ToolOverridesStore
 from stelae_lib.catalog_defaults import DEFAULT_TOOL_OVERRIDES
 
@@ -34,25 +31,19 @@ def build_sample_runtime(tmp_path: Path) -> AggregationFixture:
     config_overlays.state_home.cache_clear()
 
     try:
-        repo_config = tmp_path / "config"
-        repo_config.mkdir(parents=True, exist_ok=True)
-        overrides_path = repo_config / "tool_overrides.json"
+        overrides_path = config_root / "tool_overrides.json"
+        overrides_path.parent.mkdir(parents=True, exist_ok=True)
         overrides_path.write_text(json.dumps(_base_overrides(), indent=2), encoding="utf-8")
 
-        aggregation_path = repo_config / "tool_aggregations.json"
-        aggregation_path.write_text(json.dumps(_aggregation_payload(), indent=2), encoding="utf-8")
-
-        overlay_path = config_root / "tool_overrides.local.json"
-        runtime_path = config_root / "tool_overrides.json"
-        overlay_path.parent.mkdir(parents=True, exist_ok=True)
+        runtime_path = config_overlays.runtime_path("tool_overrides.json")
 
         store = ToolOverridesStore(
             overrides_path,
-            overlay_path=overlay_path,
+            overlay_path=overrides_path,
             runtime_path=runtime_path,
             target="overlay",
         )
-        config = load_tool_aggregation_config(aggregation_path)
+        config = ToolAggregationConfig.from_data(_aggregation_payload())
         changed = config.apply_overrides(store)
         assert changed, "Expected aggregation config to update overrides"
         store.write()

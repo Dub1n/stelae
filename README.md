@@ -12,7 +12,7 @@ A WSL-native deployment of [mcp-proxy](https://github.com/TBXark/mcp-proxy) that
 | Filesystem MCP | local | stdio | `${FILESYSTEM_BIN} --root ${STELAE_DIR}` | Scoped read/write access to the repo. |
 | ripgrep MCP | local | stdio | `${RG_BIN} --stdio --root ${SEARCH_ROOT}` | Code search backend powering the `grep` tool. |
 | Commands MCP | local | stdio | `${NPX_BIN}` | Runs the `g0t4/mcp-server-commands` binary so terminal helpers execute inside the repo. |
-| Tool aggregator MCP | default | stdio | `${PYTHON} ${STELAE_DIR}/scripts/tool_aggregator_server.py` | Publishes declarative composite tools from `config/tool_aggregations.json` and any overlays (the starter bundle installs suites such as `workspace_fs_read`). |
+| Tool aggregator MCP | default | stdio | `${PYTHON} ${STELAE_DIR}/scripts/tool_aggregator_server.py` | Publishes declarative composite tools from config-home catalog fragments (`${STELAE_CONFIG_HOME}/catalog/*.json`) plus bundle fragments under `${STELAE_CONFIG_HOME}/bundles/*/catalog.json` (the starter bundle installs suites such as `workspace_fs_read`). |
 | Stelae integrator MCP | default | stdio | `${PYTHON} ${STELAE_DIR}/scripts/stelae_integrator_server.py` | Consumes 1mcp discovery output, updates templates/overrides, and restarts the stack via `manage_stelae`. |
 | Basic Memory MCP | local | stdio | `${MEMORY_BIN}` | Persistent project memory. |
 | Strata MCP | local | stdio | `${STRATA_BIN}` | Progressive discovery / intent routing. |
@@ -30,19 +30,18 @@ Path placeholders expand from `.env`; see setup below.
 
 - **Core template:** the repo now ships only the self-management essentials (custom tools, the Stelae integrator, the tool aggregator helper, the 1mcp stdio agent, and the public 1mcp catalog bridge) plus the Go proxy and FastMCP bridge. Optional suites (workspace filesystem helpers, memory, fetch, etc.) appear only after installing the starter bundle so fresh clones stay lean.
 - **Starter bundle:** Basic Memory, Strata, Fetch, Scrapling, filesystem/ripgrep/commands runners, and other developer-quality-of-life servers now live in the folder-based `bundles/starter/` package. `python scripts/install_stelae_bundle.py` copies that folder into `${STELAE_CONFIG_HOME}/bundles/starter/`, registers each server’s `installRef`, and runs `manage_stelae install_server` so catalog data flows through the bundle fragment instead of overlay files. Use `--server` to pick individual entries, `--dry-run` to preview the copy/install steps, or `--force` to overwrite an existing server entry when you rerun the installer.
-- **Overlays only:** bundle installs no longer touch `${STELAE_CONFIG_HOME}/*.local.json`; the tracked folder is the source of truth and uninstalling is as simple as removing `${STELAE_CONFIG_HOME}/bundles/<name>/`. Delete a `.local` file only when you want to reset manual edits, or remove the bundle folder entirely to return to the lean core stack.
+- **Config-home only:** bundle installs copy folders into `${STELAE_CONFIG_HOME}/bundles/<name>/` and contribute catalog fragments there; removing the folder uninstalls it. No tracked overrides or `.local` files are touched.
 
 ### Overlay workflow & guardrails
 
-Whenever you modify tracked templates or add new aggregates, follow this loop so manifests stay deterministic and clone-safe:
+Whenever you modify templates or catalog fragments, follow this loop so manifests stay deterministic and clone-safe:
 
-1. `python scripts/process_tool_aggregations.py --scope default` – refresh the tracked default aggregations before committing changes.
-2. `python scripts/process_tool_aggregations.py --scope local` – regenerate `${TOOL_OVERRIDES_PATH}` and the intended catalog from config-home fragments/bundles.
-3. `make render-proxy` – re-render `${PROXY_CONFIG}` plus merged overrides inside `${STELAE_STATE_HOME}` (defaults to `${STELAE_CONFIG_HOME}/.state`).
-4. `pytest tests/test_repo_sanitized.py` – fails if renders leak host-specific paths or stop pointing runtime outputs at the config/state homes.
-5. `make verify-clean` (optional pre-commit step) – proves the render + restart helper leave `git status` empty.
+1. `python scripts/process_tool_aggregations.py --scope local` – validate config-home catalog/bundle fragments and emit `${TOOL_OVERRIDES_PATH}` plus `${INTENDED_CATALOG_PATH}` under `${STELAE_STATE_HOME}`.
+2. `make render-proxy` – re-render `${PROXY_CONFIG}` plus merged overrides inside `${STELAE_STATE_HOME}` (defaults to `${STELAE_CONFIG_HOME}/.state`).
+3. `pytest tests/test_repo_sanitized.py` – fails if renders leak host-specific paths or stop pointing runtime outputs at the config/state homes.
+4. `make verify-clean` (optional pre-commit step) – proves the render + restart helper leave `git status` empty.
 
-Keep hand-edited config (`*.json`, `.env.local`, discovery caches) in `${STELAE_CONFIG_HOME}` and let renderers write runtime JSON into `${STELAE_STATE_HOME}` so machines never drift apart. The consolidated smoke-readiness plan in `dev/tasks/stelae-smoke-readiness.md` depends on this workflow; update that doc when process changes.
+Keep hand-edited config in `${STELAE_CONFIG_HOME}` (env files plus catalog fragments under `catalog/` and bundle folders under `bundles/`) and let renderers write runtime JSON into `${STELAE_STATE_HOME}` so machines never drift apart. The consolidated smoke-readiness plan in `dev/tasks/stelae-smoke-readiness.md` depends on this workflow; update that doc when process changes.
 
 - Scrapling’s canonical schema lives in your config-home overrides (`${STELAE_CONFIG_HOME}/tool_overrides.json`) under the `scrapling` server. Both `s_fetch_page` and `s_fetch_pattern` advertise `{metadata, content}` payloads in the merged runtime file `${TOOL_OVERRIDES_PATH}`, and the Go proxy’s call-path adapter keeps those overrides in sync whenever a server emits a new structure. If Scrapling’s upstream contract changes, update the config-home file and rerun `make render-proxy` so manifests and tools/list remain truthful.
 
@@ -74,7 +73,7 @@ Keep hand-edited config (`*.json`, `.env.local`, discovery caches) in `${STELAE_
    \```bash
    make render-proxy
    \```
-   This renders `${PROXY_CONFIG}` (defaults to `~/.config/stelae/.state/proxy.json`) from `config/proxy.template.json` plus `${STELAE_CONFIG_HOME}/proxy.template.local.json` if present. The renderer also merges `${STELAE_ENV_FILE}`, `.env.example`, and `${STELAE_CONFIG_HOME}/.env.local`, so placeholders such as `{{ PATH }}` resolve correctly without pulling in fragile shell state.
+   This renders `${PROXY_CONFIG}` (defaults to `~/.config/stelae/.state/proxy.json`) from `config/proxy.template.json` using `${STELAE_ENV_FILE}` (plus `${STELAE_CONFIG_HOME}/.env.local` for hydrated defaults), so placeholders such as `{{ PATH }}` resolve correctly without pulling in fragile shell state.
 4. (Optional) Tailor tool metadata with the config-home overrides (`${STELAE_CONFIG_HOME}/tool_overrides.json`). The file is validated against `config/tool_overrides.schema.json`, carries an explicit `schemaVersion`, and supports per-tool `description`, aliasing via `name`, richer annotation fields (including `title`), plus full `inputSchema`/`outputSchema` overrides so manifests always describe the wrapped payloads we return. The merged runtime file lives at `${TOOL_OVERRIDES_PATH}`, so keep the config-home copy focused on defaults you want locally:
 
    ```json
@@ -143,7 +142,7 @@ Keep hand-edited config (`*.json`, `.env.local`, discovery caches) in `${STELAE_
 
   Pass `--output` to capture into alternate files (handy for diffs) or set `STELAE_STATE_HOME`/`STELAE_PROXY_BASE` before invoking the script. The restart/verify automation already handles this, so `${STELAE_STATE_HOME}/live_catalog.json` is refreshed after every successful stack restart.
 
-   After you install the starter bundle, the aggregator exposes these optional suites via your local overlay:
+   After you install the starter bundle, the aggregator exposes these optional suites from the synced bundle catalog fragment:
    - `workspace_fs_read` – Read-only filesystem helpers (`list_*`, `read_*`, `find_*`, `search_*`, `get_file_info`, `calculate_directory_size`).
    - `workspace_fs_write` – Mutating filesystem helpers (`create_directory`, `edit_file`, `write_file`, `move_file`, `delete_*`, `insert_*`, `zip_*`, `unzip_file`).
     > The filesystem server now launches with `rust-mcp-filesystem --allow-write {{STELAE_DIR}}`, so both read/write suites operate inside the repo. Pass absolute paths under `${STELAE_DIR}` when you need deterministic results—the binary inherits the proxy’s working directory, so relative paths depend on whichever cwd the proxy used when spawning the server.
@@ -211,16 +210,16 @@ python scripts/install_stelae_bundle.py
 
   Keeping the wrapper out of `bundles/starter/catalog.json` prevents it from leaking into the default manifest; only run the steps above when you explicitly need the Codex automation stack.
 
-Rerun the installer after pulling template updates or whenever you delete your local overlays. Removing `${STELAE_CONFIG_HOME}/proxy.template.local.json` reverts back to the five-server core automatically.
+Rerun the installer after pulling template updates or whenever you remove a bundle folder. Deleting `${STELAE_CONFIG_HOME}/bundles/<name>/` rolls the catalog back to the tracked core automatically.
 
-### Two-layer overlays
+### Config-home layout
 
-Templates still live in `config/` (proxy, schemas), but all mutable JSON now lives under `${STELAE_CONFIG_HOME}` without `.local` suffixes. Any local edits made via `manage_stelae`, the restart scripts, or manual tweaks are written to `${STELAE_CONFIG_HOME}` instead:
+Templates stay in `config/` (proxy, schemas), while writable data now lives only under `${STELAE_CONFIG_HOME}`:
 
 - `${STELAE_CONFIG_HOME}/.env.local` receives hydrated secrets and generated values so `${STELAE_ENV_FILE}` stays portable.
-- `${STELAE_CONFIG_HOME}/tool_overrides.json`, `tool_aggregations.json`, `discovered_servers.json`, `custom_tools.json`, and `tool_schema_status.json` are the editable copies; renderers and helpers fail fast if these paths point outside `${STELAE_CONFIG_HOME}`/`${STELAE_STATE_HOME}`.
-- Renderers merge template → config-home files → runtime (`${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${STELAE_CONFIG_HOME}/cloudflared.yml`, ...). Delete the config-home copy and rerun the matching command to reset it to embedded defaults.
-- Runtime caches such as `${STELAE_DISCOVERY_PATH}` stay under `${STELAE_CONFIG_HOME}`, while generated artifacts (`${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${TOOL_SCHEMA_STATUS_PATH}`, `${INTENDED_CATALOG_PATH}`) live under `${STELAE_STATE_HOME}`. Git remains clean even when the proxy or integrator writes back metadata.
+- Catalog data lives in `${STELAE_CONFIG_HOME}/catalog/*.json` (seeded via `scripts/setup_env.py --materialize-defaults`) plus bundle fragments under `${STELAE_CONFIG_HOME}/bundles/*/catalog.json`; `process_tool_aggregations.py` merges these into `${TOOL_OVERRIDES_PATH}`/`${INTENDED_CATALOG_PATH}` inside `${STELAE_STATE_HOME}`.
+- Other writable helpers (`tool_overrides.json`, `discovered_servers.json`, `custom_tools.json`, `tool_schema_status.json`) stay alongside the catalog directory in config-home. Renderers/helpers fail fast if these paths point outside `${STELAE_CONFIG_HOME}`/`${STELAE_STATE_HOME}`.
+- Runtime caches (`${STELAE_DISCOVERY_PATH}`) and generated artifacts (`${PROXY_CONFIG}`, `${TOOL_OVERRIDES_PATH}`, `${TOOL_SCHEMA_STATUS_PATH}`, `${INTENDED_CATALOG_PATH}`) live under `${STELAE_STATE_HOME}` so git remains clean even when the proxy or integrator writes back metadata.
 
 ### Hygiene Checks
 
@@ -263,13 +262,12 @@ Templates still live in `config/` (proxy, schemas), but all mutable JSON now liv
 
 ### Declarative Tool Aggregations
 
-- **Optional server:** `tool_aggregator` only runs when you keep it enabled in `${STELAE_CONFIG_HOME}/proxy.template.local.json`. The repo template documents every available wrapper, while `${STELAE_CONFIG_HOME}/tool_aggregations.local.json` carries your custom copies so local-only stacks can pare down the catalog.
-- `config/tool_aggregations.json` (validated by `config/tool_aggregations.schema.json`) describes composite MCP tools that we expose under the dedicated `tool_aggregator` server. Each entry defines manifest metadata plus a list of operations, and specifies which downstream tools should be hidden once the wrapper exists. `scripts/tool_aggregator_server.py` loads this file (plus `${STELAE_CONFIG_HOME}/tool_aggregations.local.json`) at runtime, while `scripts/process_tool_aggregations.py --scope local` writes only the local differences into `${TOOL_OVERRIDES_PATH}` (defaults are already tracked) and marks the relevant `hideTools` entries as `enabled: false` so manifests stay tidy. Use `--scope default` when you intentionally need to refresh the tracked defaults.
+- The tracked proxy template keeps `tool_aggregator` enabled; catalog entries are sourced from `${STELAE_CONFIG_HOME}/catalog/*.json` plus `${STELAE_CONFIG_HOME}/bundles/*/catalog.json` and validated against `config/tool_aggregations.schema.json`. `scripts/process_tool_aggregations.py --scope local` merges those fragments with the embedded defaults, writes `${TOOL_OVERRIDES_PATH}`/`${INTENDED_CATALOG_PATH}`, and marks hidden tools as `enabled: false` so manifests stay tidy. Use `--scope default` only when you intentionally need to refresh the embedded defaults.
   A vendor-neutral documentation workflow is under construction; once the new aggregate (`documentation_catalog`) ships, it will surface here alongside the existing filesystem/memory/strata helpers.
 - Aggregated tools return a tuple of downstream `content` blocks plus the preserved `structuredContent`. The runner skips FastMCP’s conversion layer (via a custom `FuncMetadata` shim) and unwraps JSON-like strings before replying, so Codex no longer sees serialized JSON blobs in the `structuredContent.result` field.
 - To add another aggregate tool:
 
-1. Copy the target block inside `bundles/starter/catalog.json` (or your `${STELAE_CONFIG_HOME}/tool_aggregations.local.json`) and adjust the manifest metadata, `operations`, `argumentMappings`, `responseMappings`, and `hideTools` list for the downstream tool(s) you want to wrap.
+1. Copy the target block inside `bundles/starter/catalog.json` (or your `${STELAE_CONFIG_HOME}/catalog/*.json` fragment) and adjust the manifest metadata, `operations`, `argumentMappings`, `responseMappings`, and `hideTools` list for the downstream tool(s) you want to wrap.
  2. (Optional) Run `python scripts/process_tool_aggregations.py --check-only` to validate the JSON/schema without mutating overrides.
  3. Run `make render-proxy` (or `scripts/run_restart_stelae.sh`) so the helper refreshes `${TOOL_OVERRIDES_PATH}`, disables the wrapped tools, and restarts the `tool_aggregator` stdio server.
  4. Call the new MCP tool as normal (e.g., `tools/call name="documentation_catalog" arguments={...}` once it exists); arguments are validated per the rules you encode, then forwarded through the proxy to the downstream tool, and the downstream result is returned unchanged.

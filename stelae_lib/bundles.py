@@ -7,15 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Literal, Mapping, Sequence
 
-from stelae_lib.config_overlays import (
-    BUNDLES_DIRNAME,
-    config_home,
-    deep_merge,
-    ensure_parent,
-    load_json,
-    overlay_path_for,
-    write_json,
-)
+from stelae_lib.config_overlays import BUNDLES_DIRNAME, config_home, ensure_parent, write_json
 from stelae_lib.integrator.core import StelaeIntegratorService
 from stelae_lib.integrator.runner import CommandRunner
 
@@ -24,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BUNDLE_CATALOG_FILENAME = "catalog.json"
 BUNDLE_INSTALL_FILENAME = "install.json"
 INSTALL_STATE_FILENAME = "bundle_installs.json"
+BUNDLE_DEFAULT_NAME = "bundle"
 
 
 @dataclass(frozen=True)
@@ -140,81 +133,19 @@ def sync_bundle_folder(
     return BundleSyncResult(destination=destination, changed=True)
 
 
-def _apply_overlay(base_path: Path, addition: dict[str, Any], *, dry_run: bool) -> tuple[bool, Path]:
-    overlay_path = overlay_path_for(base_path)
-    existing = load_json(overlay_path, default={})
-    merged = deep_merge(existing, addition)
-    if merged == existing:
-        return False, overlay_path
-    if not dry_run:
-        write_json(overlay_path, merged)
-    return True, overlay_path
-
-
-def _merge_named_entries(
-    existing: list[dict[str, Any]],
-    additions: list[dict[str, Any]],
-    *,
-    key_func: Callable[[dict[str, Any]], str | None],
-) -> list[dict[str, Any]]:
-    result: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for entry in additions:
-        key = key_func(entry)
-        if not key or key in seen:
-            continue
-        result.append(json.loads(json.dumps(entry, ensure_ascii=False)))
-        seen.add(key)
-    for entry in existing:
-        key = key_func(entry)
-        if not key or key in seen:
-            continue
-        result.append(json.loads(json.dumps(entry, ensure_ascii=False)))
-        seen.add(key)
-    return result
-
-
-def _apply_tool_aggregations_overlay(
-    base_path: Path,
-    addition: dict[str, Any],
-    *,
-    dry_run: bool,
-) -> tuple[bool, Path]:
-    overlay_path = overlay_path_for(base_path)
-    existing = load_json(overlay_path, default={})
-    passthrough_keys = {
-        key: value
-        for key, value in addition.items()
-        if key not in {"aggregations", "hiddenTools"}
-    }
-    merged = deep_merge(existing, passthrough_keys)
-    existing_aggs = existing.get("aggregations", []) if isinstance(existing.get("aggregations"), list) else []
-    addition_aggs = addition.get("aggregations", []) if isinstance(addition.get("aggregations"), list) else []
-    merged["aggregations"] = _merge_named_entries(
-        existing_aggs,
-        addition_aggs,
-        key_func=lambda entry: str(entry.get("name") or "").strip() or None,
-    )
-    existing_hidden = (
-        existing.get("hiddenTools", []) if isinstance(existing.get("hiddenTools"), list) else []
-    )
-    addition_hidden = (
-        addition.get("hiddenTools", []) if isinstance(addition.get("hiddenTools"), list) else []
-    )
-    merged["hiddenTools"] = _merge_named_entries(
-        existing_hidden,
-        addition_hidden,
-        key_func=lambda entry: (
-            f"{str(entry.get('server') or '').strip()}::{str(entry.get('tool') or '').strip()}"
-            if entry.get("server") and entry.get("tool")
-            else None
-        ),
-    )
-    if merged == existing:
-        return False, overlay_path
-    if not dry_run:
-        write_json(overlay_path, merged)
-    return True, overlay_path
+def _write_catalog_fragment(target: Path, payload: Mapping[str, Any], *, dry_run: bool) -> bool:
+    serialized = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+    if target.exists():
+        try:
+            if target.read_text(encoding="utf-8") == serialized:
+                return False
+        except OSError:
+            pass
+    if dry_run:
+        return True
+    ensure_parent(target)
+    target.write_text(serialized, encoding="utf-8")
+    return True
 
 
 def install_bundle(
@@ -248,6 +179,18 @@ def install_bundle(
     install_refs_summary = {"registered": [], "skipped": []}
     seen_install_refs: set[str] = set()
     errors: list[dict[str, Any]] = []
+    bundle_root = config_home()
+    bundle_files_changed_flag = bool(bundle_files_changed)
+    fragment_path = catalog_fragment_path
+    bundle_label = bundle_name or bundle.get("name") or BUNDLE_DEFAULT_NAME
+    if fragment_path is None:
+        fragment_path = bundle_root / BUNDLES_DIRNAME / str(bundle_label) / BUNDLE_CATALOG_FILENAME
+    fragment_changed = _write_catalog_fragment(fragment_path, bundle, dry_run=dry_run)
+    if fragment_changed:
+        bundle_files_changed_flag = True
+        emit(f"[bundle] {'Would write' if dry_run else 'Wrote'} catalog fragment → {fragment_path}")
+    catalog_fragment_path = fragment_path
+
     for raw_descriptor in bundle.get("servers", []):
         if not isinstance(raw_descriptor, dict):
             continue
@@ -287,25 +230,7 @@ def install_bundle(
             log=emit,
         )
     overlay_updates: list[dict[str, Any]] = []
-    if catalog_fragment_path is None:
-        overrides_payload = bundle.get("toolOverrides")
-        if isinstance(overrides_payload, dict) and overrides_payload.get("servers"):
-            changed, path = _apply_overlay(ROOT / "config" / "tool_overrides.json", overrides_payload, dry_run=dry_run)
-            if changed:
-                overlay_updates.append({"path": str(path), "dryRun": dry_run})
-                emit(f"[bundle] Overlay updated → {path}")
-        aggregations_payload = bundle.get("toolAggregations")
-        if isinstance(aggregations_payload, dict) and aggregations_payload.get("aggregations"):
-            changed, path = _apply_tool_aggregations_overlay(
-                ROOT / "config" / "tool_aggregations.json",
-                aggregations_payload,
-                dry_run=dry_run,
-            )
-            if changed:
-                overlay_updates.append({"path": str(path), "dryRun": dry_run})
-                emit(f"[bundle] Overlay updated → {path}")
-    else:
-        emit(f"[bundle] Catalog fragment managed via {catalog_fragment_path}")
+    emit(f"[bundle] Catalog fragment managed via {catalog_fragment_path}")
     if install_manifest:
         _register_manifest_refs(
             install_manifest,
@@ -318,7 +243,7 @@ def install_bundle(
             log=emit,
         )
     commands_run: list[list[str]] = []
-    needs_restart = (installed or overlay_updates or bundle_files_changed) and not errors
+    needs_restart = (installed or overlay_updates or bundle_files_changed_flag) and not errors
     if restart and not dry_run and needs_restart:
         for command in DEFAULT_RESTART_COMMANDS:
             result = runner.run(command)
