@@ -539,6 +539,10 @@ class AggregatedToolDefinition:
             raise ToolAggregationError(f"Aggregation '{name}' is missing a description")
         input_schema = _normalize_schema(payload.get("inputSchema"))
         output_schema = _normalize_schema(payload.get("outputSchema"), allow_empty=True)
+        # Default aggregated tools to object output to avoid permissive type arrays
+        # that some clients (e.g., Codex MCP) reject during schema parsing.
+        if output_schema is None:
+            output_schema = {"type": "object"}
         annotations = (
             dict(payload.get("annotations"))
             if isinstance(payload.get("annotations"), Mapping)

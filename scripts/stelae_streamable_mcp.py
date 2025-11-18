@@ -474,11 +474,18 @@ def _convert_tool_descriptor(descriptor: Dict[str, Any]) -> types.Tool:
     if not isinstance(name, str) or not name:
         raise ValueError("Tool descriptor missing name")
 
+    raw_output_schema = descriptor.get("outputSchema")
+    if isinstance(raw_output_schema, dict):
+        raw_type = raw_output_schema.get("type")
+        if isinstance(raw_type, list):
+            # Codex MCP client rejects schema.type arrays; coerce to permissive object
+            raw_output_schema = dict(raw_output_schema, type="object")
+
     tool_data: Dict[str, Any] = {
         "name": name,
         "description": descriptor.get("description"),
         "inputSchema": _normalize_input_schema(descriptor.get("inputSchema")),
-        "outputSchema": descriptor.get("outputSchema"),
+        "outputSchema": raw_output_schema,
     }
 
     annotations = descriptor.get("annotations")

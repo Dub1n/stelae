@@ -244,6 +244,34 @@ async def test_proxy_mode_exposes_remote_catalog(monkeypatch):
     assert structured == {"result": "ok"}
     assert content_blocks[0].type == "text"
 
+
+@pytest.mark.anyio("asyncio")
+async def test_proxy_normalizes_output_schema_type(monkeypatch):
+    async def fake_proxy_jsonrpc(method, params=None, *, read_timeout=None):
+        if method == "tools/list":
+            return {
+                "tools": [
+                    {
+                        "name": "workspace_fs_read",
+                        "description": "agg",
+                        "inputSchema": {"type": "object"},
+                        "outputSchema": {"type": ["object", "array"]},
+                    }
+                ]
+            }
+        return {}
+
+    hub._activate_proxy_handlers()
+    monkeypatch.setattr(hub, "PROXY_MODE", True)
+    monkeypatch.setattr(hub, "_proxy_jsonrpc", fake_proxy_jsonrpc)
+
+    tools = await hub.app.list_tools()
+    target = {tool.name: tool for tool in tools}
+    assert "workspace_fs_read" in target
+    assert isinstance(target["workspace_fs_read"].outputSchema, dict)
+    assert target["workspace_fs_read"].outputSchema.get("type") == "object"
+
+
 @pytest.mark.anyio("asyncio")
 async def test_workspace_fs_read_roundtrip(monkeypatch):
     payload = {

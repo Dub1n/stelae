@@ -200,6 +200,9 @@ class ToolOverridesStore:
                 changed = True
         if output_schema is not None:
             serialized = json.loads(json.dumps(output_schema))
+            if isinstance(serialized, dict) and isinstance(serialized.get("type"), list):
+                # Normalize permissive type arrays for MCP clients that reject them.
+                serialized = dict(serialized, type="object")
             if tool_block.get("outputSchema") != serialized:
                 tool_block["outputSchema"] = serialized
                 changed = True

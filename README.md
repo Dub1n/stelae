@@ -329,10 +329,11 @@ Templates stay in `config/` (proxy, schemas), while writable data now lives only
   - `refresh_discovery` – Copies `${ONE_MCP_DIR}/discovered_servers.json` (or a supplied `source_path`) into `${STELAE_DISCOVERY_PATH}`, returning a diff so you can see what changed.
   - `run_reconciler` – Re-runs `make render-proxy` + the restart script without touching configs; handy after manual template edits.
 - For terminal-first workflows set the env overrides inline and call `make discover-servers`, e.g. `DISCOVER_QUERY="vector search" DISCOVER_LIMIT=5 DISCOVER_DRY_RUN=1 make discover-servers`. Supported env knobs mirror the MCP payload (`DISCOVER_QUERY`, `DISCOVER_TAGS`, `DISCOVER_PRESET`, `DISCOVER_LIMIT`, `DISCOVER_MIN_SCORE`, `DISCOVER_APPEND`, `DISCOVER_DRY_RUN`).
-- `manage_stelae` now ships in the proxy manifest like any other downstream server; the streamable bridge only injects a local fallback descriptor if the proxy catalog is missing the tool (for example during restart). Codex sessions keep working, but once the proxy is healthy all calls flow through the canonical manifest entry.
-- The tool reports file diffs, commands executed, proxy readiness waits, and warnings/errors in a uniform JSON envelope. All validations happen before any file writes so a missing binary or placeholder halts the operation early.
-- Manual override-only workflows remain supported via `python scripts/populate_tool_overrides.py --servers <name> --dry-run`, which refreshes schemas without consulting the discovery cache.
-- For non-MCP workflows you can inspect the catalogue directly via `scripts/one_mcp_discovery.py "vector search" --limit 10`, which uses the same backend as `discover_servers` and, unless `--dry-run` is set, merges the results into `${STELAE_DISCOVERY_PATH}`.
+ - `manage_stelae` now ships in the proxy manifest like any other downstream server; the streamable bridge only injects a local fallback descriptor if the proxy catalog is missing the tool (for example during restart). Codex sessions keep working, but once the proxy is healthy all calls flow through the canonical manifest entry.
+ - The tool reports file diffs, commands executed, proxy readiness waits, and warnings/errors in a uniform JSON envelope. All validations happen before any file writes so a missing binary or placeholder halts the operation early.
+ - Manual override-only workflows remain supported via `python scripts/populate_tool_overrides.py --servers <name> --dry-run`, which refreshes schemas without consulting the discovery cache.
+ - For non-MCP workflows you can inspect the catalogue directly via `scripts/one_mcp_discovery.py "vector search" --limit 10`, which uses the same backend as `discover_servers` and, unless `--dry-run` is set, merges the results into `${STELAE_DISCOVERY_PATH}`.
+- Aggregated tools default their `outputSchema.type` to `"object"` to satisfy stricter clients (e.g., Codex MCP) that reject schema type arrays. If a client suddenly sees no Stelae tools, rerun `python scripts/process_tool_aggregations.py --scope local` plus `make render-proxy` to regenerate normalized descriptors.
 
 ---
 
