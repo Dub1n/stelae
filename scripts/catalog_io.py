@@ -49,24 +49,51 @@ def load_live(path: str | Path | None = None) -> Any:
 
 def tool_names(payload: Mapping[str, Any]) -> set[str]:
     names: set[str] = set()
-    tools = payload.get("tools")
-    if isinstance(tools, list):
+    tool_blocks: list[Any] = [
+        payload.get("tools"),
+        payload.get("catalog", {}).get("tools") if isinstance(payload.get("catalog"), Mapping) else None,
+        payload.get("tools_list", {}).get("result", {}).get("tools")
+        if isinstance(payload.get("tools_list"), Mapping)
+        else None,
+    ]
+    for tools in tool_blocks:
+        if not isinstance(tools, list):
+            continue
         for entry in tools:
             if not isinstance(entry, Mapping):
                 continue
             name = entry.get("name")
             if isinstance(name, str):
                 names.add(name)
+
     catalog = payload.get("catalog")
     if isinstance(catalog, Mapping):
-        catalog_tools = catalog.get("tools")
-        if isinstance(catalog_tools, list):
-            for entry in catalog_tools:
+        aggregations = catalog.get("toolAggregations", {}).get("aggregations")
+        if isinstance(aggregations, list):
+            for entry in aggregations:
                 if not isinstance(entry, Mapping):
                     continue
                 name = entry.get("name")
                 if isinstance(name, str):
                     names.add(name)
+
+        servers = catalog.get("toolOverrides", {}).get("servers")
+        if isinstance(servers, Mapping):
+            for server_entry in servers.values():
+                if not isinstance(server_entry, Mapping):
+                    continue
+                server_enabled = server_entry.get("enabled")
+                tools = server_entry.get("tools")
+                if not isinstance(tools, Mapping):
+                    continue
+                for tool_name, tool_entry in tools.items():
+                    if not isinstance(tool_name, str):
+                        continue
+                    if isinstance(tool_entry, Mapping) and tool_entry.get("enabled") is False:
+                        continue
+                    if server_enabled is False:
+                        continue
+                    names.add(tool_name)
     return names
 
 
