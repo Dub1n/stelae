@@ -475,15 +475,19 @@ def main() -> None:
 
     descriptor_index: dict[tuple[str, str], dict[str, Any]] | None = None
     descriptor_source = "live_descriptors"
-    descriptor_error: str | None = None
-    try:
-        descriptor_index, _ = _load_live_descriptors(live_descriptors_path, baseline_mtime=baseline_mtime)
-    except DescriptorLoadError as exc:
-        descriptor_error = str(exc)
+    descriptor_warning: str | None = None
+    if live_descriptors_path.exists():
+        try:
+            descriptor_index, _ = _load_live_descriptors(live_descriptors_path, baseline_mtime=baseline_mtime)
+        except DescriptorLoadError as exc:
+            descriptor_warning = str(exc)
+            descriptor_source = "overrides"
+            descriptor_index = _descriptor_index_from_overrides(store.merged_snapshot())
+            if args.verify and not allow_stale:
+                verification_errors.append(f"Live descriptors stale or invalid: {descriptor_warning}")
+    else:
+        descriptor_warning = f"live descriptors missing at {live_descriptors_path}"
         descriptor_source = "overrides"
-    if descriptor_index is None:
-        if not allow_stale:
-            raise SystemExit(f"[process-tool-aggregations] {descriptor_error or 'live descriptors unavailable'} (pass --allow-stale-descriptors to fall back to overrides)")
         descriptor_index = _descriptor_index_from_overrides(store.merged_snapshot())
 
     runtime_snapshot = store.merged_snapshot()
@@ -494,8 +498,8 @@ def main() -> None:
     )
 
     intended_metadata = {"descriptorSource": descriptor_source}
-    if descriptor_source != "live_descriptors" and descriptor_error:
-        intended_metadata["descriptorWarning"] = descriptor_error
+    if descriptor_source != "live_descriptors" and descriptor_warning:
+        intended_metadata["descriptorWarning"] = descriptor_warning
 
     intended_tools = _enabled_tools(runtime_snapshot, catalog_store.hide_tools)
     live_catalog_exists = live_catalog_path.exists()
