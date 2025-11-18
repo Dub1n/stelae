@@ -100,15 +100,15 @@ def load_catalog_store(
 
     for fragment in fragments:
         payload = fragment.payload
-        overrides_payload = payload.get("tool_overrides")
+        overrides_payload = payload.get("tool_overrides") or payload.get("toolOverrides")
         if isinstance(overrides_payload, Mapping):
             overrides = deep_merge(overrides, overrides_payload)
 
-        aggregations_payload = payload.get("tool_aggregations")
+        aggregations_payload = payload.get("tool_aggregations") or payload.get("toolAggregations")
         if isinstance(aggregations_payload, Mapping):
             aggregations = merge_aggregation_payload(aggregations, aggregations_payload)
 
-        hide_entries.extend(_normalize_hide_tools(payload.get("hide_tools"), source=fragment.path))
+        hide_entries.extend(_normalize_hide_tools(payload.get("hide_tools") or payload.get("hideTools"), source=fragment.path))
 
     hidden = _dedupe_hide_tools(list(aggregations.get("hiddenTools", [])) + hide_entries)
     aggregations["hiddenTools"] = hidden
