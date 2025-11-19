@@ -27,8 +27,8 @@ Tags: `#infra`, `#tests`, `#docs`
 
 > For all checklist items, find the relevant workstream and ensure the work is carried out as part of it's setup. This includes performing any pre-reading and adding documentation to the appropriate places.
 
-- [ ] Prerequisite – restore `workspace_fs_read` coverage by ensuring the filesystem server/bundle entries are installed and exposed through the proxy (aggregator currently fails with `Unknown tool: read_file`). Document the fix and the downstream tool list in Appendix B once complete.
-- [ ] Trials – Codex CLI harness runs (`codex exec --json --full-auto`) prove `workspace_fs_read` and `manage_stelae` register and complete without manual prompts while the documentation catalog work remains in flight. *(Appendix B documents the current blocker: Codex still reports `Expecting value` from `workspace_fs_read` even though HTTP probes pass.)*
+- [x] Prerequisite – restore `workspace_fs_read` coverage by ensuring the filesystem server/bundle entries are installed and exposed through the proxy (aggregator currently fails with `Unknown tool: read_file`). *2025-11-19 agent fix: tool aggregator now pins each workspace FS/Shell aggregation to its downstream server, so the proxy always routes calls through `fs`/`sh` even when base tools are hidden or renamed; Appendix B captures the downstream tool matrix.*
+- [ ] Trials – Codex CLI harness runs (`codex exec --json --full-auto`) prove `workspace_fs_read` and `manage_stelae` register and complete without manual prompts while the documentation catalog work remains in flight.
 - [ ] Harness reliability – capture a “restart succeeds under 120 s” run with `--capture-debug-tools --manual-stage install` plus logs attached to `dev/logs/harness/`.
 - [ ] Codex orchestration – rerun the full golden path (discover → dry-run install → real install → remove) after catalog fixes land and archive the transcripts under `dev/logs/harness/`.
 - [ ] Intended catalog soak – run `python scripts/run_e2e_clone_smoke_test.py --catalog-mode both` for two consecutive greens (and at least one PM2 environment using `STELAE_USE_INTENDED_CATALOG=1`) so we can retire the legacy runtime path with confidence. Record each passing run (timestamp, workspace, log bundle) in Appendix C.
@@ -142,6 +142,10 @@ Scenario: prove Codex CLI can drive `discover → install → remove` solely via
   - 2025‑11‑08: descriptors lacked launch commands; installs failed validation. Fix: catalog overrides hydrate stdio command/env placeholders.
   - Install/remove originally dropped MCP responses when the proxy restarted; 2025‑11‑10 bridge change keeps calls local so Codex sees completion even while pm2 flips.
   - Current blocker: `codex exec` occasionally stalls during bundle stages and still surfaces `workspace_fs_read` “Expecting value” even though FastMCP debug logs show valid JSON; logs mirrored via `--capture-debug-tools` until resolved.
+  - 2025‑11‑19: `workspace_fs_read`, `workspace_fs_write`, and `workspace_shell_control` now declare explicit `downstreamServer` targets and the aggregator passes them through `tools/call`, eliminating the `Unknown tool: read_file` failure. Downstream suites now route as follows:
+    - `workspace_fs_read` → `fs` server operations: `list_allowed_directories`, `directory_tree`, `list_directory`, `list_directory_with_sizes`, `calculate_directory_size`, `get_file_info`, `head_file`, `read_file`, `read_file_lines`, `read_text_file`, `read_media_file`, `read_multiple_media_files`, `read_multiple_text_files`, `find_duplicate_files`, `find_empty_directories`, `search_files`, `search_files_content`.
+    - `workspace_fs_write` → `fs` server operations: `create_directory`, `move_file`, `edit_file`, `write_file`, `delete_file_content`, `insert_file_content`, `update_file_content`, `zip_directory`, `zip_files`, `unzip_file`.
+    - `workspace_shell_control` → `sh` server operation `run_command` (selectors: `execute_command`, `change_directory`, `get_current_directory`, `get_command_history`).
 
 ### Appendix C – Clone smoke harness deliverable snapshot
 

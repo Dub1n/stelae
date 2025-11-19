@@ -15,7 +15,7 @@ from stelae_lib.catalog_defaults import DEFAULT_TOOL_AGGREGATIONS
 from stelae_lib.config_overlays import deep_merge, overlay_path_for
 from stelae_lib.integrator.tool_overrides import ToolOverridesStore
 
-ProxyCaller = Callable[[str, Dict[str, Any], float | None], Awaitable[Dict[str, Any]]]
+ProxyCaller = Callable[[str, Dict[str, Any], float | None, str | None], Awaitable[Dict[str, Any]]]
 
 DEFAULT_SELECTOR_FIELD = "operation"
 DEFAULT_AGGREGATOR_SERVER = "tool_aggregator"
@@ -727,7 +727,12 @@ class AggregatedToolRunner:
             label=f"{self.definition.name}:{operation.value}",
         )
         timeout = operation.timeout_seconds or self.definition.timeout_seconds or self._fallback_timeout
-        raw_result = await self._proxy_call(operation.downstream_tool, request_args, timeout)
+        raw_result = await self._proxy_call(
+            operation.downstream_tool,
+            request_args,
+            timeout,
+            operation.downstream_server,
+        )
         decoded_result = _decode_json_like(raw_result)
         structured_payload = None
         if operation.response_rules:

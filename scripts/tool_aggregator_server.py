@@ -101,7 +101,13 @@ class ProxyCaller:
             self.endpoint = endpoint.rstrip("/") + "/mcp"
         self._counter = itertools.count(1)
 
-    async def __call__(self, tool_name: str, arguments: Dict[str, Any], timeout: float | None) -> Dict[str, Any]:
+    async def __call__(
+        self,
+        tool_name: str,
+        arguments: Dict[str, Any],
+        timeout: float | None,
+        server_name: str | None = None,
+    ) -> Dict[str, Any]:
         request_id = f"agg-{next(self._counter)}"
         payload = {
             "jsonrpc": "2.0",
@@ -112,6 +118,8 @@ class ProxyCaller:
                 "arguments": arguments,
             },
         }
+        if server_name:
+            payload["params"]["serverName"] = server_name
         timeout_value = timeout or 60.0
         http_timeout = httpx.Timeout(
             timeout=timeout_value,
