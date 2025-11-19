@@ -37,6 +37,8 @@ if [ -z "${STELAE_STATE_HOME:-}" ]; then
 fi
 STELAE_ENV_FILE="${STELAE_ENV_FILE:-${STELAE_CONFIG_HOME}/.env}"
 export STELAE_ENV_FILE
+STELAE_USE_INTENDED_CATALOG="${STELAE_USE_INTENDED_CATALOG:-1}"
+export STELAE_USE_INTENDED_CATALOG
 
 SCRIPT_START=$(date +%s)
 
@@ -98,9 +100,6 @@ for var in "${REQUIRED_ENV_VARS[@]}"; do
     exit 1
   fi
 done
-log "Paths: config_home=${STELAE_CONFIG_HOME} state_home=${STELAE_STATE_HOME} env_file=${STELAE_ENV_FILE}"
-log "Runtime: proxy_config=${PROXY_JSON} overrides=${TOOL_OVERRIDES_PATH} schema_status=${TOOL_SCHEMA_STATUS_PATH} discovery=${STELAE_DISCOVERY_PATH}"
-log "Catalog: intended=${INTENDED_CATALOG_PATH} live=${LIVE_CATALOG_PATH}"
 
 # cloudflared (named tunnel w/ config)
 CLOUDFLARED_BIN="${CLOUDFLARED:-$HOME_DIR/.nvm/versions/node/v22.19.0/bin/cloudflared}"
@@ -126,6 +125,7 @@ START_WATCHDOG=1
 KEEP_PM2=0
 FULL_REDEPLOY=0
 RUN_POPULATE=1
+CATALOG_MODE_OVERRIDE=""
 for arg in "$@"; do
   case "$arg" in
     --no-cloudflared) START_CLOUDFLARED=0;;
@@ -134,6 +134,9 @@ for arg in "$@"; do
     --keep-pm2) KEEP_PM2=1;;
     --full) FULL_REDEPLOY=1;;
     --skip-populate-overrides) RUN_POPULATE=0;;
+    --legacy-catalog) CATALOG_MODE_OVERRIDE="legacy";;
+    --intended-catalog) CATALOG_MODE_OVERRIDE="intended";;
+    --catalog-mode=*) CATALOG_MODE_OVERRIDE="${arg#*=}";;
     -h|--help)
       cat <<EOF
 Usage: $(basename "$0") [options]
@@ -143,6 +146,9 @@ Usage: $(basename "$0") [options]
   --keep-pm2                Do not 'pm2 kill'; just (re)start managed apps
   --full                    Also push manifest to Cloudflare KV and deploy worker
   --skip-populate-overrides Do not auto-refresh config/tool_overrides.json
+  --legacy-catalog          Force STELAE_USE_INTENDED_CATALOG=0 for this run
+  --intended-catalog        Force STELAE_USE_INTENDED_CATALOG=1 for this run
+  --catalog-mode=<mode>     Same as the two flags above (values: intended, legacy)
 
 Env overrides:
   PROXY_PORT        (default 9090)
@@ -153,6 +159,31 @@ EOF
     ;;
   esac
 done
+
+case "${CATALOG_MODE_OVERRIDE}" in
+  "") ;;
+  intended|legacy)
+    if [ "$CATALOG_MODE_OVERRIDE" = "intended" ]; then
+      STELAE_USE_INTENDED_CATALOG=1
+    else
+      STELAE_USE_INTENDED_CATALOG=0
+    fi
+    export STELAE_USE_INTENDED_CATALOG
+    ;;
+  *)
+    err "Unknown catalog mode: ${CATALOG_MODE_OVERRIDE} (expected intended or legacy)"
+    exit 1
+    ;;
+esac
+
+log "Paths: config_home=${STELAE_CONFIG_HOME} state_home=${STELAE_STATE_HOME} env_file=${STELAE_ENV_FILE}"
+log "Runtime: proxy_config=${PROXY_JSON} overrides=${TOOL_OVERRIDES_PATH} schema_status=${TOOL_SCHEMA_STATUS_PATH} discovery=${STELAE_DISCOVERY_PATH}"
+log "Catalog: intended=${INTENDED_CATALOG_PATH} live=${LIVE_CATALOG_PATH}"
+if [[ "${STELAE_USE_INTENDED_CATALOG,,}" =~ ^(1|true|yes|on)$ ]]; then
+  log "Catalog mode: STELAE_USE_INTENDED_CATALOG=${STELAE_USE_INTENDED_CATALOG} (prefers intended catalog)"
+else
+  log "Catalog mode: STELAE_USE_INTENDED_CATALOG=${STELAE_USE_INTENDED_CATALOG:-0} (using legacy runtime overrides)"
+fi
 
 # helpers ----------------------------------------------------------------------
 

@@ -6,7 +6,7 @@ Stelae combines a Go-based MCP aggregation proxy, a fleet of downstream MCP serv
 
 ### Config layout
 
-Templates live under `config/` in this repo; machine-specific state lives in `${STELAE_CONFIG_HOME}` (default `~/.config/stelae`) and runtime artifacts land in `${STELAE_STATE_HOME}` (default `${STELAE_CONFIG_HOME}/.state`). Catalog fragments (`${STELAE_CONFIG_HOME}/catalog/*.json` seeded by `scripts/setup_env.py --materialize-defaults` plus `${STELAE_CONFIG_HOME}/bundles/*/catalog.json`) supply overrides/aggregations/hide entries for the tool aggregator. Writable helpers such as `tool_overrides.json`, `custom_tools.json`, `discovered_servers.json`, and `tool_schema_status.json` sit alongside the catalog directory. Environment values obey the same layering: `.env.example` stays generic, `${STELAE_ENV_FILE}` (default `${STELAE_CONFIG_HOME}/.env`) is human-edited, and `${STELAE_CONFIG_HOME}/.env.local` (or the last env file provided to the integrator) receives hydrated defaults so git remains clean even when overrides introduce new variables.
+Templates live under `config/` in this repo; machine-specific state lives in `${STELAE_CONFIG_HOME}` (default `~/.config/stelae`) and runtime artifacts land in `${STELAE_STATE_HOME}` (default `${STELAE_CONFIG_HOME}/.state`). Catalog fragments (`${STELAE_CONFIG_HOME}/catalog/*.json` seeded by `scripts/setup_env.py --materialize-defaults` plus `${STELAE_CONFIG_HOME}/bundles/*/catalog.json`) supply overrides/aggregations/hide entries for the tool aggregator. Writable helpers are split by ownership: `${STELAE_CONFIG_HOME}` holds human-edited overlays (`tool_overrides.json`, `custom_tools.json`) while `${STELAE_STATE_HOME}` owns runtime artifacts (`tool_overrides.json` mirror, `tool_schema_status.json`, `discovered_servers.json`, `intended_catalog.json`, `live_catalog.json`, `live_descriptors.json`, drift logs). Environment values obey the same layering: `.env.example` stays generic, `${STELAE_ENV_FILE}` (default `${STELAE_CONFIG_HOME}/.env`) is human-edited, and `${STELAE_CONFIG_HOME}/.env.local` (or the last env file provided to the integrator) receives hydrated defaults so git remains clean even when overrides introduce new variables.
 
 All mutable lookups flow through `require_home_path`, which rejects paths outside `${STELAE_CONFIG_HOME}`/`${STELAE_STATE_HOME}`; fixtures and helpers assume those roots.
 
@@ -21,18 +21,20 @@ flowchart LR
     Templates["Tracked templates<br/>(config/*.template.*)"]
     Catalog["${STELAE_CONFIG_HOME}/catalog/*.json<br/>${STELAE_CONFIG_HOME}/bundles/*/catalog.json"]
     EnvFiles[".env.example → ${STELAE_ENV_FILE} + ${STELAE_CONFIG_HOME}/.env.local"]
+    LiveDescriptors["${STELAE_STATE_HOME}/live_descriptors.json<br/>(proxy snapshot)"]
     Renderers["scripts/process_tool_aggregations.py + render_* helpers"]
-    State["${STELAE_STATE_HOME}<br/>proxy.json · tool_overrides.json · tool_schema_status.json · intended_catalog.json"]
+    State["${STELAE_STATE_HOME}<br/>proxy.json · tool_overrides.json · tool_schema_status.json · intended_catalog.json · live_catalog.json"]
     PM2["pm2 + long-lived daemons"]
 
     Templates --> Renderers
     Catalog --> Renderers
     EnvFiles --> Renderers
+    LiveDescriptors --> Renderers
     Renderers --> State
     State --> PM2
 ```
 
-Templates remain read-only; renderers merge them with config-home fragments and env layers before emitting runtime JSON into `${STELAE_STATE_HOME}` (the only path PM2 reads).
+Templates remain read-only; renderers merge them with config-home fragments, env layers, and the latest `${STELAE_STATE_HOME}/live_descriptors.json` snapshot before emitting runtime JSON into `${STELAE_STATE_HOME}` (the only path PM2 reads). `live_catalog.json` is captured after restarts so intended vs live drift stays auditable.
 
 ### Core vs optional bundle
 
@@ -54,7 +56,7 @@ Templates remain read-only; renderers merge them with config-home fragments and 
 
 ## Catalog Aggregation & Overrides
 
-> Note: tracked mutable templates (`config/tool_overrides.json`, `config/tool_aggregations.json`, `config/custom_tools.json`, `config/discovered_servers.json`, `config/tool_schema_status.json`) have been removed. The config-home copies (`${STELAE_CONFIG_HOME}/tool_overrides.json`, etc.) are the editable sources; runtime artifacts live under `${STELAE_STATE_HOME}`.
+> Note: tracked mutable templates (`config/tool_overrides.json`, `config/tool_aggregations.json`, `config/custom_tools.json`, `config/discovered_servers.json`, `config/tool_schema_status.json`) have been removed. Aggregations now live solely inside catalog fragments under `${STELAE_CONFIG_HOME}/catalog/*.json` and `${STELAE_CONFIG_HOME}/bundles/*/catalog.json`; the only separate overlay file left in config-home is `tool_overrides.json`, with runtime mirrors/artifacts in `${STELAE_STATE_HOME}`.
 
 ```mermaid
 flowchart LR
@@ -275,7 +277,7 @@ Key takeaways:
 
 ### Catalog publication & Codex trust boundaries
 
-**Renderer → pm2 → proxy.** The catalog always originates from the rendered proxy config: `config/proxy.template.json:2-76` defines the Go facade address plus `toolOverridesPath`/`toolSchemaStatusPath` fields that point at `${STELAE_STATE_HOME}`. `scripts/render_proxy_config.py:18-78` loads layered `.env` values, guarantees `PROXY_PORT` is set (defaulting to `PUBLIC_PORT` or `9090`), and writes the merged JSON to `${PROXY_CONFIG}` (defaulting to `~/.config/stelae/.state/proxy.json`). Restarts (`scripts/run_restart_stelae.sh:41-139`) export that same `PROXY_PORT`, wait for the HTTP `/mcp` endpoint to report a minimum tool count, and immediately run `scripts/populate_tool_overrides.py` through the proxy so schema changes are captured in the config-home overrides. The clone-smoke harness keeps disposable sandboxes from clashing with the long-lived dev proxy by writing the randomly chosen `choose_proxy_port()` value into `.env`, `${STELAE_CONFIG_HOME}`, and the rendered proxy file inside `${STELAE_STATE_HOME}` (`stelae_lib/smoke_harness.py:54-122` plus docs/e2e_clone_smoke_test.md:89-124). Because `ecosystem.config.js:24-65` always launches pm2 with `${PROXY_CONFIG}` and defaults `STELAE_PROXY_BASE` to `http://127.0.0.1:9090`, any sandbox or developer environment that needs a different port must ensure both env vars are updated before restarts run.
+**Renderer → pm2 → proxy.** The catalog always originates from the rendered proxy config: `config/proxy.template.json:2-76` defines the Go facade address plus `toolOverridesPath`/`toolSchemaStatusPath` fields that point at `${STELAE_STATE_HOME}`. `scripts/render_proxy_config.py:18-78` loads layered `.env` values, guarantees `PROXY_PORT` is set (defaulting to `PUBLIC_PORT` or `9090`), and writes the merged JSON to `${PROXY_CONFIG}` (defaulting to `~/.config/stelae/.state/proxy.json`). Restarts (`scripts/run_restart_stelae.sh:41-139`) export that same `PROXY_PORT`, honor `STELAE_USE_INTENDED_CATALOG` (default `1` from `.env.example`), wait for the HTTP `/mcp` endpoint to report a minimum tool count, and immediately run `scripts/populate_tool_overrides.py` through the proxy so schema changes are captured in the config-home overrides. Use `--intended-catalog` / `--legacy-catalog` (or `--catalog-mode=intended|legacy`) to toggle the flag for a single restart; the helper logs whichever input path was loaded so drift triage has a permanent breadcrumb. The clone-smoke harness keeps disposable sandboxes from clashing with the long-lived dev proxy by writing the randomly chosen `choose_proxy_port()` value into `.env`, `${STELAE_CONFIG_HOME}`, and the rendered proxy file inside `${STELAE_STATE_HOME}` (`stelae_lib/smoke_harness.py:54-122` plus docs/e2e_clone_smoke_test.md:89-124), and its new `--catalog-mode` option runs legacy + intended restarts back-to-back when needed. Because `ecosystem.config.js:24-65` always launches pm2 with `${PROXY_CONFIG}`, exports `${STELAE_CONFIG_HOME}`/`${STELAE_STATE_HOME}`, and defaults `STELAE_USE_INTENDED_CATALOG` to `1`, any sandbox or developer environment that needs a different port or catalog mode must ensure both env vars are updated before restarts run.
 
 #### Catalog rendering & publication flow
 
@@ -283,6 +285,7 @@ Key takeaways:
 flowchart LR
     Aggregations["${STELAE_CONFIG_HOME}/catalog/*.json<br/>${STELAE_CONFIG_HOME}/bundles/*/catalog.json"] --> Process["scripts/process_tool_aggregations.py"]
     LocalOverrides["${STELAE_CONFIG_HOME}/tool_overrides.json"] --> Process
+    LiveDescriptors["${STELAE_STATE_HOME}/live_descriptors.json"] --> Process
     Process --> StateOverrides["${STELAE_STATE_HOME}/tool_overrides.json"]
     Process --> Intended["${STELAE_STATE_HOME}/intended_catalog.json"]
 
@@ -292,6 +295,9 @@ flowchart LR
 
     ProxyConfig --> Restart["scripts/run_restart_stelae.sh<br/>pm2 ecosystem"]
     Restart --> Proxy["Go mcp-proxy"]
+    Proxy --> LiveDescriptors
+    Restart --> Capture["scripts/capture_live_catalog.py"]
+    Capture --> LiveCatalog["${STELAE_STATE_HOME}/live_catalog.json"]
     Proxy --> Bridge["stelae_streamable_mcp\n(stdio)"]
     Proxy --> Tunnel["cloudflared tunnel\n(https://mcp.infotopology.xyz)"]
     Tunnel --> Remote["Remote clients (ChatGPT, etc.)"]
@@ -302,7 +308,7 @@ flowchart LR
     StateOverrides --> Proxy
 ```
 
-Tracked + local overrides feed `process_tool_aggregations.py`, renderers materialize `${PROXY_CONFIG}`, the restart helper launches pm2 processes, and both FastMCP and Cloudflare consumers read the exact catalog that `/mcp` advertises. `populate_tool_overrides.py` completes the loop by snapshotting live schemas back into the overlay.
+Tracked + local overrides (plus the proxy-generated `live_descriptors.json`) feed `process_tool_aggregations.py`, renderers materialize `${PROXY_CONFIG}`, the restart helper launches pm2 processes, and both FastMCP and Cloudflare consumers read the exact catalog that `/mcp` advertises. `capture_live_catalog.py` persists the live `tools/list` payload for drift checks, and `populate_tool_overrides.py` completes the loop by snapshotting live schemas back into the overlay.
 
 **Bridge + Codex trust.** The FastMCP bridge (`scripts/stelae_streamable_mcp.py:61-519`) acts as the stdio endpoint for Codex/VS Code. On startup it loads `.env`/`.env.local` (via `load_layered_env`) so downstream helpers inherit the same `STELAE_*` paths as pm2, queries `PROXY_BASE` for `tools/list`, injects a local fallback descriptor for `manage_stelae` if the proxy catalog still lacks it, and monkey-patches FastMCP to forward `tools/list`, `tools/call`, prompts, and resources straight through to the Go facade. Codex only trusts the catalog it receives during `initialize`; even if `/mcp` and the TUI report the expected entries, an interactive session will continue using whatever tool list it cached earlier. That is why verifying the catalog requires creating a fresh Codex session each time the proxy restarts, rather than relying on `codex mcp` or curl probes alone.
 
@@ -383,6 +389,8 @@ flowchart TD
     Config["┌──────────────┐<br>${PROXY_CONFIG}"] --> A
     Overrides["┌──────────────┐<br>${TOOL_OVERRIDES_PATH}"] --> A
 ```
+
+Filesystem/ripgrep/shell/memory/fetch/strata nodes arrive via the starter bundle (`${STELAE_CONFIG_HOME}/bundles/starter`); the tracked proxy template only includes the core set (custom tools, integrator, tool aggregator helper, 1mcp stdio agent, public catalog bridge, Go proxy/bridge).
 
 ## Discovery & Auto-Loading Pipeline
 

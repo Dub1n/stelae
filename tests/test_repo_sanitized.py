@@ -16,6 +16,7 @@ def test_env_example_has_no_provider_specific_variables() -> None:
     assert "STELAE_STATE_HOME=${STELAE_CONFIG_HOME}/.state" in content
     assert "STELAE_ENV_FILE=${STELAE_CONFIG_HOME}/.env" in content
     assert "PROXY_CONFIG=${STELAE_STATE_HOME}/proxy.json" in content
+    assert "STELAE_USE_INTENDED_CATALOG=1" in content
     assert "STELAE_TOOL_OVERRIDES=${STELAE_CONFIG_HOME}/tool_overrides.json" in content
     assert "STELAE_TOOL_AGGREGATIONS=${STELAE_CONFIG_HOME}/tool_aggregations.json" in content
     assert "TOOL_OVERRIDES_PATH=${STELAE_STATE_HOME}/tool_overrides.json" in content

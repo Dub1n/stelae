@@ -52,6 +52,7 @@ def test_build_env_map_sets_wrapper_values(tmp_path: Path) -> None:
     assert values["STELAE_DIR"] == str(clone)
     assert values["CODEX_WRAPPER_BIN"] == str(wrapper)
     assert values["PUBLIC_BASE_URL"].endswith(":19333")
+    assert values["STELAE_USE_INTENDED_CATALOG"] == "1"
 
 
 def test_format_env_lines_respects_key_order() -> None:
@@ -97,3 +98,19 @@ def test_discover_smoke_workspaces_respects_prefix(tmp_path: Path) -> None:
     found = smoke_script.discover_smoke_workspaces(tmp_path)
     assert managed in found
     assert unmanaged not in found
+
+
+def test_upsert_env_value_appends_and_updates(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    smoke_script.upsert_env_value(env_file, "FOO", "1")
+    assert env_file.read_text(encoding="utf-8") == "FOO=1\n"
+    smoke_script.upsert_env_value(env_file, "BAR", "example")
+    assert "BAR=example" in env_file.read_text(encoding="utf-8")
+    smoke_script.upsert_env_value(env_file, "FOO", "2")
+    lines = env_file.read_text(encoding="utf-8").splitlines()
+    assert lines.count("FOO=2") == 1
+
+
+def test_parse_args_accepts_catalog_mode() -> None:
+    args = smoke_script.parse_args(["--catalog-mode", "both"])
+    assert args.catalog_mode == "both"

@@ -10,6 +10,8 @@ const BRIDGE_PY    = process.env.BRIDGE_PY || `${HOME}/.venvs/stelae-bridge/bin/
 
 const PROXY_BIN    = process.env.PROXY_BIN    || `${APPS_DIR}/mcp-proxy/build/mcp-proxy`;
 const PROXY_CONFIG = process.env.PROXY_CONFIG || `${STELAE_STATE_HOME}/proxy.json`;
+const INTENDED_CATALOG_PATH = process.env.INTENDED_CATALOG_PATH || `${STELAE_STATE_HOME}/intended_catalog.json`;
+const LIVE_CATALOG_PATH = process.env.LIVE_CATALOG_PATH || `${STELAE_STATE_HOME}/live_catalog.json`;
 
 const PYTHON_BIN   = process.env.PYTHON || "python3";
 
@@ -32,6 +34,12 @@ module.exports = {
         PATH: ENV_PATH,
         MCP_DEFAULT_SERVER: "mem",
         MCP_DEBUG_LOG: "1",
+        STELAE_DIR,
+        STELAE_CONFIG_HOME,
+        STELAE_STATE_HOME,
+        INTENDED_CATALOG_PATH,
+        LIVE_CATALOG_PATH,
+        STELAE_USE_INTENDED_CATALOG: process.env.STELAE_USE_INTENDED_CATALOG || "1",
         ...(process.env.OPENAI_API_KEY ? { OPENAI_API_KEY: process.env.OPENAI_API_KEY } : {}),
         ...(process.env.GITHUB_TOKEN ? { GITHUB_TOKEN: process.env.GITHUB_TOKEN } : {})
       },

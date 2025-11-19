@@ -63,6 +63,22 @@ def _write_live_descriptors(target: Path | None = None, payload: dict[str, Any] 
     return path
 
 
+def _configure_test_env(monkeypatch: pytest.MonkeyPatch, config_root: Path) -> None:
+    state_root = config_root / ".state"
+    monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_root))
+    monkeypatch.setenv("STELAE_STATE_HOME", str(state_root))
+    for var in (
+        "LIVE_DESCRIPTORS_PATH",
+        "LIVE_CATALOG_PATH",
+        "TOOL_SCHEMA_STATUS_PATH",
+        "TOOL_OVERRIDES_PATH",
+        "INTENDED_CATALOG_PATH",
+    ):
+        monkeypatch.delenv(var, raising=False)
+    config_home.cache_clear()
+    state_home.cache_clear()
+
+
 STARTER_AGGREGATION_CASES = [
     ("workspace_fs_read", {"operation": "list_allowed_directories"}),
     ("workspace_fs_write", {"operation": "create_directory", "path": "docs/new-directory"}),
@@ -98,10 +114,7 @@ def test_tool_overrides_store_embedded_defaults(tmp_path: Path) -> None:
 def test_process_tool_aggregations_uses_embedded_defaults(monkeypatch, tmp_path: Path) -> None:
     module = _load_process_tool_aggregations_module()
     config_root = tmp_path / "config-home"
-    monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_root))
-    monkeypatch.setenv("STELAE_STATE_HOME", str(config_root / ".state"))
-    config_home.cache_clear()
-    state_home.cache_clear()
+    _configure_test_env(monkeypatch, config_root)
     _write_live_descriptors()
     monkeypatch.setattr(sys, "argv", ["process_tool_aggregations.py", "--scope", "local"])
     module.main()
@@ -143,10 +156,7 @@ def test_process_tool_aggregations_writes_intended_catalog(monkeypatch, tmp_path
         encoding="utf-8",
     )
 
-    monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_root))
-    monkeypatch.setenv("STELAE_STATE_HOME", str(config_root / ".state"))
-    config_home.cache_clear()
-    state_home.cache_clear()
+    _configure_test_env(monkeypatch, config_root)
     _write_live_descriptors()
 
     overrides_path = config_root / "overrides.json"
@@ -178,10 +188,7 @@ def test_process_tool_aggregations_writes_intended_catalog(monkeypatch, tmp_path
 def test_process_tool_aggregations_allows_stale_descriptors_with_verify(monkeypatch, tmp_path: Path) -> None:
     module = _load_process_tool_aggregations_module()
     config_root = tmp_path / "config-home"
-    monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_root))
-    monkeypatch.setenv("STELAE_STATE_HOME", str(config_root / ".state"))
-    config_home.cache_clear()
-    state_home.cache_clear()
+    _configure_test_env(monkeypatch, config_root)
     # Provide stale/empty descriptors and allow fallback to overrides.
     _write_live_descriptors(payload={"servers": {}})
     monkeypatch.setattr(
@@ -197,10 +204,7 @@ def test_process_tool_aggregations_allows_stale_descriptors_with_verify(monkeypa
 def test_process_tool_aggregations_fails_when_live_catalog_missing(monkeypatch, tmp_path: Path) -> None:
     module = _load_process_tool_aggregations_module()
     config_root = tmp_path / "config-home"
-    monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_root))
-    monkeypatch.setenv("STELAE_STATE_HOME", str(config_root / ".state"))
-    config_home.cache_clear()
-    state_home.cache_clear()
+    _configure_test_env(monkeypatch, config_root)
     _write_live_descriptors()
 
     argv = ["process_tool_aggregations.py", "--scope", "local", "--verify"]
@@ -444,8 +448,7 @@ def test_overlay_only_excludes_defaults(monkeypatch, tmp_path: Path) -> None:
     base_path.write_text(json.dumps(base_data), encoding="utf-8")
 
     config_home = tmp_path / "config_home"
-    monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_home))
-    monkeypatch.setenv("STELAE_STATE_HOME", str(config_home / ".state"))
+    _configure_test_env(monkeypatch, config_home)
     overlay_path = overlay_path_for(base_path)
     overlay_path.parent.mkdir(parents=True, exist_ok=True)
     overlay_data = {
@@ -516,10 +519,7 @@ def test_process_tool_aggregations_handles_missing_overrides(monkeypatch, tmp_pa
         encoding="utf-8",
     )
 
-    monkeypatch.setenv("STELAE_CONFIG_HOME", str(config_root))
-    monkeypatch.setenv("STELAE_STATE_HOME", str(config_root / ".state"))
-    config_home.cache_clear()
-    state_home.cache_clear()
+    _configure_test_env(monkeypatch, config_root)
     _write_live_descriptors()
 
     overrides_path = config_root / "tool_overrides.json"

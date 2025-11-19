@@ -80,6 +80,7 @@ Common options:
 - `--keep-workspace` – keep artifacts after success.
 - `--codex-cli /path/to/codex` – pin a specific Codex binary (defaults to `shutil.which("codex")`).
 - `--codex-home /path/to/.codex` – mirror a custom Codex config/auth directory into the sandbox.
+- `--catalog-mode intended|legacy|both` – restart the stack with the intended catalog (default), force the legacy runtime overrides, or run both cycles before Codex automation.
 - `--wrapper-release …` – copy a Codex MCP wrapper release into the sandbox so the starter bundle can expose it.
 - `--proxy-source <git-or-path>` – override the mcp-proxy checkout source. When omitted the harness checks `STELAE_PROXY_SOURCE`, then falls back to a local `~/apps/mcp-proxy` clone (useful when hacking on the fork), and finally clones `https://github.com/Dub1n/mcp-proxy.git`, which contains the `/mcp` facade required for the readiness probes.
 - `--manual` – generate `manual_playbook.md` / `manual_result.json`, then exit immediately so you can follow the instructions manually. The harness still provisions the sandbox (clone, bundle install, restart) so the manual steps have a ready workspace; this flag simply skips the Codex automation that would normally follow.

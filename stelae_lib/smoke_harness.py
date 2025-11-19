@@ -48,6 +48,7 @@ SMOKE_ENV_KEYS = (
     "PUBLIC_PORT",
     "PUBLIC_BASE_URL",
     "PUBLIC_SSE_URL",
+    "STELAE_USE_INTENDED_CATALOG",
     "BASIC_MEMORY_PROJECT",
 )
 
@@ -125,6 +126,7 @@ def build_env_map(
         "PUBLIC_PORT": str(proxy_port),
         "PUBLIC_BASE_URL": f"http://127.0.0.1:{proxy_port}",
         "PUBLIC_SSE_URL": f"http://127.0.0.1:{proxy_port}/mcp",
+        "STELAE_USE_INTENDED_CATALOG": "1",
         "BASIC_MEMORY_PROJECT": "stelae-smoke",
     }
     if extra:

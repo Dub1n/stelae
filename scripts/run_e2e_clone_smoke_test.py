@@ -86,6 +86,25 @@ def _cleanup_entrypoint(target: Path | None) -> List[Path]:
         return [target] if cleanup_workspace_path(target) else []
     return cleanup_temp_smoke_workspaces()
 
+
+def upsert_env_value(env_file: Path, key: str, value: str) -> None:
+    """Ensure the config-home .env persists the requested key/value pair."""
+
+    try:
+        lines = env_file.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        lines = []
+    updated = False
+    for idx, line in enumerate(lines):
+        if line.startswith(f"{key}="):
+            lines[idx] = f"{key}={value}"
+            updated = True
+            break
+    if not updated:
+        lines.append(f"{key}={value}")
+    env_file.parent.mkdir(parents=True, exist_ok=True)
+    env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
 from stelae_lib.smoke_harness import (
     MCPToolCall,
     ManualContext,
@@ -191,6 +210,9 @@ class CloneSmokeHarness:
                 "CODEX_HOME": str(self.codex_home),
             }
         )
+        self.catalog_modes = self._resolve_catalog_modes(args.catalog_mode or "intended")
+        self.active_catalog_mode: str | None = None
+        self._env["STELAE_USE_INTENDED_CATALOG"] = "1" if self.catalog_modes[0] == "intended" else "0"
         self._apply_proxy_port(self.proxy_port)
         self._env.setdefault("PYTHONUNBUFFERED", "1")
         if self.pm2_bin:
@@ -218,6 +240,11 @@ class CloneSmokeHarness:
         self._log(f"Workspace: {self.workspace}")
 
     # --------------------------------------------------------------------- utils
+    def _resolve_catalog_modes(self, selection: str) -> List[str]:
+        if selection == "both":
+            return ["legacy", "intended"]
+        return [selection]
+
     def _prepare_workspace_dir(self, workspace: Path) -> Path:
         if workspace.exists():
             marker = is_smoke_workspace(workspace)
@@ -259,6 +286,16 @@ class CloneSmokeHarness:
         self._env["PUBLIC_BASE_URL"] = base
         self._env["PUBLIC_SSE_URL"] = f"{base}/mcp"
         self._env["PUBLIC_PORT"] = str(port)
+
+    def _set_catalog_mode(self, mode: str) -> None:
+        if mode not in {"intended", "legacy"}:
+            raise ValueError(f"Unknown catalog mode: {mode}")
+        value = "1" if mode == "intended" else "0"
+        env_file = self.config_home / ".env"
+        upsert_env_value(env_file, "STELAE_USE_INTENDED_CATALOG", value)
+        self._env["STELAE_USE_INTENDED_CATALOG"] = value
+        self.active_catalog_mode = mode
+        self._log(f"Catalog mode set to {mode} (STELAE_USE_INTENDED_CATALOG={value})")
 
     def _configure_debug_env(self) -> None:
         self.debug_log_dir.mkdir(parents=True, exist_ok=True)
@@ -510,8 +547,12 @@ class CloneSmokeHarness:
                 self._ephemeral = False
                 success = True
                 return
-            self._run_render_restart()
-            self._assert_clean_repo("post-restart")
+            total_modes = len(self.catalog_modes)
+            for idx, mode in enumerate(self.catalog_modes, start=1):
+                self._log(f"Catalog restart cycle {idx}/{total_modes} ({mode})")
+                self._set_catalog_mode(mode)
+                self._run_render_restart()
+                self._assert_clean_repo(f"post-restart[{mode}]")
             self._run_pytest(["tests/test_repo_sanitized.py"], label="structural")
             stages = self._codex_stages()
             manual_assets_needed = self.manual_mode or bool(self.manual_stage_names)
@@ -600,6 +641,7 @@ class CloneSmokeHarness:
             extra={
                 "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY", "test-clone-smoke-key"),
                 "GITHUB_TOKEN": os.environ.get("GITHUB_TOKEN", ""),
+                "STELAE_USE_INTENDED_CATALOG": "1" if self.catalog_modes[0] == "intended" else "0",
             },
         )
         env_contents = format_env_lines(env_map)
@@ -1215,6 +1257,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--capture-debug-tools",
         action="store_true",
         help="Enable FastMCP + tool_aggregator debug logs and persist per-stage snapshots alongside Codex transcripts",
+    )
+    parser.add_argument(
+        "--catalog-mode",
+        choices=["intended", "legacy", "both"],
+        default="intended",
+        help="Choose which catalog path the restart script should exercise (default: intended; 'both' runs legacy then intended)",
     )
     parser.add_argument(
         "--restart-timeout",
