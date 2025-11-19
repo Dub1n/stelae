@@ -183,6 +183,8 @@ class CloneSmokeHarness:
         self.streamable_debug_log = self.debug_log_dir / "streamable_tool_debug.log"
         self.aggregator_debug_log = self.debug_log_dir / "tool_aggregator_debug.log"
         self.repo_debug_dir = self.source_repo / "dev" / "logs" / "harness"
+        self.repo_smoke_root = self.source_repo / "logs" / "e2e-smoke"
+        self.repo_smoke_run_dir = self.repo_smoke_root / self.run_label
         self.proxy_port = args.port or choose_proxy_port()
         self.wrapper_release = Path(args.wrapper_release).expanduser().resolve() if args.wrapper_release else None
         self.wrapper_dest: Path | None = None
@@ -512,20 +514,36 @@ class CloneSmokeHarness:
         self.debug_log_dir.mkdir(parents=True, exist_ok=True)
         self.transcript_dir.mkdir(parents=True, exist_ok=True)
         self.repo_debug_dir.mkdir(parents=True, exist_ok=True)
+        self.repo_smoke_run_dir.mkdir(parents=True, exist_ok=True)
         for source, base_name in artifacts:
             if not source.exists():
                 continue
             workspace_copy = self.debug_log_dir / f"{stage_slug}-{base_name}"
             transcript_copy = self.transcript_dir / f"{stage_slug}-{base_name}"
             repo_copy = self.repo_debug_dir / f"{self.run_label}-{stage_slug}-{base_name}"
+            smoke_copy = self.repo_smoke_run_dir / f"{stage_slug}-{base_name}"
             shutil.copy2(source, workspace_copy)
             shutil.copy2(source, transcript_copy)
             shutil.copy2(source, repo_copy)
+            shutil.copy2(source, smoke_copy)
             source.unlink(missing_ok=True)
             self._log(
-                "Captured debug log %s for stage %s → %s (mirrored to %s and %s)"
-                % (base_name, stage_name, workspace_copy, transcript_copy, repo_copy)
+                "Captured debug log %s for stage %s → %s (mirrored to %s, %s, and %s)"
+                % (base_name, stage_name, workspace_copy, transcript_copy, repo_copy, smoke_copy)
             )
+
+    def _mirror_transcript_to_repo(self, stage_name: str) -> None:
+        transcript_path = self.transcript_dir / f"{stage_name}.jsonl"
+        if not transcript_path.exists():
+            return
+        try:
+            self.repo_smoke_run_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            self._log(f"Warning: unable to create smoke log directory {self.repo_smoke_run_dir}: {exc}")
+            return
+        dest = self.repo_smoke_run_dir / f"{stage_name}.jsonl"
+        shutil.copy2(transcript_path, dest)
+        self._log(f"Mirrored Codex transcript for stage {stage_name} → {dest}")
 
     # -------------------------------------------------------------------- stages
     def run(self) -> None:
@@ -950,6 +968,7 @@ class CloneSmokeHarness:
                 )
             finally:
                 self._capture_debug_logs(stage.name)
+                self._mirror_transcript_to_repo(stage.name)
             self._assert_clean_repo(f"after-{stage.name}")
         return False
 

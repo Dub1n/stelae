@@ -75,11 +75,12 @@ Key artifacts in the workspace:
 | `client-repo/` | Minimal git repo used as the Codex working tree. |
 | `codex-transcripts/*.jsonl` | Raw `codex exec --json` streams per stage. |
 | `manual_playbook.md` / `manual_result.json` | Only created when `--manual` is set (see below). |
+| `logs/e2e-smoke/<timestamp>/` (repo) | Harness-mirrored Codex transcripts (and, when enabled, agent debug logs) copied out of the disposable workspace so evidence survives cleanup. |
 
 When `--capture-debug-tools` is set the harness also writes `streamable_tool_debug.log` and
 `tool_aggregator_debug.log` snapshots into `${WORKSPACE}/logs/` (named `<stage>-*.log`), copies the same files into
-`codex-transcripts/`, and mirrors each snapshot back to `dev/logs/harness/<timestamp>-<stage>-*.log` so the evidence
-survives even if the disposable workspace is deleted.
+`codex-transcripts/`, mirrors each snapshot back to `dev/logs/harness/<timestamp>-<stage>-*.log`, and copies the stage
+artifacts into `logs/e2e-smoke/<timestamp>/` alongside the per-stage Codex transcripts.
 
 For the active backlog, run logs, and troubleshooting playbooks see
 `dev/tasks/stelae-smoke-readiness.md`.
