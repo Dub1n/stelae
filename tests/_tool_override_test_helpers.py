@@ -68,7 +68,7 @@ def _base_overrides() -> Dict[str, Any]:
                 "enabled": True,
                 "tools": {
                     "sample_fetch_suite": {
-                        "description": "Doc fetch aggregate (base)",
+                        "description": "Content fetch aggregate (base)",
                         "enabled": True,
                         "inputSchema": {
                             "type": "object",
@@ -77,8 +77,8 @@ def _base_overrides() -> Dict[str, Any]:
                                 "operation": {
                                     "type": "string",
                                     "enum": [
-                                        "fetch_document_links",
-                                        "fetch_documentation_page",
+                                        "fetch_page_sections",
+                                        "fetch_snippet_preview",
                                     ],
                                 }
                             },
@@ -86,11 +86,11 @@ def _base_overrides() -> Dict[str, Any]:
                     }
                 },
             },
-            "docs": {
+            "content_proxy": {
                 "enabled": True,
                 "tools": {
-                    "fetch_document_links": {"enabled": True},
-                    "fetch_documentation_page": {"enabled": True},
+                    "fetch_page_sections": {"enabled": True},
+                    "fetch_snippet_preview": {"enabled": True},
                 },
             },
         },
@@ -103,7 +103,7 @@ def _aggregation_payload() -> Dict[str, Any]:
         "aggregations": [
             {
                 "name": "sample_fetch_suite",
-                "description": "Documentation fetch helpers (overlay)",
+                "description": "Content fetch helpers (overlay)",
                 "inputSchema": {
                     "type": "object",
                     "required": ["operation"],
@@ -111,31 +111,31 @@ def _aggregation_payload() -> Dict[str, Any]:
                         "operation": {
                             "type": "string",
                             "enum": [
-                                "fetch_document_links",
-                                "fetch_documentation_page",
+                                "fetch_page_sections",
+                                "fetch_snippet_preview",
                             ],
                         }
                     },
                 },
                 "operations": [
                     {
-                        "value": "fetch_document_links",
-                        "downstreamTool": "fetch_document_links",
+                        "value": "fetch_page_sections",
+                        "downstreamTool": "fetch_page_sections",
                     },
                     {
-                        "value": "fetch_documentation_page",
-                        "downstreamTool": "fetch_documentation_page",
+                        "value": "fetch_snippet_preview",
+                        "downstreamTool": "fetch_snippet_preview",
                     },
                 ],
                 "hideTools": [
                     {
-                        "server": "docs",
-                        "tool": "fetch_document_links",
+                        "server": "content_proxy",
+                        "tool": "fetch_page_sections",
                         "reason": "Wrapped by sample_fetch_suite",
                     },
                     {
-                        "server": "docs",
-                        "tool": "fetch_documentation_page",
+                        "server": "content_proxy",
+                        "tool": "fetch_snippet_preview",
                         "reason": "Wrapped by sample_fetch_suite",
                     },
                 ],

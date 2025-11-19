@@ -312,7 +312,12 @@ def test_runner_dispatches_and_maps_arguments() -> None:
     aggregation = config.aggregations[0]
     observed: dict[str, Any] = {}
 
-    async def fake_call(name: str, arguments: dict[str, Any], timeout: float | None):
+    async def fake_call(
+        name: str,
+        arguments: dict[str, Any],
+        timeout: float | None,
+        server_name: str | None,
+    ):
         observed["tool"] = name
         observed["arguments"] = arguments
         observed["timeout"] = timeout
@@ -360,7 +365,12 @@ def test_runner_decodes_structured_json_payloads() -> None:
     config = ToolAggregationConfig.from_data(config_data)
     aggregation = config.aggregations[0]
 
-    async def fake_call(name: str, arguments: dict[str, Any], timeout: float | None):
+    async def fake_call(
+        name: str,
+        arguments: dict[str, Any],
+        timeout: float | None,
+        server_name: str | None,
+    ):
         return {
             "content": [{"type": "text", "text": "payload"}],
             "structuredContent": {"result": '{"status": "ok", "entries": [1]}'},
@@ -373,6 +383,49 @@ def test_runner_decodes_structured_json_payloads() -> None:
     assert isinstance(content_blocks[0], types.TextContent)
     assert structured["result"]["entries"] == [1]
     assert structured["result"]["status"] == "ok"
+
+
+def test_runner_passes_downstream_server() -> None:
+    config_data = {
+        "schemaVersion": 1,
+        "aggregations": [
+            {
+                "name": "demo_aggregate",
+                "description": "Sample aggregate",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"operation": {"type": "string"}},
+                    "required": ["operation"],
+                },
+                "operations": [
+                    {
+                        "value": "ping",
+                        "downstreamTool": "demo_tool",
+                        "downstreamServer": "fs",
+                        "argumentMappings": [
+                            {"target": "operation", "value": "ping"},
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+    config = ToolAggregationConfig.from_data(config_data)
+    aggregation = config.aggregations[0]
+    observed: dict[str, Any] = {}
+
+    async def fake_call(
+        name: str,
+        arguments: dict[str, Any],
+        timeout: float | None,
+        server_name: str | None,
+    ):
+        observed["server"] = server_name
+        return {"result": {"status": "ok"}}
+
+    runner = AggregatedToolRunner(aggregation, fake_call)
+    asyncio.run(runner.dispatch({"operation": "ping"}))
+    assert observed["server"] == "fs"
 
 
 def test_require_any_of_enforced() -> None:
@@ -401,7 +454,12 @@ def test_require_any_of_enforced() -> None:
     config = ToolAggregationConfig.from_data(config_data)
     aggregation = config.aggregations[0]
 
-    async def fake_call(name: str, arguments: dict[str, Any], timeout: float | None):  # pragma: no cover - not reached
+    async def fake_call(
+        name: str,
+        arguments: dict[str, Any],
+        timeout: float | None,
+        server_name: str | None,
+    ):  # pragma: no cover - not reached
         return {}
 
     runner = AggregatedToolRunner(aggregation, fake_call)
@@ -418,12 +476,12 @@ def test_aggregation_runtime_dedupes_and_hides(tmp_path: Path) -> None:
     assert required_fields == ["operation"]
 
     enum_values = aggregated["inputSchema"]["properties"]["operation"]["enum"]
-    assert {"fetch_document_links", "fetch_documentation_page"}.issubset(set(enum_values))
+    assert {"fetch_page_sections", "fetch_snippet_preview"}.issubset(set(enum_values))
 
-    docs_tools = servers["docs"]["tools"]
-    for tool_name in ("fetch_document_links", "fetch_documentation_page"):
-        assert tool_name in docs_tools
-        assert docs_tools[tool_name]["enabled"] is False
+    content_tools = servers["content_proxy"]["tools"]
+    for tool_name in ("fetch_page_sections", "fetch_snippet_preview"):
+        assert tool_name in content_tools
+        assert content_tools[tool_name]["enabled"] is False
 
 
 def test_overlay_only_excludes_defaults(monkeypatch, tmp_path: Path) -> None:
@@ -432,15 +490,15 @@ def test_overlay_only_excludes_defaults(monkeypatch, tmp_path: Path) -> None:
         "schemaVersion": 1,
         "defaults": {"selectorField": "operation", "serverName": "tool_aggregator"},
         "hiddenTools": [
-            {"server": "docs", "tool": "fetch_document_links", "reason": "Wrapped"}
+            {"server": "content_proxy", "tool": "fetch_page_sections", "reason": "Wrapped"}
         ],
         "aggregations": [
             {
-                "name": "docs_suite",
-                "description": "Docs",
+                "name": "content_suite",
+                "description": "Content fetch",
                 "inputSchema": {"type": "object"},
                 "operations": [
-                    {"value": "fetch_document_links", "downstreamTool": "fetch_document_links"}
+                    {"value": "fetch_page_sections", "downstreamTool": "fetch_page_sections"}
                 ],
             }
         ],
@@ -453,16 +511,16 @@ def test_overlay_only_excludes_defaults(monkeypatch, tmp_path: Path) -> None:
     overlay_path.parent.mkdir(parents=True, exist_ok=True)
     overlay_data = {
         "hiddenTools": [
-            {"server": "docs", "tool": "fetch_document_links", "reason": "Wrapped"},
+            {"server": "content_proxy", "tool": "fetch_page_sections", "reason": "Wrapped"},
             {"server": "mem", "tool": "legacy", "reason": "Custom"},
         ],
         "aggregations": [
             {
-                "name": "docs_suite",
-                "description": "Docs",
+                "name": "content_suite",
+                "description": "Content fetch",
                 "inputSchema": {"type": "object"},
                 "operations": [
-                    {"value": "fetch_document_links", "downstreamTool": "fetch_document_links"}
+                    {"value": "fetch_page_sections", "downstreamTool": "fetch_page_sections"}
                 ],
             },
             {
@@ -557,7 +615,12 @@ def test_starter_bundle_aggregations_roundtrip_structured_payloads(
     structured_sample = build_sample_from_schema(schema)
     serialized = json.dumps(structured_sample, ensure_ascii=False)
 
-    async def fake_call(name: str, params: dict[str, Any], timeout: float | None):
+    async def fake_call(
+        name: str,
+        params: dict[str, Any],
+        timeout: float | None,
+        server_name: str | None,
+    ):
         # Aggregator should decode double-encoded payloads and leave structured content intact.
         return {
             "content": [{"type": "text", "text": serialized}],

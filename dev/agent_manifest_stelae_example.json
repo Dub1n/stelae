@@ -286,50 +286,6 @@
             ]
         },
         {
-            "name": "fetch_documentation_page",
-            "summary": "Fetch a docs page and return markdown.",
-            "category": "docs",
-            "annotations": {
-                "readOnly": true,
-                "destructive": false,
-                "idempotent": true
-            },
-            "approval": "never",
-            "input_schema": {
-                "type": "object",
-                "required": [
-                    "url"
-                ],
-                "properties": {
-                    "url": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        {
-            "name": "fetch_document_links",
-            "summary": "Extract internal/external links from a docs page.",
-            "category": "docs",
-            "annotations": {
-                "readOnly": true,
-                "destructive": false,
-                "idempotent": true
-            },
-            "approval": "never",
-            "input_schema": {
-                "type": "object",
-                "required": [
-                    "url"
-                ],
-                "properties": {
-                    "url": {
-                        "type": "string"
-                    }
-                }
-            }
-        },
-        {
             "name": "fetch",
             "summary": "Fetch URL content as markdown or raw.",
             "category": "docs",

@@ -2,7 +2,7 @@ got it—here’s the landscape + a practical swap plan to retire the legacy doc
 
 > context (what we’re replacing)
 >
-> stelae currently ships a legacy documentation MCP plus a small manager and wraps it behind aggregated tools (`documentation_catalog`, `doc_fetch_suite`), with aggregates allowed to persist JSON state under `${STELAE_STATE_HOME}`. the goal is to drop those bespoke assets from git and move to off‑the‑shelf mcp servers, with curated lists/history stored in a state file like `${STELAE_STATE_HOME}/doc_catalog.json` and exposed via a new aggregate (e.g., `documentation_catalog`).
+> stelae previously shipped a legacy documentation MCP plus a small manager and wrapped it behind aggregated tools (`documentation_catalog`, `doc_fetch_suite`), with aggregates allowed to persist JSON state under `${STELAE_STATE_HOME}`. those bespoke assets are now removed from git, and the goal is to lean on off‑the‑shelf mcp servers with curated lists/history stored in a state file like `${STELAE_STATE_HOME}/doc_catalog.json` and exposed via a new aggregate (e.g., `documentation_catalog`).
 
 ---
 
@@ -248,7 +248,7 @@ use `manage_stelae` to add servers; new env keys land in `${STELAE_CONFIG_HOME}/
 
 ## how we’d stage the cut‑over
 
-1. **add new aggregate** `documentation_catalog` with the ops above; state at `${STELAE_STATE_HOME}/doc_catalog.json`. keep `doc_fetch_suite` around briefly for parity testing.
+1. **add new aggregate** `documentation_catalog` with the ops above; state at `${STELAE_STATE_HOME}/doc_catalog.json`. the retired `doc_fetch_suite` is gone, so parity tests now run directly against `documentation_catalog` plus the external fetch/search servers.
 2. **install** the chosen searcher(s) + fetcher(s) + rag via `manage_stelae`. missing env keys get hydrated into `${STELAE_CONFIG_HOME}/.env.local`.
 3. **wire the routes** (search→tavily/exa/brave/ddg; fetch→fetch/scrapling/firecrawl; rag→qdrant/chroma) in the aggregate json; render/restart as usual.
 4. **remove the legacy documentation binary** from the starter bundle and delete the repo‑tracked files once parity checks pass (your core template is already designed to keep optional stacks out of git). ⁄(⁄ ⁄•⁄-⁄•⁄ ⁄)⁄

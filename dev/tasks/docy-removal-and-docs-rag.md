@@ -6,7 +6,7 @@ Tags: `#infra` `#docs`
 
 ## Checklist
 
-- [ ] Phase 1: Remove Docy from tracked repo and starter bundle (scripts, templates, README/tests).
+- [x] Phase 1: Remove Docy from tracked repo and starter bundle (scripts, templates, README/tests).
 - [ ] Phase 2: Refactor aggregates/state helpers to support doc catalog state (`documentation_catalog` aggregate, `${STELAE_STATE_HOME}/doc_catalog.json`).
 - [ ] Phase 3: Install/validate new MCP stack (Tavily search/fetch + Qdrant RAG baseline; add optional fetch fallbacks if needed).
 - [ ] Update spec/progress/task file.

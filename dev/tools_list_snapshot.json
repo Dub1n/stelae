@@ -1299,84 +1299,6 @@
           "destructiveHint": false,
           "idempotentHint": false,
           "openWorldHint": false,
-          "readOnlyHint": true
-        },
-        "description": "Fetch all links from a documentation page, categorized by internal and external links.\n\n    This tool retrieves all links from a web page at the specified URL and returns them categorized\n    as internal links (within the same domain) and external links (to other domains). Use this tool\n    to discover related documentation pages from a starting URL.\n\n    Example usage:\n    ```\n    fetch_document_links(url=\"https://example.com/documentation/page\")\n    ```\n\n    Response includes a structured list of internal and external links found on the page, with their\n    URLs and link text when available.",
-        "inputSchema": {
-          "properties": {
-            "url": {
-              "title": "Url",
-              "type": "string"
-            }
-          },
-          "required": [
-            "url"
-          ],
-          "type": "object"
-        },
-        "name": "fetch_document_links",
-        "outputSchema": {
-          "properties": {
-            "result": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "result"
-          ],
-          "type": "object"
-        },
-        "x-stelae": {
-          "primaryServer": "docs",
-          "servers": [
-            "docs"
-          ]
-        }
-      },
-      {
-        "annotations": {
-          "destructiveHint": false,
-          "idempotentHint": false,
-          "openWorldHint": false,
-          "readOnlyHint": true
-        },
-        "description": "Fetch the content of a documentation page by URL as markdown.\n\n    This tool retrieves the full content from a documentation page at the specified URL and returns it as markdown.\n    The markdown format preserves headings, links, lists, and other formatting from the original documentation.\n\n    Example usage:\n    ```\n    fetch_documentation_page(url=\"https://example.com/documentation/page\")\n    ```\n\n    Response includes the full markdown content of the page along with metadata like title and links.",
-        "inputSchema": {
-          "properties": {
-            "url": {
-              "title": "Url",
-              "type": "string"
-            }
-          },
-          "required": [
-            "url"
-          ],
-          "type": "object"
-        },
-        "name": "fetch_documentation_page",
-        "outputSchema": {
-          "properties": {
-            "result": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "result"
-          ],
-          "type": "object"
-        },
-        "x-stelae": {
-          "primaryServer": "docs",
-          "servers": [
-            "docs"
-          ]
-        }
-      },
-      {
-        "annotations": {
-          "destructiveHint": false,
-          "idempotentHint": false,
-          "openWorldHint": false,
           "readOnlyHint": false
         },
         "description": "\n    Fetch the README content for a GitHub URL. If the URL is not for GitHub, returns empty content.\n    Attempts to locate the README.md in the indicated directory (e.g., for\n    https://github.com/owner/repo/tree/main/path, it fetches README.md inside path).\n    First tries raw.githubusercontent.com; if that fails, falls back to PyGithub API.\n\n    Returns JSON string with keys:\n      - status: \"success\" or \"error: <message>\"\n      - require_api_key: bool (heuristic scan)\n      - content: README text (empty on error)\n      - REMINDER: only present when require_api_key is True\n    ",
@@ -2115,25 +2037,6 @@
           "primaryServer": "fs",
           "servers": [
             "fs"
-          ]
-        }
-      },
-      {
-        "annotations": {
-          "destructiveHint": false,
-          "idempotentHint": false,
-          "openWorldHint": false,
-          "readOnlyHint": false
-        },
-        "description": "List all available documentation sources this service has access to.\n\n    This tool requires no input parameters and returns a list of documentation sources configured for this service.\n    Use this tool first to discover what documentation sources are available.\n\n    Example usage:\n    ```\n    list_documentation_sources_tool()\n    ```\n\n    Response provides the URLs to documentation sources and their types.",
-        "inputSchema": {
-          "type": "object"
-        },
-        "name": "list_documentation_sources_tool",
-        "x-stelae": {
-          "primaryServer": "docs",
-          "servers": [
-            "docs"
           ]
         }
       },

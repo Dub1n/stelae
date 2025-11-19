@@ -173,8 +173,8 @@ async def test_proxy_mode_exposes_remote_catalog(monkeypatch):
             return {
                 "prompts": [
                     {
-                        "name": "documentation_sources",
-                        "description": "List docs",
+                        "name": "stack_overview",
+                        "description": "List stack components",
                         "arguments": [],
                     }
                 ]
@@ -197,7 +197,7 @@ async def test_proxy_mode_exposes_remote_catalog(monkeypatch):
                         "content": {"type": "text", "text": "hello"},
                     }
                 ],
-                "description": "List docs",
+                "description": "List stack components",
             }
         if method == "resources/read":
             return {
@@ -227,12 +227,12 @@ async def test_proxy_mode_exposes_remote_catalog(monkeypatch):
     names = [tool.name for tool in tools]
     assert "read_file" in names
     prompts = await hub.app.list_prompts()
-    assert prompts and prompts[0].name == "documentation_sources"
+    assert prompts and prompts[0].name == "stack_overview"
     resources = await hub.app.list_resources()
     assert resources and str(resources[0].uri) == "grep://info"
 
-    messages = await hub.app.get_prompt("documentation_sources", {})
-    assert messages.description == "List docs"
+    messages = await hub.app.get_prompt("stack_overview", {})
+    assert messages.description == "List stack components"
     assert messages.messages[0].content.type == "text"
 
     contents = await hub.app.read_resource("grep://info")
@@ -347,8 +347,8 @@ def test_rendered_manifest_contains_only_aggregates(tmp_path: Path) -> None:
         if descriptor.get("enabled", True)
     ]
     assert ("tool_aggregator", "sample_fetch_suite") in enabled
-    assert ("docs", "fetch_document_links") not in enabled
-    assert ("docs", "fetch_documentation_page") not in enabled
+    assert ("content_proxy", "fetch_page_sections") not in enabled
+    assert ("content_proxy", "fetch_snippet_preview") not in enabled
 
     schema = servers["tool_aggregator"]["tools"]["sample_fetch_suite"]["inputSchema"]
     assert len(schema["required"]) == len(set(schema["required"]))
