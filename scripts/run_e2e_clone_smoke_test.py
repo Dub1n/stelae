@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Automated + manual harness for the clone smoke test."""
+"""Automated harness for the clone smoke test."""
 
 from __future__ import annotations
 
@@ -107,12 +107,10 @@ def upsert_env_value(env_file: Path, key: str, value: str) -> None:
 
 from stelae_lib.smoke_harness import (
     MCPToolCall,
-    ManualContext,
     build_env_map,
     choose_proxy_port,
     format_env_lines,
     parse_codex_jsonl,
-    render_manual_playbook,
     summarize_tool_calls,
 )
 
@@ -139,11 +137,20 @@ class CodexStage:
     expectations: List[ToolExpectation]
 
 
+def assert_stage_expectations(stage: CodexStage, calls: Iterable[MCPToolCall]) -> None:
+    """Ensure every expected tool call appears at least ``min_calls`` times."""
+
+    for expectation in stage.expectations:
+        matches = [call for call in calls if expectation.matches(call)]
+        if len(matches) < expectation.min_calls:
+            raise RuntimeError(
+                f"Codex stage '{stage.name}' missing tool '{expectation.tool}' – {expectation.description}."
+            )
+
+
 class CloneSmokeHarness:
     def __init__(self, args: argparse.Namespace) -> None:
         self.args = args
-        self.manual_mode = bool(args.manual)
-        self.manual_stage_names = set(args.manual_stage or [])
         self.force_workspace = bool(args.force_workspace)
         self.reuse_workspace = bool(args.reuse_workspace)
         self.source_repo = Path(args.source).resolve()
@@ -169,9 +176,6 @@ class CloneSmokeHarness:
         self.client_repo = self.workspace / "client-repo"
         self.codex_home = self.workspace / "codex-home"
         self.transcript_dir = self.workspace / "codex-transcripts"
-        self.manual_result_path = self.workspace / "manual_result.json"
-        self.manual_playbook_path = self.workspace / "manual_playbook.md"
-        self.manual_mission = Path("dev/tasks/missions/e2e_clone_smoke.json")
         self.log_path = self.workspace / "harness.log"
         self.python_site = self.workspace / "python-site"
         self._pytest_ready = False
@@ -210,11 +214,9 @@ class CloneSmokeHarness:
                 "GOCACHE": str(self.workspace / ".gocache"),
                 "PM2_HOME": str(self.pm2_home),
                 "CODEX_HOME": str(self.codex_home),
+                "STELAE_USE_INTENDED_CATALOG": "1",
             }
         )
-        self.catalog_modes = self._resolve_catalog_modes(args.catalog_mode or "intended")
-        self.active_catalog_mode: str | None = None
-        self._env["STELAE_USE_INTENDED_CATALOG"] = "1" if self.catalog_modes[0] == "intended" else "0"
         self._apply_proxy_port(self.proxy_port)
         self._env.setdefault("PYTHONUNBUFFERED", "1")
         if self.pm2_bin:
@@ -242,11 +244,6 @@ class CloneSmokeHarness:
         self._log(f"Workspace: {self.workspace}")
 
     # --------------------------------------------------------------------- utils
-    def _resolve_catalog_modes(self, selection: str) -> List[str]:
-        if selection == "both":
-            return ["legacy", "intended"]
-        return [selection]
-
     def _prepare_workspace_dir(self, workspace: Path) -> Path:
         if workspace.exists():
             marker = is_smoke_workspace(workspace)
@@ -288,16 +285,6 @@ class CloneSmokeHarness:
         self._env["PUBLIC_BASE_URL"] = base
         self._env["PUBLIC_SSE_URL"] = f"{base}/mcp"
         self._env["PUBLIC_PORT"] = str(port)
-
-    def _set_catalog_mode(self, mode: str) -> None:
-        if mode not in {"intended", "legacy"}:
-            raise ValueError(f"Unknown catalog mode: {mode}")
-        value = "1" if mode == "intended" else "0"
-        env_file = self.config_home / ".env"
-        upsert_env_value(env_file, "STELAE_USE_INTENDED_CATALOG", value)
-        self._env["STELAE_USE_INTENDED_CATALOG"] = value
-        self.active_catalog_mode = mode
-        self._log(f"Catalog mode set to {mode} (STELAE_USE_INTENDED_CATALOG={value})")
 
     def _configure_debug_env(self) -> None:
         self.debug_log_dir.mkdir(parents=True, exist_ok=True)
@@ -565,29 +552,13 @@ class CloneSmokeHarness:
                 self._ephemeral = False
                 success = True
                 return
-            total_modes = len(self.catalog_modes)
-            for idx, mode in enumerate(self.catalog_modes, start=1):
-                self._log(f"Catalog restart cycle {idx}/{total_modes} ({mode})")
-                self._set_catalog_mode(mode)
-                self._run_render_restart()
-                self._assert_clean_repo(f"post-restart[{mode}]")
+            self._log("Catalog restart cycle 1/1 (intended)")
+            self._run_render_restart()
+            self._assert_clean_repo("post-restart[intended]")
             self._run_pytest(["tests/test_repo_sanitized.py"], label="structural")
             stages = self._codex_stages()
-            manual_assets_needed = self.manual_mode or bool(self.manual_stage_names)
-            if manual_assets_needed:
-                self._write_manual_assets()
-                if self.manual_mode and not self.manual_stage_names:
-                    self._log(
-                        "Manual playbook written. Complete the instructions in manual_playbook.md and rerun the harness without --manual."
-                    )
-                    self._ephemeral = False
-                    return
-            auto_stage_pending = any(stage.name not in self.manual_stage_names for stage in stages)
-            if auto_stage_pending:
-                self._prepare_codex_environment()
-            if self._run_codex_flow(stages):
-                self._ephemeral = False
-                return
+            self._prepare_codex_environment()
+            self._run_codex_flow(stages)
             self._run_pytest([], label="full-suite")
             self._run_verify_clean()
             self._assert_clean_repo("final")
@@ -659,7 +630,6 @@ class CloneSmokeHarness:
             extra={
                 "OPENAI_API_KEY": os.environ.get("OPENAI_API_KEY", "test-clone-smoke-key"),
                 "GITHUB_TOKEN": os.environ.get("GITHUB_TOKEN", ""),
-                "STELAE_USE_INTENDED_CATALOG": "1" if self.catalog_modes[0] == "intended" else "0",
             },
         )
         env_contents = format_env_lines(env_map)
@@ -682,7 +652,7 @@ class CloneSmokeHarness:
 
     def _copy_wrapper_release(self) -> None:
         if not self.wrapper_release:
-            self._log("No wrapper release provided; manual steps must use an existing install.")
+            self._log("No wrapper release provided; using any existing installation on disk.")
             return
         if not self.wrapper_release.is_dir():
             raise SystemExit(f"{self.wrapper_release} is not a release directory")
@@ -951,16 +921,13 @@ class CloneSmokeHarness:
         self._run(["git", "add", "README.md"], cwd=self.client_repo)
         self._run(["git", "commit", "-m", "chore: seed client repo"], cwd=self.client_repo)
 
-    def _run_codex_flow(self, stages: List[CodexStage]) -> bool:
+    def _run_codex_flow(self, stages: List[CodexStage]) -> None:
         self.transcript_dir.mkdir(parents=True, exist_ok=True)
         for stage in stages:
-            if stage.name in self.manual_stage_names:
-                self._emit_manual_stage(stage)
-                return True
             try:
                 events = self._execute_codex_stage(stage)
                 calls = summarize_tool_calls(events)
-                self._assert_stage_expectations(stage, calls)
+                assert_stage_expectations(stage, calls)
                 self.codex_transcripts[stage.name] = calls
                 self._log(
                     f"Codex stage '{stage.name}' captured {len(calls)} tool calls: "
@@ -970,7 +937,6 @@ class CloneSmokeHarness:
                 self._capture_debug_logs(stage.name)
                 self._mirror_transcript_to_repo(stage.name)
             self._assert_clean_repo(f"after-{stage.name}")
-        return False
 
     def _codex_stages(self) -> List[CodexStage]:
         bundle_expectations = [
@@ -1081,31 +1047,6 @@ class CloneSmokeHarness:
             """
         ).strip()
 
-    def _emit_manual_stage(self, stage: CodexStage) -> None:
-        instructions = textwrap.dedent(
-            f"""
-            # Manual Codex stage: {stage.name}
-
-            Workspace: `{self.clone_dir}`
-            STELAE_CONFIG_HOME: `{self.config_home}`
-            PM2_HOME: `{self.pm2_home}`
-            Client repo (Codex working tree): `{self.client_repo}`
-
-            Run the Codex CLI manually for this stage using the sandbox env file (`source {self.config_home / '.env'}`; the repo `.env` symlink points here) and the prompt below. The harness expects you to run the same instructions it would have passed to `codex exec`:
-
-            ```
-            {stage.prompt}
-            ```
-
-            After completing the stage, rerun the harness without `--manual-stage {stage.name}` to continue. Use `python scripts/run_e2e_clone_smoke_test.py --workspace {self.workspace} --reuse-workspace ...` so the sandbox is reused.
-            """
-        ).strip()
-        path = self.workspace / f"manual_stage_{stage.name}.md"
-        path.write_text(instructions + "\n", encoding="utf-8")
-        self._log(
-            f"Manual stage '{stage.name}' instructions written → {path}. Complete the steps and rerun without --manual-stage {stage.name}."
-        )
-
     def _execute_codex_stage(self, stage: CodexStage) -> List[Dict[str, Any]]:
         if not self.codex_cli_bin:
             raise RuntimeError("Codex CLI not prepared")
@@ -1132,14 +1073,6 @@ class CloneSmokeHarness:
         transcript_path.write_text(result.stdout, encoding="utf-8")
         return parse_codex_jsonl(result.stdout.splitlines())
 
-    def _assert_stage_expectations(self, stage: CodexStage, calls: Iterable[MCPToolCall]) -> None:
-        for expectation in stage.expectations:
-            matches = [call for call in calls if expectation.matches(call)]
-            if len(matches) < expectation.min_calls:
-                raise RuntimeError(
-                    f"Codex stage '{stage.name}' missing tool '{expectation.tool}' – {expectation.description}."
-                )
-
     def _build_manage_predicate(self, operation: str, alias: str) -> Callable[[MCPToolCall], bool]:
         def predicate(call: MCPToolCall) -> bool:
             if not isinstance(call.arguments, dict):
@@ -1161,31 +1094,6 @@ class CloneSmokeHarness:
         status = self._run(["git", "status", "--porcelain"], cwd=self.clone_dir, capture_output=True).stdout.strip()
         if status:
             raise RuntimeError(f"Repo dirty {label}:\n{status}")
-
-    def _write_manual_assets(self) -> None:
-        manual_template = {
-            "status": "pending",
-            "install_call_id": "",
-            "remove_call_id": "",
-            "notes": "",
-        }
-        self._log(f"Writing manual result template → {self.manual_result_path}")
-        self.manual_result_path.write_text(json.dumps(manual_template, indent=2), encoding="utf-8")
-        ctx = ManualContext(
-            sandbox_root=self.workspace,
-            clone_dir=self.clone_dir,
-            env_file=self.config_home / ".env",
-            config_home=self.config_home,
-            proxy_url=f"http://127.0.0.1:{self.proxy_port}/mcp",
-            manual_result=self.manual_result_path,
-            wrapper_bin=self.wrapper_bin,
-            wrapper_config=self.wrapper_config,
-            mission_file=(self.clone_dir / self.manual_mission) if (self.clone_dir / self.manual_mission).exists() else None,
-        )
-        playbook = render_manual_playbook(ctx)
-        self._log(f"Writing manual playbook → {self.manual_playbook_path}")
-        self.manual_playbook_path.write_text(playbook, encoding="utf-8")
-        self._log(f"Manual instructions ready: {self.manual_playbook_path}")
 
     def _teardown_processes(self) -> None:
         if shutil.which("pm2"):
@@ -1259,29 +1167,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--proxy-source", help="Alternate git source for mcp-proxy")
     parser.add_argument("--wrapper-release", help="Path to a codex-mcp-wrapper release directory to copy into the sandbox")
     parser.add_argument("--port", type=int, help="Override the sandbox proxy port")
-    parser.add_argument(
-        "--manual",
-        action="store_true",
-        help="Prepare manual assets and exit instead of running codex exec automation",
-    )
-    parser.add_argument(
-        "--manual-stage",
-        action="append",
-        choices=["bundle-tools", "install", "remove"],
-        help="Treat the specified stage as manual/resumable; the harness emits stage instructions and exits before running it",
-    )
     parser.add_argument("--codex-cli", help="Path to the codex CLI binary to run inside the sandbox")
     parser.add_argument("--codex-home", help="Optional path to mirror into CODEX_HOME inside the sandbox")
     parser.add_argument(
         "--capture-debug-tools",
         action="store_true",
         help="Enable FastMCP + tool_aggregator debug logs and persist per-stage snapshots alongside Codex transcripts",
-    )
-    parser.add_argument(
-        "--catalog-mode",
-        choices=["intended", "legacy", "both"],
-        default="intended",
-        help="Choose which catalog path the restart script should exercise (default: intended; 'both' runs legacy then intended)",
     )
     parser.add_argument(
         "--restart-timeout",

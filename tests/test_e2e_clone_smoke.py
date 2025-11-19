@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 import sys
 
+import pytest
+
 # Ensure the repo root is importable when pytest runs inside the venv.
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -10,13 +12,8 @@ if str(ROOT) not in sys.path:
 
 import scripts.run_e2e_clone_smoke_test as smoke_script
 
-from stelae_lib.smoke_harness import (
-    ManualContext,
-    build_env_map,
-    choose_proxy_port,
-    format_env_lines,
-    render_manual_playbook,
-)
+from scripts.run_e2e_clone_smoke_test import CodexStage, ToolExpectation, assert_stage_expectations
+from stelae_lib.smoke_harness import MCPToolCall, build_env_map, choose_proxy_port, format_env_lines
 
 
 def test_choose_proxy_port_excludes_default_range() -> None:
@@ -61,23 +58,6 @@ def test_format_env_lines_respects_key_order() -> None:
     assert text.splitlines()[1] == "B=2"
 
 
-def test_render_manual_playbook_mentions_manual_paths(tmp_path: Path) -> None:
-    ctx = ManualContext(
-        sandbox_root=tmp_path,
-        clone_dir=tmp_path / "clone",
-        env_file=tmp_path / ".env",
-        config_home=tmp_path / "config",
-        proxy_url="http://127.0.0.1:9999/mcp",
-        manual_result=tmp_path / "manual_result.json",
-        wrapper_bin=tmp_path / "bin" / "codex-mcp-wrapper",
-        wrapper_config=tmp_path / "cfg" / "wrapper.toml",
-        mission_file=tmp_path / "clone" / "dev" / "tasks" / "missions" / "e2e_clone_smoke.json",
-    )
-    text = render_manual_playbook(ctx)
-    assert str(ctx.manual_result) in text
-    assert "codex-mcp-wrapper" in text
-    assert "manage_stelae" in text
-
 
 def test_mark_and_cleanup_workspace(tmp_path: Path) -> None:
     workspace = tmp_path / "stelae-smoke-workspace-demo"
@@ -111,6 +91,56 @@ def test_upsert_env_value_appends_and_updates(tmp_path: Path) -> None:
     assert lines.count("FOO=2") == 1
 
 
-def test_parse_args_accepts_catalog_mode() -> None:
-    args = smoke_script.parse_args(["--catalog-mode", "both"])
-    assert args.catalog_mode == "both"
+def test_assert_stage_expectations_passes_with_required_calls() -> None:
+    stage = CodexStage(
+        name="bundle-tools",
+        prompt="",
+        expectations=[
+            ToolExpectation(
+                tool="workspace_fs_read",
+                description="read file",
+                predicate=lambda call: isinstance(call.arguments, dict)
+                and call.arguments.get("operation") == "read_file",
+            )
+        ],
+    )
+    calls = [
+        MCPToolCall(
+            id="1",
+            server="stelae",
+            tool="workspace_fs_read",
+            status="completed",
+            arguments={"operation": "read_file"},
+            result=None,
+            error=None,
+        )
+    ]
+    assert_stage_expectations(stage, calls)
+
+
+def test_assert_stage_expectations_raises_when_tool_missing() -> None:
+    stage = CodexStage(
+        name="install",
+        prompt="",
+        expectations=[
+            ToolExpectation(
+                tool="manage_stelae",
+                description="install",
+                predicate=lambda call: isinstance(call.arguments, dict)
+                and call.arguments.get("operation") == "install_server",
+            )
+        ],
+    )
+    calls = [
+        MCPToolCall(
+            id="2",
+            server="stelae",
+            tool="manage_stelae",
+            status="completed",
+            arguments={"operation": "list_discovered_servers"},
+            result=None,
+            error=None,
+        )
+    ]
+    with pytest.raises(RuntimeError):
+        assert_stage_expectations(stage, calls)

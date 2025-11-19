@@ -27,8 +27,7 @@ Run the helper from the repo root:
 ```bash
 python scripts/run_e2e_clone_smoke_test.py \
   --wrapper-release ~/dev/codex-mcp-wrapper/dist/releases/0.1.0 \
-  --codex-cli $(which codex) \
-  --catalog-mode both
+  --codex-cli $(which codex)
 ```
 
 The harness will:
@@ -74,7 +73,6 @@ Key artifacts in the workspace:
 | `codex-home/` | Mirrored `CODEX_HOME` (config + auth). |
 | `client-repo/` | Minimal git repo used as the Codex working tree. |
 | `codex-transcripts/*.jsonl` | Raw `codex exec --json` streams per stage. |
-| `manual_playbook.md` / `manual_result.json` | Only created when `--manual` is set (see below). |
 | `logs/e2e-smoke/<timestamp>/` (repo) | Harness-mirrored Codex transcripts (and, when enabled, agent debug logs) copied out of the disposable workspace so evidence survives cleanup. |
 
 When `--capture-debug-tools` is set the harness also writes `streamable_tool_debug.log` and
@@ -91,11 +89,8 @@ Common options:
 - `--keep-workspace` – keep artifacts after success.
 - `--codex-cli /path/to/codex` – pin a specific Codex binary (defaults to `shutil.which("codex")`).
 - `--codex-home /path/to/.codex` – mirror a custom Codex config/auth directory into the sandbox.
-- `--catalog-mode intended|legacy|both` – restart the stack with the intended catalog (default), force the legacy runtime overrides, or run both cycles before Codex automation.
 - `--wrapper-release …` – copy a Codex MCP wrapper release into the sandbox so the starter bundle can expose it.
 - `--proxy-source <git-or-path>` – override the mcp-proxy checkout source. When omitted the harness checks `STELAE_PROXY_SOURCE`, then falls back to a local `~/apps/mcp-proxy` clone (useful when hacking on the fork), and finally clones `https://github.com/Dub1n/mcp-proxy.git`, which contains the `/mcp` facade required for the readiness probes.
-- `--manual` – generate `manual_playbook.md` / `manual_result.json`, then exit immediately so you can follow the instructions manually. The harness still provisions the sandbox (clone, bundle install, restart) so the manual steps have a ready workspace; this flag simply skips the Codex automation that would normally follow.
-- `--manual-stage bundle-tools|install|remove` – stop right before a specific Codex stage, emit `manual_stage_<stage>.md`, and exit. After finishing those steps, rerun with `--workspace <path> --reuse-workspace` (and without that `--manual-stage`) to continue.
 - `--capture-debug-tools` – enable the FastMCP/tool-aggregator debug env vars, store their log files under `${WORKSPACE}/logs/`,
   add a per-stage copy to `codex-transcripts/`, and mirror the same snapshots to `dev/logs/harness/` so the artifacts survive
   even when the disposable workspace is deleted.
@@ -107,8 +102,10 @@ Common options:
 
 **Important:** The “install” phase (starter bundle + `make render-proxy` + restart script) consistently completes in under one minute on a clean sandbox. If you see the harness stuck on “Installing starter bundle…” or “Restarting stack…”, treat it as an orchestration failure—use `--restart-timeout`, `--restart-retries`, and `--heartbeat-timeout` to bail out quickly, capture the pm2/log snippets, and debug the blocked subprocess instead of raising the timeout ceiling.
 - `--force-workspace` – overwrite the directory passed to `--workspace` even if it predates the harness marker or contains other files. Recommended when you want deterministic paths plus full logs (pair with `--keep-workspace`).
-- `--reuse-workspace` – reuse an existing smoke workspace (identified by `.stelae_smoke_workspace`) instead of deleting it. Required when resuming a manual stage; pair with `--workspace <path>`.
+- `--reuse-workspace` – reuse an existing smoke workspace (identified by `.stelae_smoke_workspace`) instead of deleting it. Pair with `--workspace <path>` when you want to keep a sandbox warm between runs.
 - `--cleanup-only [--workspace /path]` – delete previously kept smoke workspaces (or a specific path) and exit without provisioning a new clone.
+
+The harness always exports `STELAE_USE_INTENDED_CATALOG=1`; legacy runtime overrides are no longer exercised during smoke runs so failures point directly at the intended catalog pipeline.
 
 ### Port selection & graceful shutdown
 
@@ -151,32 +148,9 @@ The JSONL files prove exactly which MCP calls executed and are parsed by
 alters the expected sequence, update the harness expectations and the accompanying
 unit tests (`tests/test_codex_exec_transcript.py`).
 
-## Manual fallback (optional)
-
-Manual checkpoints follow the same CLI pattern as automation: run
-
-```bash
-codex exec --json --skip-git-repo-check --sandbox workspace-write --full-auto \
-  --cd ${WORKSPACE}/client-repo "<prompt from manual_stage_*.md>"
-```
-
-after sourcing the sandbox `.env` so Codex inherits the proxy settings. The harness
-captures the prompt for you inside the generated manual files; rerun automation (without
-`--manual`/`--manual-stage`) once the manual `codex exec` call completes.
-
-- `--manual` writes the full playbook/result scaffolding (mirroring the original
-  flow) and exits immediately so you can run the MCP steps manually via the `codex exec`
-  command described above. Rerun the harness (without `--manual`) once the manual
-  steps succeed.
-- `--manual-stage bundle-tools|install|remove` converts individual stages into
-  resumable checkpoints. The harness stops right before the selected stage, writes
-  `manual_stage_<stage>.md` describing the required Codex prompt, and exits. After
-  completing the manual stage, rerun with `--workspace <path> --reuse-workspace` and
-  omit that `--manual-stage` so automation can continue with the remaining stages.
-
 ## Feedback + cleanup
 
-After Codex (auto or manual) finishes, the harness:
+After Codex automation finishes, the harness:
 
 1. Runs the remaining pytest modules and `make verify-clean` from inside the clone.
 2. Captures any failures with full logs and leaves the workspace intact for triage. A

@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import json
 import random
-import textwrap
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping
@@ -147,53 +146,6 @@ def format_env_lines(values: Mapping[str, str], *, keys: Iterable[str] = SMOKE_E
             continue
         lines.append(f"{key}={value}")
     return "\n".join(lines) + "\n"
-
-
-@dataclass(frozen=True)
-class ManualContext:
-    sandbox_root: Path
-    clone_dir: Path
-    env_file: Path
-    config_home: Path
-    proxy_url: str
-    manual_result: Path
-    wrapper_bin: Path | None = None
-    wrapper_config: Path | None = None
-    mission_file: Path | None = None
-
-
-def render_manual_playbook(ctx: ManualContext) -> str:
-    """Return the markdown playbook testers should follow for manual steps."""
-    if ctx.wrapper_bin:
-        mission_arg = ctx.mission_file or Path("dev/tasks/missions/e2e_clone_smoke.json")
-        config_arg = f"--config {ctx.wrapper_config}" if ctx.wrapper_config else ""
-        cmd = f"{ctx.wrapper_bin} run-mission {mission_arg} --workspace {ctx.clone_dir}"
-        if config_arg:
-            cmd = f"{cmd} {config_arg}"
-        wrapper_hint = f"Run `{cmd}` after exporting `STELAE_CONFIG_HOME={ctx.config_home}`."
-    else:
-        wrapper_hint = "Launch your Codex MCP wrapper (set `STELAE_CONFIG_HOME` to the sandbox) before continuing."
-    mission_hint = (
-        f"Mission file: `{ctx.mission_file}`" if ctx.mission_file else "Mission file: dev/tasks/missions/e2e_clone_smoke.json"
-    )
-    return textwrap.dedent(
-        f"""
-        # Codex MCP manual smoke instructions
-
-        1. Open a new terminal and `cd {ctx.clone_dir}`.
-        2. Export `STELAE_CONFIG_HOME={ctx.config_home}` and `PM2_HOME={ctx.sandbox_root / '.pm2'}` so Codex reuses the sandbox.
-        3. Start the Codex MCP wrapper using the sandbox `.env` (`source {ctx.env_file}` or pass `--env-file`).
-        4. Connect to the sandbox proxy: `{ctx.proxy_url}`. Verify `workspace_fs_read`, `grep`, and `manage_stelae` appear via `tools/list`.
-        5. Call `workspace_fs_read` with `{{"operation":"read_file","path":"README.md"}}`, then call `grep` with `{{"pattern":"manage_stelae","paths":["README.md"],"recursive":false,"regexp":false}}`, and finally call `manage_stelae` with `{{"operation":"list_discovered_servers"}}`.
-        6. Install Qdrant under a throwaway alias by calling `manage_stelae` with `{{"operation":"install_server","params":{{"name":"qdrant","target_name":"qdrant_smoke","force":true}}}}` and wait for completion.
-        7. Remove the alias via `manage_stelae` `{{"operation":"remove_server","params":{{"name":"qdrant_smoke","force":true}}}}`.
-        8. Update `{ctx.manual_result}` with `status="passed"` (or `failed`) plus any notes and include the install/remove call IDs reported by Codex.
-
-        {wrapper_hint}
-
-        {mission_hint}
-        """
-    ).strip() + "\n"
 
 
 @dataclass(frozen=True)
