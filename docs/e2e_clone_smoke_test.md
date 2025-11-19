@@ -50,11 +50,18 @@ The harness will:
    and temporarily disables `PIP_REQUIRE_VIRTUALENV` so developers that enforce that
    guardrail on their host still get a working structural check.
 5. Drive Codex through three JSONL stages (bundle tools, install Qdrant as
-   `qdrant_smoke`, remove it again). Each stage runs `codex exec --json --full-auto`
-   with scripted instructions and writes the transcript to
-   `${WORKSPACE}/codex-transcripts/<stage>.jsonl`. The harness parses the JSON lines
-   and fails if it cannot find the required `workspace_fs_read`, `grep`,
-   or `manage_stelae` calls.
+   `qdrant_smoke`, remove it again). Each stage runs the CLI invocation below—no
+   MCP wrapper entry point or `codex mcp` subcommand participates:
+
+   ```bash
+   codex exec --json --skip-git-repo-check --sandbox workspace-write --full-auto \
+     --cd ${WORKSPACE}/client-repo "<stage prompt>"
+   ```
+
+   The raw stdout from that command is saved to
+   `${WORKSPACE}/codex-transcripts/<stage>.jsonl`, and the harness fails immediately
+   if it cannot find the required `workspace_fs_read`, `grep`, or `manage_stelae`
+   calls inside the JSON lines.
 6. Assert `git status --porcelain` is empty after every major step (bundle install,
    Codex install/remove, final tests).
 
@@ -145,10 +152,21 @@ unit tests (`tests/test_codex_exec_transcript.py`).
 
 ## Manual fallback (optional)
 
+Manual checkpoints follow the same CLI pattern as automation: run
+
+```bash
+codex exec --json --skip-git-repo-check --sandbox workspace-write --full-auto \
+  --cd ${WORKSPACE}/client-repo "<prompt from manual_stage_*.md>"
+```
+
+after sourcing the sandbox `.env` so Codex inherits the proxy settings. The harness
+captures the prompt for you inside the generated manual files; rerun automation (without
+`--manual`/`--manual-stage`) once the manual `codex exec` call completes.
+
 - `--manual` writes the full playbook/result scaffolding (mirroring the original
-  flow) and exits immediately so you can run the MCP steps manually via the Codex MCP
-  wrapper or another tooling path. Rerun the harness (without `--manual`) once the
-  manual steps succeed.
+  flow) and exits immediately so you can run the MCP steps manually via the `codex exec`
+  command described above. Rerun the harness (without `--manual`) once the manual
+  steps succeed.
 - `--manual-stage bundle-tools|install|remove` converts individual stages into
   resumable checkpoints. The harness stops right before the selected stage, writes
   `manual_stage_<stage>.md` describing the required Codex prompt, and exits. After

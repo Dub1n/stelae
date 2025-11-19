@@ -6,13 +6,15 @@ Tags: `#infra`, `#tests`
 
 ## Checklist
 
-- [x] Land a Codex MCP wrapper (or equivalent orchestrator) that can launch sandboxes with caller-provided env/layout and hand structured missions to the agent. _(Delivered separately in `~/dev/codex-mcp-wrapper`; this task consumes the released bundle.)_
+- [x] Land a Codex MCP wrapper mission that can launch sandboxes with caller-provided env/layout for optional experiments. _(Delivered separately in `~/dev/codex-mcp-wrapper`; the smoke harness now runs without it, but the release remains available.)_
 - [x] Build an automation harness that clones the repo into a temp workspace, points `STELAE_CONFIG_HOME`/`.env` at that sandbox, renders + restarts the stack, and drives the CLI portions of `stelae.manage_stelae` (install/remove) while asserting the git tree stays clean.
-- [x] Write the companion manual playbook so testers can launch the Codex MCP wrapper inside the sandbox, follow the scripted MCP interactions (install server via tool, exercise it, remove it, finish), and feed results back to the harness/orchestrator.
+- [x] Write the companion manual playbook so testers can follow the scripted MCP interactions (install server via tool, exercise it, remove it, finish) even without automation; when desired, they can still launch the Codex MCP wrapper inside the sandbox and feed results back to the harness.
 - [x] If the Codex MCP wrapper cannot be delivered in time, fall back to a documented manual MCP procedure (still using the sandbox + CLI harness) and capture the gap in the task notes. _(N/A – wrapper available; playbook references the release copy.)_
 - [x] Update README/AGENTS/docs with instructions for running the smoke test (both automated portion and the human-in-the-loop MCP steps).
 - [x] Update spec/progress/task files.
 - [x] Commit with message `infra: add e2e clone smoke test harness` after tests.
+
+*Historical note: early iterations referenced a separate Codex MCP wrapper “orchestrator.” The delivered harness now runs the entire workflow itself (render → restart → staged `codex exec --json --full-auto` calls), and the wrapper is strictly optional for other MCP experiments.*
 
 ## References
 

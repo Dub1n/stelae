@@ -144,6 +144,7 @@ Feasibility note
 - If all phases can be applied in one session (small code surface, limited test fallout), proceed end-to-end. If scope grows (e.g., pervasive path changes or test churn), split the work and delegate via codex-wrapper per docs/codex-wrapper-instructions.md, one phase at a time, keeping this task doc as the orchestrator plan.
 
 Progress log
+
 - Completed Phase 1: env-driven paths under config/state homes with fail-fast validation; loaders/renderers/integrator/aggregator/custom-tools/populate scripts updated; `.env.example` lists required paths.
 - Completed Phase 2: removed tracked mutable JSONs; config-home files use plain names (no `.local`); tests/docs/code updated to stop referencing tracked templates or `.local` names.
 - New work (2025-11-17 agent run): docs refreshed (README/ARCHITECTURE/AGENTS) to emphasize config-home catalogs/bundles; setup_env tightened; bundle/tests touched. Phase 3 still partial—bundle installer still uses overlay helpers (`overlay_path_for`) and needs a cleanup to stop mentioning `.local` entirely; restart/bundle flows not yet confirmed against `.local` recreation. Tests run by agent: `.venv/bin/pytest tests/test_install_stelae_bundle.py tests/test_tool_aggregations.py::test_aggregation_runtime_dedupes_and_hides`.

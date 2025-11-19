@@ -1,9 +1,7 @@
 # Task: Stelae smoke readiness (catalog hygiene · harness reliability · Codex orchestration)
 
 Related requirements: consolidated from
-`archive/e2e-clone-smoke-test.md`, `archive/clone-smoke-harness-stability.md`,
-`archive/stelae-tool-aggregation-visibility.md`, `archive/stelae-mcp-catalog-consistency.md`, and
-`archive/codex-manage-stelae-smoke.md`.
+`archive/e2e-clone-smoke-test.md`, `archive/clone-smoke-harness-stability.md`, `archive/stelae-tool-aggregation-visibility.md`, `archive/stelae-mcp-catalog-consistency.md`, and `archive/codex-manage-stelae-smoke.md`.
 
 Tags: `#infra`, `#tests`, `#docs`
 
@@ -12,7 +10,7 @@ Tags: `#infra`, `#tests`, `#docs`
 > checklists, and run logs live in one place.
 >
 > **Note:** References to the retired documentation stack/`doc_fetch_suite` are preserved for historical context. The new `documentation_catalog` aggregate will replace those workflows once the vendor-neutral tooling lands.
-
+>
 > **Doc boundary:** This file is the engineering planning log for smoke readiness.
 > The canonical runbook/architecture reference lives in `docs/e2e_clone_smoke_test.md`.
 > Keep low-level instructions there and record action items + evidence here.
@@ -23,14 +21,14 @@ Tags: `#infra`, `#tests`, `#docs`
 | --- | --- | --- |
 | Catalog hygiene | Keep the published manifest limited to curated aggregate tools, dedupe schemas, and capture Codex catalog regressions in the harness. Intended catalog is now the default proxy input; harness runs must cover both intended + legacy fallbacks until the rollback window closes. | `[~]` (`workspace_fs_read` JSON parsing gap still unresolved) |
 | Harness + restart reliability | `scripts/run_e2e_clone_smoke_test.py` finishes clone → bundle → render → restart → Codex stages with bounded retries and diagnostics while keeping git clean. Env bootstraps now run through `scripts/setup_env.py` so `${STELAE_ENV_FILE}` lives under `${STELAE_CONFIG_HOME}` and the harness no longer writes repo-local `.env` files directly. | `[~]` (port preflight + restart probes landed, Codex stage timeouts under investigation) |
-| Codex orchestration | Codex CLI + wrapper can run the golden-path `manage_stelae` scenario end-to-end using only MCP calls, with transcripts stored by the harness. | `[~]` (Stage scripts + wrapper integration complete; catalog consistency still blocks “tool missing” flakes.) |
+| Codex orchestration | `codex exec --json --full-auto` drives the golden-path `manage_stelae` scenario end-to-end (discover → install → remove) without any MCP wrapper entry point, and the harness captures every transcript. | `[~]` (Stage prompts + CLI automation landed; catalog consistency still blocks “tool missing” flakes.) |
 
 ## Active checklist
 
 > For all checklist items, find the relevant workstream and ensure the work is carried out as part of it's setup. This includes performing any pre-reading and adding documentation to the appropriate places.
 
 - [ ] Prerequisite – restore `workspace_fs_read` coverage by ensuring the filesystem server/bundle entries are installed and exposed through the proxy (aggregator currently fails with `Unknown tool: read_file`). Document the fix and the downstream tool list in Appendix B once complete.
-- [ ] Trials – Codex CLI wrappers + harness prove `workspace_fs_read` and `manage_stelae` all register and complete without manual prompts while the documentation catalog work remains in flight. *(Appendix B documents the current blocker: Codex still reports `Expecting value` from `workspace_fs_read` even though HTTP probes pass.)*
+- [ ] Trials – Codex CLI harness runs (`codex exec --json --full-auto`) prove `workspace_fs_read` and `manage_stelae` register and complete without manual prompts while the documentation catalog work remains in flight. *(Appendix B documents the current blocker: Codex still reports `Expecting value` from `workspace_fs_read` even though HTTP probes pass.)*
 - [ ] Harness reliability – capture a “restart succeeds under 120 s” run with `--capture-debug-tools --manual-stage install` plus logs attached to `dev/logs/harness/`.
 - [ ] Codex orchestration – rerun the full golden path (discover → dry-run install → real install → remove) after catalog fixes land and archive the transcripts under `dev/logs/harness/`.
 - [ ] Intended catalog soak – run `python scripts/run_e2e_clone_smoke_test.py --catalog-mode both` for two consecutive greens (and at least one PM2 environment using `STELAE_USE_INTENDED_CATALOG=1`) so we can retire the legacy runtime path with confidence. Record each passing run (timestamp, workspace, log bundle) in Appendix C.
@@ -74,13 +72,13 @@ Tags: `#infra`, `#tests`, `#docs`
 
 ### Codex orchestration
 
-- **Goals:** Codex CLI + wrapper complete `discover → install (dry-run + real) → reconciler/remove` using only MCP transport while the harness validates catalog state and git cleanliness.
+- **Goals:** Codex CLI (invoked via `codex exec --json --full-auto`) completes `discover → install (dry-run + real) → reconciler/remove` using only the standard CLI entry point while the harness validates catalog state and git cleanliness.
 - **What’s done:**
   - `stelae_lib/integrator/catalog_overrides.py` hydrates descriptors (stdio command/env placeholders) during discovery, so installs pass schema validation.
   - FastMCP bridge handles `manage_stelae` locally, so proxy restarts during install/remove no longer sever Codex calls mid-flight.
   - Harness bundle stage script forces Codex to issue `workspace_fs_read`, `grep`, `documentation_catalog`, and `doc_fetch_suite` even when the catalog omits them, producing actionable failures instead of silent skips.
 - **Still open:**
-  - Track the golden-path CLI instructions, prerequisites, and verification steps in one place (see Appendix B) and keep that section updated whenever we change orchestrator interactions.
+  - Track the golden-path CLI instructions, prerequisites, and verification steps in one place (see Appendix B) and keep that section updated whenever we change the scripted `codex exec` prompts.
   - Automation must archive `codex-transcripts/<stage>.jsonl` plus the mirrored debug logs for every CI/manual run so catalog regressions are obvious.
   - Once catalog hygiene stickiness is verified, add a nightly (or on-demand) harness run that uploads transcripts + `logs/streamable_tool_debug.log` as artifacts.
 
