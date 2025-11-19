@@ -14,7 +14,7 @@ Tags: `#infra`, `#tests`
 - [x] Update spec/progress/task files.
 - [x] Commit with message `infra: add e2e clone smoke test harness` after tests.
 
-*Historical note: early iterations referenced a separate Codex MCP wrapper “orchestrator.” The delivered harness now runs the entire workflow itself (render → restart → staged `codex exec --json --full-auto` calls), and the wrapper is strictly optional for other MCP experiments.*
+_Historical note: early iterations referenced a separate Codex MCP wrapper “orchestrator.” The delivered harness now runs the entire workflow itself (render → restart → staged `codex exec --json --full-auto` calls), and the wrapper is strictly optional for other MCP experiments._
 
 ## References
 
