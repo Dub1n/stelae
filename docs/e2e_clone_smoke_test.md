@@ -25,7 +25,8 @@ Run the helper from the repo root:
 ```bash
 python scripts/run_e2e_clone_smoke_test.py \
   --wrapper-release ~/dev/codex-mcp-wrapper/dist/releases/0.1.0 \
-  --codex-cli $(which codex)
+  --codex-cli $(which codex) \
+  --catalog-mode both
 ```
 
 The harness will:
