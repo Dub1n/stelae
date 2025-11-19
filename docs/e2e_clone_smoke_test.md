@@ -4,7 +4,9 @@ The clone smoke test proves that a fresh checkout can bootstrap the entire stack
 install/remove managed servers, and survive a full Codex MCP session without touching
 an engineer's primary development environment. The harness now runs Codex in
 non-interactive mode via `codex exec --json`, records every MCP tool call, and fails if
-expected calls (starter bundle tools + `manage_stelae`) are missing.
+expected calls (starter bundle tools + `manage_stelae`) are missing. This document is
+the canonical architecture/runbook reference for the clone smoke harness; development
+planning and task tracking live in `dev/tasks/stelae-smoke-readiness.md`.
 
 ## Prerequisites
 

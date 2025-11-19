@@ -13,6 +13,10 @@ Tags: `#infra`, `#tests`, `#docs`
 >
 > **Note:** References to the retired documentation stack/`doc_fetch_suite` are preserved for historical context. The new `documentation_catalog` aggregate will replace those workflows once the vendor-neutral tooling lands.
 
+> **Doc boundary:** This file is the engineering planning log for smoke readiness.
+> The canonical runbook/architecture reference lives in `docs/e2e_clone_smoke_test.md`.
+> Keep low-level instructions there and record action items + evidence here.
+
 ## Scope & checkpoints
 
 | Stream | Goal | Status |
@@ -25,14 +29,16 @@ Tags: `#infra`, `#tests`, `#docs`
 
 > For all checklist items, find the relevant workstream and ensure the work is carried out as part of it's setup. This includes performing any pre-reading and adding documentation to the appropriate places.
 
+- [ ] Prerequisite – restore `workspace_fs_read` coverage by ensuring the filesystem server/bundle entries are installed and exposed through the proxy (aggregator currently fails with `Unknown tool: read_file`). Document the fix and the downstream tool list in Appendix B once complete.
 - [ ] Trials – Codex CLI wrappers + harness prove `workspace_fs_read` and `manage_stelae` all register and complete without manual prompts while the documentation catalog work remains in flight. *(Appendix B documents the current blocker: Codex still reports `Expecting value` from `workspace_fs_read` even though HTTP probes pass.)*
 - [ ] Harness reliability – capture a “restart succeeds under 120 s” run with `--capture-debug-tools --manual-stage install` plus logs attached to `dev/logs/harness/`.
 - [ ] Codex orchestration – rerun the full golden path (discover → dry-run install → real install → remove) after catalog fixes land and archive the transcripts under `dev/logs/harness/`.
-- [ ] Intended catalog soak – run `python scripts/run_e2e_clone_smoke_test.py --catalog-mode both` for two consecutive greens (and at least one PM2 environment using `STELAE_USE_INTENDED_CATALOG=1`) so we can retire the legacy runtime path with confidence.
+- [ ] Intended catalog soak – run `python scripts/run_e2e_clone_smoke_test.py --catalog-mode both` for two consecutive greens (and at least one PM2 environment using `STELAE_USE_INTENDED_CATALOG=1`) so we can retire the legacy runtime path with confidence. Record each passing run (timestamp, workspace, log bundle) in Appendix C.
 - [ ] Docs/tests – README, `docs/ARCHITECTURE.md`, and `docs/e2e_clone_smoke_test.md` now reference this consolidated task and document the overlay + harness expectations (✅ Action Plan #3).
 - [ ] Documentation catalog aggregate – ensure the forthcoming replacement stays schema-compliant so Codex no longer sees “Output validation error … is not of type 'object'.”
 - [ ] Automate harness dependency bootstrap so sandbox `python-site/` always has `httpx`, `anyio`, `mcp`, `fastmcp`, `trio`, etc., before pytest runs (or run tests inside the prepared venv).
 - [ ] Preserve Codex evidence when the harness deletes workspaces (copy `codex-transcripts/*.jsonl` into `dev/logs/harness/` before cleanup so transcripts survive like the debug logs).
+- [ ] Follow-up – once the soak criteria are met, execute the intended-catalog plan cleanup (task 8 in `dev/tasks/intended-catalog-plan-enhanced.md`) to stop auto-populating aggregates into `tool_overrides.json` and document the removal of the legacy path.
 
 ## Workstreams
 
@@ -141,14 +147,14 @@ Scenario: prove Codex CLI can drive `discover → install → remove` solely via
 
 ### Appendix C – Clone smoke harness deliverable snapshot
 
-- Harness clones Stelae + `mcp-proxy`, provisions isolated `.env`, runs starter bundle with `--no-restart`, seeds a “client repo,” mirrors `~/.codex`, and enforces staged pytest (`tests/test_repo_sanitized.py` immediately, full suite + `make verify-clean` after Codex).
-- Codex automation covers three stages (`bundle-tools`, `install`, `remove`) and insists on `workspace_fs_read`, `grep`, `documentation_catalog`, `doc_fetch_suite`, and `manage_stelae` calls even when the catalog omits them. JSONL transcripts are stored under `${WORKSPACE}/codex-transcripts/` and parsed by `stelae_lib.smoke_harness`.
-- Manual fallback flags:
-  - `--manual` stops after provisioning and writes `manual_playbook.md` / `manual_result.json`.
-  - `--manual-stage <stage>` creates resumable checkpoints—rerun with `--workspace <path> --reuse-workspace` to continue.
-- Common CLI flags: `--workspace`, `--keep-workspace`, `--force-workspace`, `--reuse-workspace`, `--cleanup-only`, `--proxy-source`, `--wrapper-release`, `--capture-debug-tools`, `--bootstrap-only`, `--skip-bootstrap`.
-- Guardrail: The “install” phase (bundle + render + restart) should complete in <60 s. If “Installing starter bundle…” or “Restarting stack…” stalls longer, investigate orchestration failures (pm2 collisions, env drift, Codex CLI hangs) before raising timeouts.
+Operational/runbook details live in `docs/e2e_clone_smoke_test.md`. Use this appendix to
+record evidence from each smoke run (timestamp, command line, workspace path, and
+links to `dev/logs/harness/…` plus `codex-transcripts/…`). Keep entries ordered
+chronologically so it’s obvious which runs satisfy the “Intended catalog soak” or
+other checklist items.
 
 ---
 
-For new work, update this file instead of reviving the archived task docs. Keep appendices chronological so future contributors can see exactly what was tried, what failed, and where to resume.
+For new work, update this file instead of reviving the archived task docs. Keep
+appendices chronological so future contributors can see exactly what was tried, what
+failed, and where to resume.
