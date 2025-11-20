@@ -306,6 +306,11 @@ def parse_args() -> argparse.Namespace:
     ap.add_argument("--env-file", type=Path, help="Override the target env file path")
     ap.add_argument("--example", type=Path, help="Path to the template env file (defaults to repo/.env.example)")
     ap.add_argument(
+        "--materialize-defaults",
+        action="store_true",
+        help="Compatibility flag (default behavior already materializes defaults).",
+    )
+    ap.add_argument(
         "--copy",
         action="store_true",
         help="Copy instead of symlink repo/.env (symlinks are attempted by default)",
