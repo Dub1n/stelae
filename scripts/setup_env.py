@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import copy
 import os
 import shutil
 import sys
@@ -14,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from stelae_lib.catalog_defaults import DEFAULT_CUSTOM_TOOLS
+from stelae_lib.catalog_defaults import DEFAULT_CUSTOM_TOOLS, DEFAULT_TOOL_AGGREGATIONS
 from stelae_lib.config_overlays import ensure_catalog_file, ensure_config_home_scaffold, validate_home_path, write_json
 
 def repo_root() -> Path:
@@ -130,6 +131,43 @@ def _seed_json_stub(
     write_json(target, default)
 
 
+def _ensure_aggregation_skeleton(path: Path) -> None:
+    """Keep tool_aggregations.json schema-valid without injecting aggregates."""
+
+    skeleton = copy.deepcopy(DEFAULT_TOOL_AGGREGATIONS)
+    # Do not ship any aggregates by default.
+    skeleton["aggregations"] = []
+    if path.exists():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            write_json(path, skeleton)
+            return
+        changed = False
+        if not isinstance(data, dict):
+            write_json(path, skeleton)
+            return
+        if not isinstance(data.get("schemaVersion"), int):
+            data["schemaVersion"] = skeleton["schemaVersion"]
+            changed = True
+        if not isinstance(data.get("defaults"), dict):
+            data["defaults"] = skeleton["defaults"]
+            changed = True
+        if not isinstance(data.get("hiddenTools"), list):
+            data["hiddenTools"] = skeleton["hiddenTools"]
+            changed = True
+        if not isinstance(data.get("aggregations"), list):
+            data["aggregations"] = []
+            changed = True
+        if not isinstance(data.get("proxyURL"), str):
+            data["proxyURL"] = skeleton["proxyURL"]
+            changed = True
+        if changed:
+            write_json(path, data)
+        return
+    write_json(path, skeleton)
+
+
 def _resolve_home_json(
     env_var: str,
     default_path: Path,
@@ -195,10 +233,11 @@ def _materialize_default_catalogs(*, config_home: Path, state_root: Path) -> Non
     )
     _seed_json_stub(
         aggregations_path,
-        default={},
+        default=DEFAULT_TOOL_AGGREGATIONS,
         legacy_candidates=[config_home / "tool_aggregations.local.json"],
         search_roots=config_roots,
     )
+    _ensure_aggregation_skeleton(aggregations_path)
     _seed_json_stub(
         custom_tools_path,
         default=DEFAULT_CUSTOM_TOOLS,
