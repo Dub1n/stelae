@@ -4,6 +4,12 @@
 
 Stelae combines a Go-based MCP aggregation proxy, a fleet of downstream MCP servers, a FastMCP bridge for stdio clients, and a Cloudflare tunnel for public access. Everything originates from the local WSL workspace while remaining consumable by remote ChatGPT Connectors. The Go proxy currently comes from the [Dub1n/mcp-proxy](https://github.com/Dub1n/mcp-proxy) fork so we can expose a unified `/mcp` facade (HEAD/GET/POST) for readiness probes and streamable clients while upstreaming the feature.
 
+### Documentation map
+
+- [README](../README.md) – landing-page overview, highlights, and the minimal quick-start needed to try the stack.
+- [DEVELOPMENT](../DEVELOPMENT.md) – maintainer handbook covering operational workflows, PM2 commands, catalog tooling, Cloudflare steps, and troubleshooting.
+- This architecture guide – deep dive into layering, catalogs, and renderer flows referenced by both docs.
+
 ### Config layout
 
 Templates live under `config/` in this repo; machine-specific state lives in `${STELAE_CONFIG_HOME}` (default `~/.config/stelae`) and runtime artifacts land in `${STELAE_STATE_HOME}` (default `${STELAE_CONFIG_HOME}/.state`). Catalog fragments (`${STELAE_CONFIG_HOME}/catalog/*.json` seeded by `scripts/setup_env.py --materialize-defaults` plus `${STELAE_CONFIG_HOME}/bundles/*/catalog.json`) supply overrides/aggregations/hide entries for the tool aggregator. Writable helpers are split by ownership: `${STELAE_CONFIG_HOME}` holds human-edited overlays (`tool_overrides.json`, `custom_tools.json`) while `${STELAE_STATE_HOME}` owns runtime artifacts (`tool_overrides.json` mirror, `tool_schema_status.json`, `discovered_servers.json`, `intended_catalog.json`, `live_catalog.json`, `live_descriptors.json`, drift logs). Environment values obey the same layering: `.env.example` stays generic, `${STELAE_ENV_FILE}` (default `${STELAE_CONFIG_HOME}/.env`) is human-edited, and `${STELAE_CONFIG_HOME}/.env.local` (or the last env file provided to the integrator) receives hydrated defaults so git remains clean even when overrides introduce new variables.
