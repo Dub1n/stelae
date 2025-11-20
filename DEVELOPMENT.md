@@ -68,9 +68,9 @@ Core templates ship the essentials (custom tools, Stelae integrator, tool aggreg
 
 ## Workflow Guardrails
 
-Follow this loop whenever templates or catalog fragments change:
+Follow this loop whenever templates or catalog overlays change:
 
-1. `python scripts/process_tool_aggregations.py --scope local` – validates `${STELAE_CONFIG_HOME}/catalog/*.json` + bundle fragments, writes `${TOOL_OVERRIDES_PATH}` and `${INTENDED_CATALOG_PATH}` into `${STELAE_STATE_HOME}`.
+1. `python scripts/process_tool_aggregations.py --scope local` – validates user overlays (`tool_overrides.json`, `tool_aggregations.json`) plus any catalog fragments/bundle catalogs, then writes `${TOOL_OVERRIDES_PATH}` and `${INTENDED_CATALOG_PATH}` into `${STELAE_STATE_HOME}`. The intended catalog is the runtime source for the tool-aggregator server.
 2. `make render-proxy` – refreshes `${PROXY_CONFIG}` and merged overrides, pulling from `${STELAE_STATE_HOME}/live_descriptors.json` (pass `--allow-stale-descriptors` only when investigating drift).
 3. `pytest tests/test_repo_sanitized.py` – ensures templates remain placeholder-only.
 4. `make verify-clean` (or `./scripts/verify_clean_repo.sh --skip-restart`) – wraps render + restart automation and fails when tracked drift appears.
@@ -121,10 +121,11 @@ Keep `STELAE_PROXY_BASE` pointed at the bare origin; the bridge appends `/mcp` i
 
 ### Declarative tool aggregations
 
-- Catalog fragments live under `${STELAE_CONFIG_HOME}/catalog/*.json` plus `${STELAE_CONFIG_HOME}/bundles/*/catalog.json`. Validate them with `python scripts/process_tool_aggregations.py --check-only`.
+- User-writable overlays live in `${STELAE_CONFIG_HOME}/tool_overrides.json` and `${STELAE_CONFIG_HOME}/tool_aggregations.json`; bundle/catalog fragments are optional extras under `${STELAE_CONFIG_HOME}/bundles/*/catalog.json` (and `${STELAE_CONFIG_HOME}/catalog/*.json` if you add your own). Validate everything with `python scripts/process_tool_aggregations.py --check-only`.
 - Aggregated tools return downstream `content` blocks and preserve `structuredContent`. The runner bypasses FastMCP’s coercion via a custom `FuncMetadata` shim and decodes JSON-looking strings to keep structured results typed.
 - Bundle descriptors may declare `downstreamServer`; the aggregator forwards that as `serverName` so composites such as `workspace_fs_read` continue to call the intended backend even when overrides hide or rename tools.
 - Aggregated tool `outputSchema.type` is normalized to `"object"` for Codex compatibility. If Stelae tools disappear from `list_tools`, rerun `python scripts/process_tool_aggregations.py --scope local` and `make render-proxy`.
+- The tool-aggregator server now prefers `${INTENDED_CATALOG_PATH}` (`intended_catalog.json`) for its merged aggregation payload; `STELAE_TOOL_AGGREGATIONS` remains an explicit overlay path if you need to point at a custom file.
 
 To add an aggregate:
 

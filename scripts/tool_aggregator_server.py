@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from stelae_lib.config_overlays import config_home, require_home_path, state_home
+from stelae_lib.config_overlays import config_home, require_home_path, runtime_path, state_home
 from stelae_lib.integrator.stateful_runner import StatefulAggregatedToolRunner
 from stelae_lib.integrator.tool_aggregations import (
     AggregatedToolDefinition,
@@ -27,6 +27,8 @@ from stelae_lib.integrator.tool_aggregations import (
     ToolAggregationError,
     ToolAggregationConfig,
     load_tool_aggregation_config,
+    merge_aggregation_payload,
+    validate_aggregation_schema,
 )
 
 LOGGER = logging.getLogger("stelae.tool_aggregator")
@@ -65,6 +67,63 @@ _STATE_CONTEXT = {
     "STELAE_DIR": str(_WORKSPACE_ROOT),
     "STELAE_STATE_HOME": str(_STATE_HOME),
 }
+
+
+def _load_json(path: Path) -> Dict[str, Any] | None:
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _load_intended_aggregations() -> Dict[str, Any] | None:
+    intended_default = runtime_path("intended_catalog.json")
+    try:
+        intended_path = require_home_path(
+            "INTENDED_CATALOG_PATH",
+            default=intended_default,
+            description="Intended catalog path",
+            allow_config=False,
+            allow_state=True,
+            create=False,
+        )
+    except ValueError:
+        intended_path = intended_default
+
+    data = _load_json(intended_path)
+    catalog = data.get("catalog") if isinstance(data, dict) else None
+    aggregations = catalog.get("toolAggregations") if isinstance(catalog, dict) else None
+    return aggregations if isinstance(aggregations, dict) else None
+
+
+def _load_aggregation_config() -> ToolAggregationConfig:
+    """Prefer intended_catalog-derived aggregations; fall back to the overlay file."""
+
+    base_payload = _load_intended_aggregations()
+    overlay_payload = _load_json(_CONFIG_PATH)
+    payload: Dict[str, Any] | None = None
+    source = "intended_catalog"
+
+    if base_payload and overlay_payload:
+        payload = merge_aggregation_payload(base_payload, overlay_payload)
+        source = "intended_catalog+overlay"
+    elif base_payload:
+        payload = base_payload
+        source = "intended_catalog"
+    elif overlay_payload:
+        payload = overlay_payload
+        source = "overlay"
+
+    if payload:
+        validate_aggregation_schema(payload, _SCHEMA_PATH)
+        LOGGER.info("[tool-aggregator] loaded aggregation config (%s)", source)
+        return ToolAggregationConfig.from_data(payload)
+
+    LOGGER.info("[tool-aggregator] falling back to overlay file only (no intended catalog present)")
+    return load_tool_aggregation_config(_CONFIG_PATH, schema_path=_SCHEMA_PATH)
 
 
 class PassthroughFuncMetadata(FuncMetadata):
@@ -144,7 +203,7 @@ class ProxyCaller:
 
 
 def _load_config() -> ToolAggregationConfig:
-    return load_tool_aggregation_config(_CONFIG_PATH, schema_path=_SCHEMA_PATH, include_overlay=False)
+    return _load_aggregation_config()
 
 
 def _proxy_base_for(aggregation_base: str | None, config: ToolAggregationConfig) -> str:

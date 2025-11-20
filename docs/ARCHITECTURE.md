@@ -62,7 +62,7 @@ Templates remain read-only; renderers merge them with config-home fragments, env
 
 ## Catalog Aggregation & Overrides
 
-> Note: tracked mutable templates (`config/tool_overrides.json`, `config/tool_aggregations.json`, `config/custom_tools.json`, `config/discovered_servers.json`, `config/tool_schema_status.json`) have been removed. Aggregations now live solely inside catalog fragments under `${STELAE_CONFIG_HOME}/catalog/*.json` and `${STELAE_CONFIG_HOME}/bundles/*/catalog.json`; the only separate overlay file left in config-home is `tool_overrides.json`, with runtime mirrors/artifacts in `${STELAE_STATE_HOME}`.
+User-owned overlays live in `${STELAE_CONFIG_HOME}` (`tool_overrides.json`, `tool_aggregations.json`, optional catalog fragments/bundle catalogs). Runtime artifacts (proxy.json, intended/live catalogs, overrides mirror, schema status) live in `${STELAE_STATE_HOME}`.
 
 ```mermaid
 flowchart LR
@@ -75,6 +75,7 @@ flowchart LR
     subgraph "Overlays (${STELAE_CONFIG_HOME})"
         LO["tool_overrides.json"]
         LA["tool_aggregations.json"]
+        BF["catalog fragments / bundles<br>(catalog/*.json, bundles/*/catalog.json)"]
     end
 
     subgraph "Scripts & Helpers"
@@ -87,12 +88,13 @@ flowchart LR
     subgraph "Runtime State (${STELAE_STATE_HOME})"
         RO["${TOOL_OVERRIDES_PATH}<br>(tool_overrides.json)"]
         RS["${TOOL_SCHEMA_STATUS_PATH}"]
+        IC["${INTENDED_CATALOG_PATH}<br>(intended_catalog.json)"]
         PC["${PROXY_CONFIG}<br>(proxy.json)"]
     end
 
     subgraph "PM2 runtime"
         Proxy["mcp-proxy (Go facade)"]
-        AggSrv["tool_aggregator_server.py<br>(load_tool_aggregation_config)"]
+        AggSrv["tool_aggregator_server.py<br>(loads intended catalog)"]
     end
 
     subgraph "Downstream Servers"
@@ -107,7 +109,7 @@ flowchart LR
     end
 
     PI --> LO
-    PI --> LA
+    PI --> BF
 
     TO --> TR
     LO --> TR
@@ -117,10 +119,12 @@ flowchart LR
 
     TA --> PA
     LA --> PA
+    BF --> PA
     PA --> TR
-    PA --> AggSrv
+    PA --> IC
 
     RO --> RP
+    IC --> AggSrv
     RP --> PC
     PC --> Proxy
 
@@ -137,15 +141,15 @@ flowchart LR
     MAN --> CL
 ```
 
-- **Authoring & overlays:** config-home catalog fragments (`${STELAE_CONFIG_HOME}/catalog/core.json` auto-seeded by `scripts/setup_env.py`, any additional `${STELAE_CONFIG_HOME}/catalog/*.json`, plus `${STELAE_CONFIG_HOME}/bundles/*/catalog.json`) define the baseline catalog. Embedded defaults live in `stelae_lib/catalog_defaults.py`, and tracked schemas under `config/*.schema.json` remain only for validation; runtime behavior is driven by the config-home fragments so optional suites never leak into git.
+- **Authoring & overlays:** user-writable `tool_overrides.json` and `tool_aggregations.json` live in `${STELAE_CONFIG_HOME}`; optional catalog fragments/bundle catalogs can add more `toolOverrides`/`toolAggregations`/`hideTools` without mutating the overlays. Embedded defaults live in `stelae_lib/catalog_defaults.py`, and tracked schemas under `config/*.schema.json` remain only for validation.
 - **Aggregation + overrides pipeline:**
-  - `scripts/process_tool_aggregations.py` merges every fragment (plus the embedded defaults from `stelae_lib/catalog_defaults.py`), validates the combined payload against `config/tool_aggregations.schema.json`, writes the transformed descriptors/`hiddenTools` entries via `ToolOverridesStore.apply_overrides()`, and emits `${STELAE_STATE_HOME}/intended_catalog.json` (timestamped with fragment metadata) for downstream tooling. The renderer now prefers `${STELAE_STATE_HOME}/live_descriptors.json`, fails fast if that snapshot is missing or stale unless `--allow-stale-descriptors` is passed, appends drift summaries to `${STELAE_STATE_HOME}/live_catalog_drift.log`, and updates `tool_schema_status.json` only when live descriptors are present; `--verify` also fails when the live catalog snapshot is missing unless drift is explicitly allowed. `--scope default` restricts the merge to `catalog/core.json` so you can safely refresh the tracked defaults; `--scope local` (default) processes the full catalog.
+  - `scripts/process_tool_aggregations.py` merges overlays + fragments (plus embedded defaults), validates against `config/tool_aggregations.schema.json`, writes the transformed descriptors/`hiddenTools` via `ToolOverridesStore.apply_overrides()`, and emits `${STELAE_STATE_HOME}/intended_catalog.json` (timestamped with fragment metadata) for downstream consumers. The renderer prefers `${STELAE_STATE_HOME}/live_descriptors.json`, fails fast if that snapshot is missing or stale unless `--allow-stale-descriptors` is passed, appends drift summaries to `${STELAE_STATE_HOME}/live_catalog_drift.log`, and updates `tool_schema_status.json` only when live descriptors are present; `--verify` also fails when the live catalog snapshot is missing unless drift is explicitly allowed. `--scope default` limits to `catalog/core.json` when present; `--scope local` (default) processes every available fragment + bundle.
   - `ToolOverridesStore` layers the embedded defaults with config-home overrides, then writes the resolved catalog to `${STELAE_STATE_HOME}/tool_overrides.json` (`${TOOL_OVERRIDES_PATH}`) plus schema metadata to `${TOOL_SCHEMA_STATUS_PATH}`. This step runs inside `make render-proxy` and also whenever `manage_stelae` installs/removes servers.
   - `scripts/render_proxy_config.py` embeds the resolved override path into `${STELAE_STATE_HOME}/proxy.json`, so pm2 and the restart helper always launch the proxy with the correct runtime file.
 - **Runtime surfaces & responsibilities:**
-  - `mcp-proxy` loads `${PROXY_CONFIG}`, launches every downstream server (including `tool_aggregator_server.py`), and calls `collectTools` to gather descriptors. Aggregate tools register themselves from the merged aggregation config; base servers (filesystem, ripgrep, shell, fetch, etc.) register via their native clients.
+  - `mcp-proxy` loads `${PROXY_CONFIG}`, launches every downstream server (including `tool_aggregator_server.py`), and calls `collectTools` to gather descriptors. Aggregate tools register from the intended catalog; base servers (filesystem, ripgrep, shell, fetch, etc.) register via their native clients.
   - `buildManifestDocumentWithOverrides()` evaluates the same override set the JSON-RPC pipeline uses, so `/mcp/manifest.json`, the `initialize` response, and `tools/list` all share one resolver while still honouring transport-specific annotations.
-  - Any server or tool marked `enabled:false` in the embedded defaults or config-home fragments is suppressed before descriptors reach clients. The proxy also annotates every exposed descriptor with `x-stelae` metadata that captures the primary and fallback servers, which is how troubleshooters map Codex observations back to the originating process.
+  - Any server or tool marked `enabled:false` in the embedded defaults or overlays/fragments is suppressed before descriptors reach clients. The proxy also annotates every exposed descriptor with `x-stelae` metadata that captures the primary and fallback servers, which is how troubleshooters map Codex observations back to the originating process.
 - **Live catalog capture:** Immediately after `scripts/restart_stelae.sh` verifies that the proxy is handling `tools/list`, it launches `python scripts/capture_live_catalog.py` to persist the raw JSON-RPC payload (plus metadata such as timestamp, proxy base, and tool count) to `${STELAE_STATE_HOME}/live_catalog.json`. This snapshot is the authoritative “what the proxy actually advertised” record operators diff against `${STELAE_STATE_HOME}/intended_catalog.json`; renderer `--verify` fails if the live snapshot is missing (unless drift is explicitly allowed), and drift deltas are appended to `${STELAE_STATE_HOME}/live_catalog_drift.log`. The restart flow also emits a best-effort diff via `scripts/diff_catalog_snapshots.py` (with `--fail-on-drift`) so missing/extra tool names are visible immediately after capture, runs `scripts/catalog_metrics.py` to emit a JSON metrics snapshot under `${STELAE_STATE_HOME}`, and prunes timestamped history via `scripts/prune_catalog_history.py` to respect env limits. Capture fresh snapshots manually with `python scripts/capture_live_catalog.py --proxy-base http://127.0.0.1:9090 [--output /tmp/live.json]` whenever you need to debug catalog drift without performing a full restart.
 - **Where to debug catalog drift:** when a tool disappears, check (in order) the catalog fragments under `${STELAE_CONFIG_HOME}`, the generated runtime files in `${STELAE_STATE_HOME}` (`tool_overrides.json`, `intended_catalog.json`, schema caches), and the aggregator’s runtime config. `scripts/run_e2e_clone_smoke_test.py --capture-debug-tools` snapshots each of these surfaces so we can compare the manifest/initialize/tools-list payloads Codex saw against the expected catalog.
 
@@ -220,10 +224,10 @@ PY
 
 **How it works:**
 
-1. Catalog fragments under `${STELAE_CONFIG_HOME}/catalog/*.json` plus `${STELAE_CONFIG_HOME}/bundles/*/catalog.json` define aggregations, defaults, and hide rules. The payload is validated against `config/tool_aggregations.schema.json`, with embedded defaults sourced from `stelae_lib/catalog_defaults.py`.
-2. `scripts/process_tool_aggregations.py` runs during `make render-proxy` and the restart workflow. The default `--scope local` merges every fragment (plus embedded defaults), writes the transformed descriptors/`hiddenTools` entries via `ToolOverridesStore.apply_overrides()`, and emits `${STELAE_STATE_HOME}/intended_catalog.json` for downstream tooling. `--scope default` restricts the merge to `catalog/core.json` so you can safely refresh the embedded defaults without picking up local bundles.
-3. `scripts/tool_aggregator_server.py` is a FastMCP stdio server launched by the proxy. On startup it registers one MCP tool per aggregation; at call time it validates the input per the declarative mapping rules, translates arguments into the downstream schema, and uses the proxy JSON-RPC endpoint to call the real tool. A custom `FuncMetadata` shim bypasses FastMCP’s argument marshalling so payloads are forwarded exactly as Codex sends them, and the runner now unwraps JSON-in-a-string responses before returning the downstream `content` blocks plus their original `structuredContent`. Response mappings (optional) can still reshape the downstream payload before returning to the client. When an aggregation defines `downstreamServer` (the starter bundle sets it for the workspace FS and shell suites), the helper forwards that value as `serverName` in its JSON-RPC call so the proxy never needs to guess which server owns `read_file`/`run_command` after overrides hide or rename the originals.
-4. Because both the overrides and the stdio helper derive from the same config, adding a new aggregate requires zero Python changes—edit the JSON, run `make render-proxy`, and the proxy automatically restarts the helper with the new catalog.
+1. User overlays (`tool_overrides.json`, `tool_aggregations.json`) plus optional catalog fragments/bundle catalogs define aggregations, defaults, and hide rules. Payloads validate against `config/tool_aggregations.schema.json`, with embedded defaults sourced from `stelae_lib/catalog_defaults.py`.
+2. `scripts/process_tool_aggregations.py` runs during `make render-proxy` and the restart workflow. The default `--scope local` merges overlays + fragments (plus embedded defaults), writes the transformed descriptors/`hiddenTools` via `ToolOverridesStore.apply_overrides()`, and emits `${STELAE_STATE_HOME}/intended_catalog.json` for downstream tooling. `--scope default` restricts to `catalog/core.json` when you explicitly want the core fragment only.
+3. `scripts/tool_aggregator_server.py` is a FastMCP stdio server launched by the proxy. On startup it loads aggregations from `${INTENDED_CATALOG_PATH}` (falling back to the overlay file if needed), registers one MCP tool per aggregation, validates input per the declarative mapping rules, and uses the proxy JSON-RPC endpoint to call the real tool. A custom `FuncMetadata` shim bypasses FastMCP’s argument marshalling so payloads are forwarded exactly as Codex sends them, and the runner now unwraps JSON-in-a-string responses before returning the downstream `content` blocks plus their original `structuredContent`. Response mappings (optional) can still reshape the downstream payload before returning to the client. When an aggregation defines `downstreamServer` (the starter bundle sets it for the workspace FS and shell suites), the helper forwards that value as `serverName` in its JSON-RPC call so the proxy never needs to guess which server owns `read_file`/`run_command` after overrides hide or rename the originals.
+4. Because both the overrides and the stdio helper derive from the same merged catalog, adding a new aggregate requires zero Python changes—edit the JSON, run `make render-proxy`, and the proxy automatically restarts the helper with the new catalog.
 
 Tracked suites declared in the embedded defaults:
 

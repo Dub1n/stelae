@@ -125,16 +125,6 @@ def load_catalog_store(
             entry["enabled"] = False
             servers_block[name] = entry
 
-    if not fragments:
-        placeholder = CatalogFragment(
-            path=home / CATALOG_DIRNAME / "core.json",
-            kind="embedded-defaults",
-            name="embedded-defaults",
-            payload={},
-            exists=False,
-        )
-        fragments = [placeholder]
-
     return CatalogStore(
         tool_overrides=overrides,
         tool_aggregations=aggregations,
