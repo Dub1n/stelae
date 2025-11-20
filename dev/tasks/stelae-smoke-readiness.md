@@ -28,7 +28,7 @@ Tags: `#infra`, `#tests`, `#docs`
 > For all checklist items, find the relevant workstream and ensure the work is carried out as part of it's setup. This includes performing any pre-reading and adding documentation to the appropriate places.
 
 - [x] Prerequisite – restore `workspace_fs_read` coverage by ensuring the filesystem server/bundle entries are installed and exposed through the proxy (aggregator currently fails with `Unknown tool: read_file`). *2025-11-19 agent fix: tool aggregator now pins each workspace FS/Shell aggregation to its downstream server, so the proxy always routes calls through `fs`/`sh` even when base tools are hidden or renamed; Appendix B captures the downstream tool matrix.*
-- [ ] Trials – Codex CLI harness runs (`codex exec --json --full-auto`) prove `workspace_fs_read` and `manage_stelae` register and complete without manual prompts while the documentation catalog work remains in flight.
+- [ ] Trials – Codex CLI harness runs (`codex exec --json --full-auto`) prove `workspace_fs_read` and `manage_stelae` register and complete without manual prompts while the documentation catalog work remains in flight. (Per the smoke-test guards, don’t “fix” regressions by editing stack sources—treat `docs/e2e_clone_smoke_test.md` as the runbook, reproduce failures via the harness, and capture the required transcripts/logs for Appendix C.)
 - [ ] Harness reliability – capture a “restart succeeds under 120 s” run with `--capture-debug-tools` enabled and attach the resulting snapshots under `dev/logs/harness/`.
 - [ ] Codex orchestration – rerun the full golden path (discover → dry-run install → real install → remove) after catalog fixes land and archive the transcripts under `dev/logs/harness/`.
 - [ ] Intended catalog soak – now that the harness always exports `STELAE_USE_INTENDED_CATALOG=1`, record two consecutive green runs (plus at least one PM2 environment using the flag) so we can retire any lingering legacy-only docs. Capture the timestamp, workspace, and log bundle for Appendix C.
@@ -148,6 +148,10 @@ Scenario: prove Codex CLI can drive `discover → install → remove` solely via
     - `workspace_shell_control` → `sh` server operation `run_command` (selectors: `execute_command`, `change_directory`, `get_current_directory`, `get_command_history`).
 
 ### Appendix C – Clone smoke harness deliverable snapshot
+
+- 2025-11-20T12:27Z · `make smoke SMOKE_ARGS="--capture-debug-tools --workspace /tmp/stelae-smoke-auto --force-workspace --keep-workspace --restart-timeout 120 --heartbeat-timeout 300"` · workspace `/tmp/stelae-smoke-auto` · artifacts `dev/logs/harness/20251120-122712/` – setup script auto-rescued catalog/override files, starter bundle installed cleanly, restart succeeded, and Codex bundle stage now sees `grep` + `manage_stelae` (workspace_fs_read still missing via fallback).
+
+- 2025-11-20T11:28Z · `PATH=/home/gabri/dev/stelae/.venv/bin:$PATH python3 scripts/run_e2e_clone_smoke_test.py --capture-debug-tools --workspace /tmp/stelae-smoke-investigation --keep-workspace --reuse-workspace --skip-bootstrap --restart-timeout 90 --heartbeat-timeout 240` · workspace `/tmp/stelae-smoke-investigation` · artifacts `dev/logs/harness/20251120-113428/` – restart succeeded but catalog only exposed `fetch` + `manage_stelae` because config-home lacked `catalog/core.json`. Codex stage hit repeated `fetch` fallbacks for `tools/list`/`workspace_fs_read`/`grep` and the harness stopped at `bundle-tools`.
 
 Operational/runbook details live in `docs/e2e_clone_smoke_test.md`. Use this appendix to
 record evidence from each smoke run (timestamp, command line, workspace path, and

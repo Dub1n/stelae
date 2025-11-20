@@ -54,7 +54,7 @@ Core templates ship the essentials (custom tools, Stelae integrator, tool aggreg
 
 ### Initial configuration
 
-1. Run `python scripts/setup_env.py` to materialize `.env` entries, catalog defaults, and starter bundle placeholders inside `${STELAE_CONFIG_HOME}`.
+1. Run `python scripts/setup_env.py` to materialize `.env` entries and automatically seed/repair catalog, overrides, custom tool, and runtime JSON stubs inside `${STELAE_CONFIG_HOME}` / `${STELAE_STATE_HOME}`. The helper now relocates stray files by name, so if you ever delete `tool_overrides.json` (or move `catalog/core.json`) it silently recreates or recovers them.
 2. Edit `${STELAE_ENV_FILE}` (default `${STELAE_CONFIG_HOME}/.env`) and `${STELAE_CONFIG_HOME}/.env.local` with machine-specific paths/binaries. `.env.example` stays generic.
 3. Rebuild the Go proxy if sources change: `pushd ~/apps/mcp-proxy && go build -o build/mcp-proxy && popd`.
 4. Install or refresh optional suites via `python scripts/install_stelae_bundle.py [--server name]`.

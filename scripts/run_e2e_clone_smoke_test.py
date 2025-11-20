@@ -202,6 +202,7 @@ class CloneSmokeHarness:
         self.external_target = f"{self.external_server}_smoke"
         pm2_path = shutil.which("pm2")
         self.pm2_bin = Path(pm2_path) if pm2_path else None
+        self.python_bin = self._resolve_python_bin(args.python_bin)
         self._env = os.environ.copy()
         self._env.update(
             {
@@ -217,6 +218,8 @@ class CloneSmokeHarness:
                 "STELAE_USE_INTENDED_CATALOG": "1",
             }
         )
+        self._env["PYTHON"] = self.python_bin
+        self._env["SHIM_PYTHON"] = self.python_bin
         self._apply_proxy_port(self.proxy_port)
         self._env.setdefault("PYTHONUNBUFFERED", "1")
         if self.pm2_bin:
@@ -242,8 +245,25 @@ class CloneSmokeHarness:
         if self.heartbeat_timeout > 0:
             self._start_heartbeat_monitor()
         self._log(f"Workspace: {self.workspace}")
+        self._log(f"Using Python interpreter {self.python_bin}")
 
     # --------------------------------------------------------------------- utils
+    def _resolve_python_bin(self, override: str | None) -> str:
+        if override:
+            candidate = Path(override).expanduser()
+            if not candidate.exists():
+                raise SystemExit(f"--python-bin points to a non-existent path: {candidate}")
+            return str(candidate)
+        candidates = []
+        for name in ("python3", "python"):
+            venv_candidate = self.source_repo / ".venv" / "bin" / name
+            candidates.append(venv_candidate)
+        candidates.append(Path(sys.executable))
+        for candidate in candidates:
+            if candidate and candidate.exists():
+                return str(candidate)
+        return sys.executable
+
     def _prepare_workspace_dir(self, workspace: Path) -> Path:
         if workspace.exists():
             marker = is_smoke_workspace(workspace)
@@ -623,7 +643,7 @@ class CloneSmokeHarness:
             phoenix_root=self.workspace / "phoenix",
             local_bin=Path.home() / ".local" / "bin",
             pm2_bin=self.pm2_bin,
-            python_bin=sys.executable,
+            python_bin=self.python_bin,
             proxy_port=self.proxy_port,
             wrapper_bin=self.wrapper_bin,
             wrapper_config=self.wrapper_config,
@@ -638,7 +658,7 @@ class CloneSmokeHarness:
         env_file.write_text(env_contents, encoding="utf-8")
         self._run(
             [
-                sys.executable,
+                self.python_bin,
                 "scripts/setup_env.py",
                 "--config-home",
                 str(self.config_home),
@@ -646,6 +666,7 @@ class CloneSmokeHarness:
                 str(self.clone_dir),
                 "--env-file",
                 str(env_file),
+                "--materialize-defaults",
             ],
             cwd=self.clone_dir,
         )
@@ -683,7 +704,7 @@ class CloneSmokeHarness:
         self._log("Installing starter bundle inside sandbox (should finish in <60s; long stalls mean env/IO issues)…")
         self._run(
             [
-                sys.executable,
+                self.python_bin,
                 "scripts/install_stelae_bundle.py",
                 "--bundle",
                 "bundles/starter",
@@ -809,7 +830,7 @@ class CloneSmokeHarness:
             try:
                 self._run(
                     [
-                        sys.executable,
+                        self.python_bin,
                         "-m",
                         "pip",
                         "install",
@@ -834,7 +855,7 @@ class CloneSmokeHarness:
     def _run_pytest(self, args: List[str], *, label: str) -> None:
         self._log(f"Running pytest ({label})…")
         self._ensure_pytest()
-        cmd = [sys.executable, "-m", "pytest"]
+        cmd = [self.python_bin, "-m", "pytest"]
         if args:
             cmd.extend(args)
         self._run(cmd, cwd=self.clone_dir)
@@ -1167,6 +1188,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--proxy-source", help="Alternate git source for mcp-proxy")
     parser.add_argument("--wrapper-release", help="Path to a codex-mcp-wrapper release directory to copy into the sandbox")
     parser.add_argument("--port", type=int, help="Override the sandbox proxy port")
+    parser.add_argument("--python-bin", help="Preferred Python interpreter for sandbox automation (default: repo .venv or current python)")
     parser.add_argument("--codex-cli", help="Path to the codex CLI binary to run inside the sandbox")
     parser.add_argument("--codex-home", help="Optional path to mirror into CODEX_HOME inside the sandbox")
     parser.add_argument(

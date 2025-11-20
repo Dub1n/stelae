@@ -66,12 +66,6 @@ def _move(src: Path, dest: Path) -> None:
     src.replace(dest)
 
 
-def _materialize_default_catalogs(*, repo_dir: Path, config_home: Path) -> None:
-    raise SystemExit(
-        "[setup-env] _materialize_default_catalogs requires state_root; call via bootstrap_env()"
-    )
-
-
 def _seed_core_catalog(*, config_home: Path) -> None:
     core_path = ensure_catalog_file(base=config_home)
     try:
@@ -83,13 +77,45 @@ def _seed_core_catalog(*, config_home: Path) -> None:
     write_json(core_path, {})
 
 
-def _seed_json_stub(target: Path, *, default: object, legacy_candidates: list[Path] | None = None) -> None:
+def _relocate_missing_file(target: Path, *, search_roots: list[Path]) -> bool:
+    if target.exists():
+        return False
+    for root in search_roots:
+        if not root or not root.exists():
+            continue
+        try:
+            for candidate in root.rglob(target.name):
+                try:
+                    if candidate.resolve() == target.resolve():
+                        continue
+                except OSError:
+                    continue
+                if not candidate.is_file():
+                    continue
+                target.parent.mkdir(parents=True, exist_ok=True)
+                candidate.replace(target)
+                print(f"[setup-env] Recovered {target.name} from {candidate}")
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def _seed_json_stub(
+    target: Path,
+    *,
+    default: object,
+    legacy_candidates: list[Path] | None = None,
+    search_roots: list[Path] | None = None,
+) -> None:
     if target.exists():
         try:
             json.loads(target.read_text(encoding="utf-8"))
             return
         except json.JSONDecodeError:
             pass
+    if search_roots and _relocate_missing_file(target, search_roots=search_roots):
+        return
     replaced = False
     if legacy_candidates:
         for legacy in legacy_candidates:
@@ -159,21 +185,29 @@ def _materialize_default_catalogs(*, config_home: Path, state_root: Path) -> Non
         state_root / "intended_catalog.json",
         allow_state=True,
     )
+    config_roots = [config_home]
+    state_roots = [state_root, config_home]
     _seed_json_stub(
         overrides_path,
         default={},
         legacy_candidates=[config_home / "tool_overrides.local.json"],
+        search_roots=config_roots,
     )
     _seed_json_stub(
         aggregations_path,
         default={},
         legacy_candidates=[config_home / "tool_aggregations.local.json"],
+        search_roots=config_roots,
     )
-    _seed_json_stub(custom_tools_path, default=DEFAULT_CUSTOM_TOOLS)
-    _seed_json_stub(discovery_path, default=[])
-    _seed_json_stub(runtime_overrides_path, default={})
-    _seed_json_stub(schema_status_path, default={})
-    _seed_json_stub(intended_catalog_path, default={})
+    _seed_json_stub(
+        custom_tools_path,
+        default=DEFAULT_CUSTOM_TOOLS,
+        search_roots=config_roots,
+    )
+    _seed_json_stub(discovery_path, default=[], search_roots=state_roots)
+    _seed_json_stub(runtime_overrides_path, default={}, search_roots=state_roots)
+    _seed_json_stub(schema_status_path, default={}, search_roots=state_roots)
+    _seed_json_stub(intended_catalog_path, default={}, search_roots=state_roots)
     _seed_core_catalog(config_home=config_home)
 
 
@@ -184,7 +218,6 @@ def bootstrap_env(
     env_file: Path,
     example_path: Path,
     prefer_symlink: bool = True,
-    materialize_defaults: bool = False,
 ) -> Path:
     """Ensure ${STELAE_CONFIG_HOME}/.env exists and repo/.env points to it."""
     repo_env = repo_dir / ".env"
@@ -216,8 +249,7 @@ def bootstrap_env(
 
     def _finalize() -> Path:
         ensure_config_home_scaffold(base=config_home)
-        if materialize_defaults:
-            _materialize_default_catalogs(config_home=config_home, state_root=state_root)
+        _materialize_default_catalogs(config_home=config_home, state_root=state_root)
         print(f"[setup-env] config_home={config_home}")
         print(f"[setup-env] state_home={state_root}")
         print(f"[setup-env] env_file={env_file}")
@@ -278,11 +310,6 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Copy instead of symlink repo/.env (symlinks are attempted by default)",
     )
-    ap.add_argument(
-        "--materialize-defaults",
-        action="store_true",
-        help="Write overlay copies of tool overrides/aggregations from embedded defaults.",
-    )
     return ap.parse_args()
 
 
@@ -298,7 +325,6 @@ def main() -> None:
         env_file=env_file,
         example_path=example_path,
         prefer_symlink=not args.copy,
-        materialize_defaults=args.materialize_defaults,
     )
 
 

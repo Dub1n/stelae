@@ -30,6 +30,12 @@ python scripts/run_e2e_clone_smoke_test.py \
   --codex-cli $(which codex)
 ```
 
+Alternatively, `make smoke` wraps the same script while defaulting to the repo virtualenv so the harness always has the expected Python deps:
+
+```bash
+make smoke SMOKE_ARGS="--capture-debug-tools"
+```
+
 The harness will:
 
 1. Clone Stelae + `mcp-proxy` into a disposable workspace, create an isolated `.env`,

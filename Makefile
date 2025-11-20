@@ -52,7 +52,7 @@ render-cloudflared:
 up-with-tunnel: render-proxy render-cloudflared up
 	@echo "Cloudflared config ready. Ensure CF_CONF points to $(CF_OUTPUT) before pm2 start --only cloudflared."
 
-.PHONY: up down restart-proxy logs status render-proxy help discover-servers verify-clean check-catalog-drift catalog-metrics prune-catalog-history
+.PHONY: up down restart-proxy logs status render-proxy help discover-servers verify-clean check-catalog-drift catalog-metrics prune-catalog-history smoke
 
 help:
 	@echo "Targets:"
@@ -63,6 +63,7 @@ help:
 	@echo "  logs             - Tail pm2 logs"
 	@echo "  status           - Show pm2 status"
 	@echo "  discover-servers - Run manage_stelae discover_servers via inline CLI"
+	@echo "  smoke            - Run the clone smoke harness (set SMOKE_ARGS for flags)"
 
 up: render-proxy
 	@if [ ! -f "$(PM2_ECOSYSTEM)" ]; then echo "ERROR: Missing $(PM2_ECOSYSTEM)"; exit 1; fi
@@ -118,3 +119,8 @@ catalog-metrics:
 
 prune-catalog-history:
 	@$(PYTHON) scripts/prune_catalog_history.py
+
+SMOKE_ARGS ?=
+
+smoke:
+	@$(PYTHON) scripts/run_e2e_clone_smoke_test.py $(SMOKE_ARGS)
