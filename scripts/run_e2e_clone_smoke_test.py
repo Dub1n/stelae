@@ -173,6 +173,7 @@ class CloneSmokeHarness:
         self.skip_port_kill = bool(args.no_port_kill)
         self.pytest_scope = args.pytest_scope
         self.capture_diag_logs = bool(args.capture_diag_logs)
+        self.force_no_logs = bool(args.force_no_logs)
         self.source_repo = Path(args.source).resolve()
         if not (self.source_repo / "README.md").exists():
             raise SystemExit(f"{self.source_repo} does not look like the stelae repo")
@@ -290,6 +291,7 @@ class CloneSmokeHarness:
         self._log(f"Workspace: {self.workspace}")
         self._log(f"Using Python interpreter {self.python_bin}")
         self._diag_procs: list[subprocess.Popen[str]] = []
+        self._diag_root: Path | None = None
 
     # --------------------------------------------------------------------- utils
     def _resolve_python_bin(self, override: str | None) -> str:
@@ -372,32 +374,78 @@ class CloneSmokeHarness:
         self._heartbeat_thread = None
 
     def _start_diag_logs(self) -> None:
-        """Best-effort diag capture (dmesg/syslog/top) to repo logs/diag/."""
+        """Best-effort diag capture (dmesg/syslog/top/vmstat/free/pm2 logs) to repo logs/diag/."""
 
-        diag_root = self.source_repo / "logs" / "diag"
-        diag_root.mkdir(parents=True, exist_ok=True)
-        commands: list[tuple[list[str], Path]] = []
-        # dmesg (may require sudo)
-        commands.append((["dmesg", "-wT", "--level=err,warn"], diag_root / "dmesg.log"))
-        # syslog tail (best effort)
-        commands.append((["tail", "-F", "/var/log/syslog"], diag_root / "syslog.log"))
+        self._diag_root = self.source_repo / "logs" / "diag"
+        self._diag_root.mkdir(parents=True, exist_ok=True)
+        commands: list[tuple[list[str], Path, bool]] = []
+        # dmesg (may require sudo) – required unless forced off
+        commands.append((["dmesg", "-wT", "--level=err,warn"], self._diag_root / "dmesg.log", True))
+        # syslog tail (best effort) – required unless forced off
+        commands.append((["tail", "-F", "/var/log/syslog"], self._diag_root / "syslog.log", True))
         # top batch mode, bounded iterations
-        commands.append((["top", "-b", "-d", "5", "-n", "120"], diag_root / "top.log"))
+        commands.append((["top", "-b", "-d", "5", "-n", "120"], self._diag_root / "top.log", False))
+        # vmstat snapshot
+        commands.append((["vmstat", "1", "30"], self._diag_root / "vmstat.log", False))
         env = self._env.copy()
-        for cmd, log_path in commands:
+        required_started = 0
+        required_requested = 0
+        for cmd, log_path, required in commands:
+            if required:
+                required_requested += 1
             try:
                 handle = log_path.open("w", encoding="utf-8")
                 proc = subprocess.Popen(cmd, stdout=handle, stderr=subprocess.STDOUT, text=True)
                 self._diag_procs.append(proc)
                 self._log(f"[diag] started {' '.join(cmd)} → {log_path}")
+                if required:
+                    required_started += 1
             except FileNotFoundError:
                 self._log(f"[diag] skipping {' '.join(cmd)} (command not found)")
             except PermissionError:
                 self._log(f"[diag] skipping {' '.join(cmd)} (permission denied)")
             except Exception as exc:  # pragma: no cover - defensive
                 self._log(f"[diag] failed to start {' '.join(cmd)}: {exc}")
+        # pm2 logs tail (best effort, non-blocking)
+        pm2_log = self._diag_root / "pm2.log"
+        try:
+            with pm2_log.open("w", encoding="utf-8") as handle:
+                proc = subprocess.Popen(
+                    ["pm2", "logs", "--lines", "50", "--nostream"],
+                    stdout=handle,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                )
+                self._diag_procs.append(proc)
+                self._log(f"[diag] started pm2 logs snapshot → {pm2_log}")
+        except Exception as exc:  # pragma: no cover - best effort
+            self._log(f"[diag] skipping pm2 logs snapshot: {exc}")
+        # free -h snapshots
+        for label in ("before",):
+            try:
+                output = subprocess.check_output(["free", "-h"], text=True)
+                (self._diag_root / f"free-{label}.log").write_text(output, encoding="utf-8")
+                self._log(f"[diag] captured free -h ({label})")
+            except Exception as exc:  # pragma: no cover - best effort
+                self._log(f"[diag] skipping free -h ({label}): {exc}")
+
+        if required_requested and required_started == 0 and not self.force_no_logs:
+            raise SystemExit(
+                "Diag logging requested but dmesg/syslog could not be started. "
+                "Rerun with --force-no-logs to proceed without them."
+            )
+        if required_started == 0:
+            self._log("[diag] required loggers not running; continuing due to --force-no-logs")
 
     def _stop_diag_logs(self) -> None:
+        # free -h after run
+        if self._diag_root:
+            try:
+                output = subprocess.check_output(["free", "-h"], text=True)
+                (self._diag_root / "free-after.log").write_text(output, encoding="utf-8")
+                self._log("[diag] captured free -h (after)")
+            except Exception:
+                pass
         for proc in self._diag_procs:
             try:
                 proc.terminate()
@@ -559,6 +607,7 @@ class CloneSmokeHarness:
             "skip_port_kill": self.skip_port_kill,
             "pytest_scope": self.pytest_scope,
             "capture_diag_logs": self.capture_diag_logs,
+            "force_no_logs": self.force_no_logs,
         }
         for key, value in summary.items():
             self._log(f"[plan] {key}: {value}")
@@ -1372,6 +1421,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--capture-diag-logs",
         action="store_true",
         help="Capture lightweight diag logs (dmesg/syslog/top) to logs/diag/ during the run (best-effort; may require sudo)",
+    )
+    parser.add_argument(
+        "--force-no-logs",
+        action="store_true",
+        help="Proceed even if diag logging cannot start (bypasses dmesg/syslog guard)",
     )
     parser.add_argument(
         "--go-flags",

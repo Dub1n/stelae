@@ -73,7 +73,7 @@ Tags: `#infra`, `#tests`, `#docs`
   - Temporary guard: clone-harness `manage_stelae` install/remove calls now set `dry_run=true` to avoid nested render/restart churn during Codex stages; track a dedicated full-install run separately (see Follow-ups).
   - Planning aid: `--plan-only` prints the planned steps/env/paths and exits without executing commands for safe triage.
   - Restart throttles: default `--no-pm2-kill`, optional `--no-port-kill`, and serialized Go builds (`--go-flags`, `--gomaxprocs`) are in place to reduce restart aggressiveness; pytest scope can be limited via `--pytest-scope`.
-  - Optional diag capture: `--capture-diag-logs` writes best-effort dmesg/syslog/top snapshots to `logs/diag/` for a run (ext4 only, may skip if commands unavailable).
+  - Optional diag capture: `--capture-diag-logs` writes best-effort dmesg/syslog/top/vmstat/free/pm2 snapshots to `logs/diag/` for a run (ext4 only); guard aborts if required logs can’t start unless `--force-no-logs` is set.
 
 ### Codex orchestration
 
