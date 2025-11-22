@@ -172,6 +172,7 @@ class CloneSmokeHarness:
         self.skip_pm2_kill = bool(args.no_pm2_kill)
         self.skip_port_kill = bool(args.no_port_kill)
         self.pytest_scope = args.pytest_scope
+        self.capture_diag_logs = bool(args.capture_diag_logs)
         self.source_repo = Path(args.source).resolve()
         if not (self.source_repo / "README.md").exists():
             raise SystemExit(f"{self.source_repo} does not look like the stelae repo")
@@ -284,8 +285,11 @@ class CloneSmokeHarness:
             self._install_signal_handlers()
             if self.heartbeat_timeout > 0:
                 self._start_heartbeat_monitor()
+        if self.capture_diag_logs and self.plan_only:
+            self._log("Diag logging requested, but plan-only mode skips execution; no diag logs will be started.")
         self._log(f"Workspace: {self.workspace}")
         self._log(f"Using Python interpreter {self.python_bin}")
+        self._diag_procs: list[subprocess.Popen[str]] = []
 
     # --------------------------------------------------------------------- utils
     def _resolve_python_bin(self, override: str | None) -> str:
@@ -366,6 +370,47 @@ class CloneSmokeHarness:
         self._heartbeat_stop.set()
         self._heartbeat_thread.join(timeout=2)
         self._heartbeat_thread = None
+
+    def _start_diag_logs(self) -> None:
+        """Best-effort diag capture (dmesg/syslog/top) to repo logs/diag/."""
+
+        diag_root = self.source_repo / "logs" / "diag"
+        diag_root.mkdir(parents=True, exist_ok=True)
+        commands: list[tuple[list[str], Path]] = []
+        # dmesg (may require sudo)
+        commands.append((["dmesg", "-wT", "--level=err,warn"], diag_root / "dmesg.log"))
+        # syslog tail (best effort)
+        commands.append((["tail", "-F", "/var/log/syslog"], diag_root / "syslog.log"))
+        # top batch mode, bounded iterations
+        commands.append((["top", "-b", "-d", "5", "-n", "120"], diag_root / "top.log"))
+        env = self._env.copy()
+        for cmd, log_path in commands:
+            try:
+                handle = log_path.open("w", encoding="utf-8")
+                proc = subprocess.Popen(cmd, stdout=handle, stderr=subprocess.STDOUT, text=True)
+                self._diag_procs.append(proc)
+                self._log(f"[diag] started {' '.join(cmd)} → {log_path}")
+            except FileNotFoundError:
+                self._log(f"[diag] skipping {' '.join(cmd)} (command not found)")
+            except PermissionError:
+                self._log(f"[diag] skipping {' '.join(cmd)} (permission denied)")
+            except Exception as exc:  # pragma: no cover - defensive
+                self._log(f"[diag] failed to start {' '.join(cmd)}: {exc}")
+
+    def _stop_diag_logs(self) -> None:
+        for proc in self._diag_procs:
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+            try:
+                proc.wait(timeout=2)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+        self._diag_procs = []
 
     def _heartbeat_loop(self) -> None:
         while not self._heartbeat_stop.wait(timeout=1):
@@ -513,10 +558,13 @@ class CloneSmokeHarness:
             "skip_pm2_kill": self.skip_pm2_kill,
             "skip_port_kill": self.skip_port_kill,
             "pytest_scope": self.pytest_scope,
+            "capture_diag_logs": self.capture_diag_logs,
         }
         for key, value in summary.items():
             self._log(f"[plan] {key}: {value}")
         self._log("Planned stages: clone (if needed) → proxy clone (if needed) → env bootstrap → bundle install → render/restart → pytest → Codex stages → verify-clean")
+        if self.capture_diag_logs:
+            self._log("[plan] diag logs would be captured to repo logs/diag/")
 
     def _run(
         self,
@@ -665,6 +713,8 @@ class CloneSmokeHarness:
             return
         success = False
         try:
+            if self.capture_diag_logs:
+                self._start_diag_logs()
             if self.args.skip_bootstrap:
                 self._check_workspace_revision()
                 self._assert_bootstrap_ready()
@@ -708,6 +758,7 @@ class CloneSmokeHarness:
                     self._log(
                         f"Workspace left at {self.workspace} for triage (set --keep-workspace to always retain)."
                     )
+            self._stop_diag_logs()
             self._restore_signal_handlers()
 
     def _clone_repo(self) -> None:
@@ -1316,6 +1367,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--plan-only",
         action="store_true",
         help="Show planned steps, paths, and env without executing commands (dry run)",
+    )
+    parser.add_argument(
+        "--capture-diag-logs",
+        action="store_true",
+        help="Capture lightweight diag logs (dmesg/syslog/top) to logs/diag/ during the run (best-effort; may require sudo)",
     )
     parser.add_argument(
         "--go-flags",

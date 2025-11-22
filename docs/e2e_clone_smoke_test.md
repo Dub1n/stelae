@@ -103,6 +103,7 @@ Common options:
   even when the disposable workspace is deleted.
 - Windows-backed paths guard: if `--workspace` or the auto-chosen temp dir resolves under `/mnt/<drive>`, the harness aborts with a warning. Keep workspaces/TMPDIR on ext4 inside WSL (e.g., `~/tmp`) to avoid slow/unstable I/O.
 - `--plan-only` – dry-run mode that prints the planned steps and paths (workspace, config/state homes, ports, flags) without executing any commands.
+- `--capture-diag-logs` – best-effort sidecar logging (dmesg/syslog/top) to `logs/diag/` for the duration of the run. Requires ext4; may skip entries if commands are unavailable or need sudo.
 - Restart throttles: `--no-pm2-kill` (default) and `--no-port-kill` avoid killing the pm2 table or stray listeners; `--pm2-kill`/default port-prekill restores the old aggressive behavior when needed. `--go-flags` (default `-p=1`) and `--gomaxprocs` (default `1`) reduce Go build parallelism; `--restart-retries` now defaults to 0.
 - Test scope: `--pytest-scope {none,structural,full}` (default `structural`) to skip the full suite unless explicitly requested.
 - `--bootstrap-only` – run the clone/bundle/bootstrap steps once, keep the workspace, and exit before restarting the stack. Pair with `--workspace … --keep-workspace` (set automatically) so subsequent runs can reuse the warmed caches.
