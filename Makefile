@@ -120,6 +120,10 @@ catalog-metrics:
 prune-catalog-history:
 	@$(PYTHON) scripts/prune_catalog_history.py
 
+.PHONY: test
+test:
+	PYTHONPATH=. $(STELAE_DIR)/.venv/bin/pytest tests
+
 SMOKE_ARGS ?=
 
 smoke:
