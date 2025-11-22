@@ -615,6 +615,7 @@ class CloneSmokeHarness:
         self._log("Planned stages: clone (if needed) → proxy clone (if needed) → env bootstrap → bundle install → render/restart → pytest → Codex stages → verify-clean")
         if self.capture_diag_logs:
             self._log("[plan] diag logs would be captured to repo logs/diag/")
+        self._log(f"[plan] restart args: {self._restart_args_preview()}")
 
     def _run(
         self,
@@ -966,21 +967,26 @@ class CloneSmokeHarness:
     def _bootstrap_config_home(self) -> None:
         (self.config_home / "logs").mkdir(parents=True, exist_ok=True)
 
-    def _run_render_restart(self) -> None:
-        self._log("Running make render-proxy…")
-        self._run(["make", "render-proxy"], cwd=self.clone_dir)
-        if not self.skip_port_kill:
-            self._preflight_proxy_port()
-        restart_script = self.clone_dir / "scripts" / "run_restart_stelae.sh"
-        args = [
-            str(restart_script),
+    def _restart_args_preview(self, *, expand_script: bool = False, script_path: Path | None = None) -> list[str] | str:
+        script = script_path or (self.clone_dir / "scripts" / "run_restart_stelae.sh")
+        args: list[str] = [
+            str(script),
             "--no-bridge",
             "--no-cloudflared",
+            "--skip-proxy-build",
         ]
         if self.skip_pm2_kill:
             args.append("--no-pm2-kill")
         if self.skip_port_kill:
             args.append("--no-port-kill")
+        return args if expand_script else " ".join(args)
+
+    def _run_render_restart(self) -> None:
+        self._log("Running make render-proxy…")
+        self._run(["make", "render-proxy"], cwd=self.clone_dir)
+        if not self.skip_port_kill:
+            self._preflight_proxy_port()
+        args = self._restart_args_preview(expand_script=True)
         self._log("Restarting stack inside sandbox (expected <60s; investigate logs instead of extending timeouts)…")
         self._run_restart_with_retry(args)
         self._log("Restart script finished successfully.")

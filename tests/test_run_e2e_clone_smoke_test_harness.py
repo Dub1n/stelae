@@ -45,3 +45,21 @@ def test_plan_only_refuses_windows_mount(monkeypatch: "pytest.MonkeyPatch") -> N
     result = run_harness(["--plan-only"], env=env)
     assert result.returncode != 0
     assert "/mnt" in (result.stdout + result.stderr)
+
+
+def test_plan_only_reports_pytest_scope_and_restart_args(tmp_path: Path) -> None:
+    workspace = tmp_path / "ws-plan-scope"
+    result = run_harness(
+        [
+            "--plan-only",
+            "--workspace",
+            str(workspace),
+            "--pytest-scope",
+            "full",
+        ]
+    )
+    assert result.returncode == 0, result.stderr
+    output = result.stdout
+    assert "[plan] pytest_scope: full" in output
+    # ensure restart args include skip-proxy-build
+    assert "--skip-proxy-build" in output
