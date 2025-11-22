@@ -173,9 +173,10 @@ def _resolve_home_json(
     default_path: Path,
     *,
     allow_state: bool,
+    force_default: bool = False,
 ) -> Path:
-    override = os.environ.get(env_var)
-    raw_path = Path(override).expanduser() if override else default_path
+    override = None if force_default else os.environ.get(env_var)
+    raw_path = default_path if force_default else (Path(override).expanduser() if override else default_path)
     try:
         return validate_home_path(
             raw_path,
@@ -187,41 +188,61 @@ def _resolve_home_json(
         raise SystemExit(f"[setup-env] {exc}") from exc
 
 
-def _materialize_default_catalogs(*, config_home: Path, state_root: Path) -> None:
+def _materialize_default_catalogs(
+    *,
+    config_home: Path,
+    state_root: Path,
+    force_default: bool = False,
+    empty_aggregations: bool = False,
+) -> None:
+    agg_default = {} if (force_default or empty_aggregations) else DEFAULT_TOOL_AGGREGATIONS
     overrides_path = _resolve_home_json(
         "STELAE_TOOL_OVERRIDES",
         config_home / "tool_overrides.json",
         allow_state=False,
+        force_default=force_default,
     )
     aggregations_path = _resolve_home_json(
         "STELAE_TOOL_AGGREGATIONS",
         config_home / "tool_aggregations.json",
         allow_state=False,
+        force_default=force_default,
     )
     custom_tools_path = _resolve_home_json(
         "STELAE_CUSTOM_TOOLS_CONFIG",
         config_home / "custom_tools.json",
         allow_state=False,
+        force_default=force_default,
     )
     discovery_path = _resolve_home_json(
         "STELAE_DISCOVERY_PATH",
         state_root / "discovered_servers.json",
         allow_state=True,
+        force_default=force_default,
     )
     runtime_overrides_path = _resolve_home_json(
         "TOOL_OVERRIDES_PATH",
         state_root / "tool_overrides.json",
         allow_state=True,
+        force_default=force_default,
     )
     schema_status_path = _resolve_home_json(
         "TOOL_SCHEMA_STATUS_PATH",
         state_root / "tool_schema_status.json",
         allow_state=True,
+        force_default=force_default,
     )
     intended_catalog_path = _resolve_home_json(
         "INTENDED_CATALOG_PATH",
         state_root / "intended_catalog.json",
         allow_state=True,
+        force_default=force_default,
+    )
+    live_catalog_path = _resolve_home_json(
+        "LIVE_CATALOG_PATH",
+        state_root / "live_catalog.json",
+        allow_state=True,
+        force_default=force_default,
     )
     config_roots = [config_home]
     state_roots = [state_root, config_home]
@@ -233,11 +254,12 @@ def _materialize_default_catalogs(*, config_home: Path, state_root: Path) -> Non
     )
     _seed_json_stub(
         aggregations_path,
-        default=DEFAULT_TOOL_AGGREGATIONS,
+        default=agg_default,
         legacy_candidates=[config_home / "tool_aggregations.local.json"],
         search_roots=config_roots,
     )
-    _ensure_aggregation_skeleton(aggregations_path)
+    if not (force_default or empty_aggregations):
+        _ensure_aggregation_skeleton(aggregations_path)
     _seed_json_stub(
         custom_tools_path,
         default=DEFAULT_CUSTOM_TOOLS,
@@ -248,6 +270,20 @@ def _materialize_default_catalogs(*, config_home: Path, state_root: Path) -> Non
     _seed_json_stub(schema_status_path, default={}, search_roots=state_roots)
     _seed_json_stub(intended_catalog_path, default={}, search_roots=state_roots)
     _seed_core_catalog(config_home=config_home)
+    required_defaults = [
+        (overrides_path, {}),
+        (aggregations_path, agg_default),
+        (custom_tools_path, DEFAULT_CUSTOM_TOOLS),
+        (discovery_path, []),
+        (runtime_overrides_path, {}),
+        (schema_status_path, {}),
+        (intended_catalog_path, {}),
+        (live_catalog_path, {}),
+    ]
+    for path, default in required_defaults:
+        if not path.exists():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            write_json(path, default)
 
 
 def bootstrap_env(
@@ -257,6 +293,7 @@ def bootstrap_env(
     env_file: Path,
     example_path: Path,
     prefer_symlink: bool = True,
+    materialize_defaults: bool = False,
 ) -> Path:
     """Ensure ${STELAE_CONFIG_HOME}/.env exists and repo/.env points to it."""
     repo_env = repo_dir / ".env"
@@ -288,7 +325,26 @@ def bootstrap_env(
 
     def _finalize() -> Path:
         ensure_config_home_scaffold(base=config_home)
-        _materialize_default_catalogs(config_home=config_home, state_root=state_root)
+        default_paths_requested = not any(
+            os.environ.get(var)
+            for var in (
+                "STELAE_TOOL_OVERRIDES",
+                "STELAE_TOOL_AGGREGATIONS",
+                "STELAE_CUSTOM_TOOLS_CONFIG",
+                "STELAE_DISCOVERY_PATH",
+                "TOOL_OVERRIDES_PATH",
+                "TOOL_SCHEMA_STATUS_PATH",
+                "INTENDED_CATALOG_PATH",
+                "LIVE_CATALOG_PATH",
+                "LIVE_DESCRIPTORS_PATH",
+            )
+        )
+        _materialize_default_catalogs(
+            config_home=config_home,
+            state_root=state_root,
+            force_default=materialize_defaults and default_paths_requested,
+            empty_aggregations=materialize_defaults,
+        )
         print(f"[setup-env] config_home={config_home}")
         print(f"[setup-env] state_home={state_root}")
         print(f"[setup-env] env_file={env_file}")

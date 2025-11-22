@@ -140,7 +140,15 @@ def _discover_fragments(
     include_bundles: bool,
     catalog_filter: set[str] | None,
 ) -> list[CatalogFragment]:
-    fragments: list[CatalogFragment] = []
+    fragments: list[CatalogFragment] = [
+        CatalogFragment(
+            path=config_root / CATALOG_DIRNAME / "_embedded_defaults.json",
+            kind="embedded-defaults",
+            name="embedded-defaults",
+            payload=_copy_payload(DEFAULT_CATALOG_FRAGMENT),
+            exists=True,
+        )
+    ]
     catalog_dir = config_root / CATALOG_DIRNAME
     if catalog_dir.exists():
         for path in sorted(catalog_dir.glob("*.json")):
