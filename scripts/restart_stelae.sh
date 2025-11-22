@@ -126,6 +126,7 @@ KEEP_PM2=0
 FULL_REDEPLOY=0
 RUN_POPULATE=1
 PORT_PREKILL=1
+SKIP_PROXY_BUILD=0
 CATALOG_MODE_OVERRIDE=""
 for arg in "$@"; do
   case "$arg" in
@@ -135,6 +136,7 @@ for arg in "$@"; do
     --keep-pm2) KEEP_PM2=1;;
     --no-pm2-kill) KEEP_PM2=1;;
     --no-port-kill) PORT_PREKILL=0;;
+    --skip-proxy-build) SKIP_PROXY_BUILD=1;;
     --full) FULL_REDEPLOY=1;;
     --skip-populate-overrides) RUN_POPULATE=0;;
     --legacy-catalog) CATALOG_MODE_OVERRIDE="legacy";;
@@ -147,6 +149,7 @@ Usage: $(basename "$0") [options]
   --no-bridge               Skip starting the streamable bridge
   --no-watchdog             Skip starting the public tunnel watchdog
   --keep-pm2                Do not 'pm2 kill'; just (re)start managed apps
+  --skip-proxy-build        Reuse existing proxy binary (fails if missing/stale)
   --full                    Also push manifest to Cloudflare KV and deploy worker
   --skip-populate-overrides Do not auto-refresh config/tool_overrides.json
   --legacy-catalog          Force STELAE_USE_INTENDED_CATALOG=0 for this run
@@ -441,15 +444,58 @@ mkdir -p "$STELAE_DIR/logs"
 log "Validating tool aggregation config"
 prepare_tool_aggregations
 
-# build fresh proxy binary before restarting services
-log "Building mcp-proxy binary → $PROXY_BIN"
-build_start=$(date +%s)
-(
-  cd "$PROXY_DIR"
-  mkdir -p "$(dirname "$PROXY_BIN")"
-  go build -o "$PROXY_BIN" ./...
-)
-log "mcp-proxy build completed in $(( $(date +%s) - build_start ))s"
+stamp_path="${PROXY_DIR}/build/mcp-proxy.stamp"
+
+ensure_proxy_build() {
+  local commit
+  commit="$(git -C "$PROXY_DIR" rev-parse HEAD 2>/dev/null || true)"
+  if [ -z "$commit" ]; then
+    err "Unable to resolve proxy commit; ensure $PROXY_DIR is a git repo."
+    exit 1
+  fi
+  log "Building mcp-proxy binary → $PROXY_BIN (commit $commit)"
+  build_start=$(date +%s)
+  (
+    cd "$PROXY_DIR"
+    mkdir -p "$(dirname "$PROXY_BIN")"
+    go build -o "$PROXY_BIN" ./...
+  )
+  log "mcp-proxy build completed in $(( $(date +%s) - build_start ))s"
+  {
+    echo "commit=$commit"
+    echo "built_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  } > "$stamp_path"
+}
+
+validate_prebuilt_proxy() {
+  if [ ! -x "$PROXY_BIN" ]; then
+    err "Proxy binary missing at $PROXY_BIN; rerun without --skip-proxy-build."
+    exit 1
+  fi
+  if [ ! -f "$stamp_path" ]; then
+    err "Proxy build stamp missing (expected $stamp_path); rerun without --skip-proxy-build."
+    exit 1
+  fi
+  local stamp_commit current_commit
+  stamp_commit=$(grep '^commit=' "$stamp_path" | head -1 | sed 's/^commit=//')
+  current_commit="$(git -C "$PROXY_DIR" rev-parse HEAD 2>/dev/null || true)"
+  if [ -z "$stamp_commit" ] || [ -z "$current_commit" ]; then
+    err "Unable to validate proxy commit; rerun without --skip-proxy-build."
+    exit 1
+  fi
+  if [ "$stamp_commit" != "$current_commit" ]; then
+    err "Proxy binary commit ($stamp_commit) differs from source ($current_commit); rerun without --skip-proxy-build to rebuild."
+    exit 1
+  fi
+  log "Reusing proxy binary built from commit $stamp_commit (stamp ok)."
+}
+
+# build fresh proxy binary before restarting services (or reuse if requested)
+if [ "$SKIP_PROXY_BUILD" -eq 1 ]; then
+  validate_prebuilt_proxy
+else
+  ensure_proxy_build
+fi
 
 # stop / clean -----------------------------------------------------------------
 if [ "$KEEP_PM2" -eq 0 ]; then

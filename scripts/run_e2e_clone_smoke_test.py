@@ -252,6 +252,7 @@ class CloneSmokeHarness:
                 "GOCACHE": str(self.workspace / ".gocache"),
                 "PM2_HOME": str(self.pm2_home),
                 "CODEX_HOME": str(self.codex_home),
+                "STELAE_RESTART_ARGS": "--keep-pm2 --no-bridge --no-cloudflared --skip-proxy-build",
                 "STELAE_USE_INTENDED_CATALOG": "1",
             }
         )

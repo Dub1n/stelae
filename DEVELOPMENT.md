@@ -96,7 +96,7 @@ Logs land under `logs/` (see `ecosystem.config.js`). Always source NVM before to
 
 ### Restart helper
 
-`scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --no-cloudflared` rebuilds the proxy, re-renders configs, restarts the PM2 fleet, and captures catalog drift. Pass `--full` when you also need to push manifests to Cloudflare KV and restart the tunnel/worker. The helper prints per-process summaries (e.g., `pm2 ensure cloudflared: status=errored -> delete+start`). Override behavior via `STELAE_RESTART_ARGS`.
+`scripts/run_restart_stelae.sh --keep-pm2 --no-bridge --no-cloudflared` rebuilds the proxy, re-renders configs, restarts the PM2 fleet, and captures catalog drift. Pass `--full` when you also need to push manifests to Cloudflare KV and restart the tunnel/worker. The helper prints per-process summaries (e.g., `pm2 ensure cloudflared: status=errored -> delete+start`). Override behavior via `STELAE_RESTART_ARGS`. Use `--skip-proxy-build` to reuse an existing `build/mcp-proxy` (only when the stamp matches the current proxy commit); otherwise the script rebuilds and stamps the binary.
 
 ### FastMCP bridge and local consumers
 
