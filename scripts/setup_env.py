@@ -195,7 +195,7 @@ def _materialize_default_catalogs(
     force_default: bool = False,
     empty_aggregations: bool = False,
 ) -> None:
-    agg_default = {} if (force_default or empty_aggregations) else DEFAULT_TOOL_AGGREGATIONS
+    agg_default = {}
     overrides_path = _resolve_home_json(
         "STELAE_TOOL_OVERRIDES",
         config_home / "tool_overrides.json",
@@ -258,7 +258,7 @@ def _materialize_default_catalogs(
         legacy_candidates=[config_home / "tool_aggregations.local.json"],
         search_roots=config_roots,
     )
-    if not (force_default or empty_aggregations):
+    if not empty_aggregations:
         _ensure_aggregation_skeleton(aggregations_path)
     _seed_json_stub(
         custom_tools_path,
