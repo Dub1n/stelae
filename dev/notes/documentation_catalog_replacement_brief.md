@@ -1,4 +1,5 @@
-got it—here’s the landscape + a practical swap plan to retire the legacy documentation MCP without losing capability. ✧⁠◝⁠(⁠⁰⁠▿⁠⁰⁠)⁠◜⁠✧
+
+# documentation_catalog_replacement_brief
 
 > context (what we’re replacing)
 >

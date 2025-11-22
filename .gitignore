@@ -30,6 +30,7 @@ logs/
 .DS_Store
 .idea/
 .vscode/
+.VSCodeCounter
 
 # Package manager caches
 .npm/
