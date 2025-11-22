@@ -37,6 +37,7 @@ Tags: `#infra`, `#tests`, `#docs`
 - [ ] Automate harness dependency bootstrap so sandbox `python-site/` always has `httpx`, `anyio`, `mcp`, `fastmcp`, `trio`, etc., before pytest runs (or run tests inside the prepared venv).
 - [ ] Preserve Codex evidence when the harness deletes workspaces (copy `codex-transcripts/*.jsonl` into `dev/logs/harness/` before cleanup so transcripts survive like the debug logs).
 - [ ] Follow-up – once the soak criteria are met, execute the intended-catalog plan cleanup (task 8 in `dev/tasks/intended-catalog-plan-enhanced.md`) to stop auto-populating aggregates into `tool_overrides.json` and document the removal of the legacy path.
+- [x] Guard against Windows-backed paths for smoke workspaces/TMPDIR by aborting when `/mnt/<drive>` is detected (ext4-only).
 
 ## Workstreams
 
@@ -69,6 +70,8 @@ Tags: `#infra`, `#tests`, `#docs`
 - **Still open:**
   - Diagnose why Codex bundle stages still hit outer timeouts (see Appendix A: 2025‑02‑14 session). Need a reproducible JSONL transcript that demonstrates either `codex exec` stalling or the stack failing to stream responses.
   - Add guardrail tests around `probe_jsonrpc_initialize` and heartbeat timeouts (`tests/test_streamable_mcp.py` follow-up) once the manifest regression is covered.
+  - Temporary guard: clone-harness `manage_stelae` install/remove calls now set `dry_run=true` to avoid nested render/restart churn during Codex stages; track a dedicated full-install run separately (see Follow-ups).
+  - Planning aid: `--plan-only` prints the planned steps/env/paths and exits without executing commands for safe triage.
 
 ### Codex orchestration
 
@@ -94,6 +97,7 @@ Tags: `#infra`, `#tests`, `#docs`
 ### Follow-ups
 
 - [ ] Interpreter portability – decide on a portable way to provide `fastmcp` + `httpx` for `tool_aggregator_server.py` / `stelae_integrator_server.py` (e.g., ship a venv, add a requirements installer, or relax the dependency to system packages) so `.env.example` can go back to a generic value without breaking fresh installs.
+- [ ] Add a separate Codex-driven test (outside the clone harness) that runs full `manage_stelae` install/remove without `dry_run`, using `codex exec`, so we keep coverage of real restarts while the harness remains light.
 
 ## References
 

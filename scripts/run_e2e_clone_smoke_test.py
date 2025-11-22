@@ -87,6 +87,17 @@ def _cleanup_entrypoint(target: Path | None) -> List[Path]:
     return cleanup_temp_smoke_workspaces()
 
 
+def _is_windows_mount(path: Path) -> bool:
+    """Best-effort detection of WSL Windows-backed mounts (/mnt/<drive>/…)."""
+
+    try:
+        resolved = path.resolve()
+    except OSError:
+        resolved = path
+    parts = resolved.parts
+    return len(parts) >= 3 and parts[1] == "mnt" and len(parts[2]) == 1
+
+
 def upsert_env_value(env_file: Path, key: str, value: str) -> None:
     """Ensure the config-home .env persists the requested key/value pair."""
 
@@ -153,21 +164,40 @@ class CloneSmokeHarness:
         self.args = args
         self.force_workspace = bool(args.force_workspace)
         self.reuse_workspace = bool(args.reuse_workspace)
+        self.force_outdated = bool(args.force_outdated)
+        self.force_bootstrap = bool(args.force_bootstrap)
+        self.plan_only = bool(args.plan_only)
         self.source_repo = Path(args.source).resolve()
         if not (self.source_repo / "README.md").exists():
             raise SystemExit(f"{self.source_repo} does not look like the stelae repo")
         if args.workspace:
             workspace = Path(args.workspace).expanduser().resolve()
+            if _is_windows_mount(workspace):
+                raise SystemExit(
+                    f"Workspace path {workspace} appears to live on a Windows-backed mount; "
+                    "use a WSL/ext4 path (e.g., under your home directory) instead."
+                )
+            workspace_existed = workspace.exists()
             self.workspace = workspace
             self._ephemeral = False
             self.log_path = self.workspace / "harness.log"
-            self.workspace = self._prepare_workspace_dir(self.workspace)
+            if not self.plan_only:
+                self.workspace = self._prepare_workspace_dir(self.workspace)
+                if workspace_existed and self.reuse_workspace and not self.force_bootstrap and not args.skip_bootstrap:
+                    # Reuse assumes prior bootstrap; skip heavy setup unless explicitly requested.
+                    self._log("Reusing existing workspace; skipping bootstrap steps (pass --force-bootstrap to redo).")
+                    args.skip_bootstrap = True
         else:
-            workspace = Path(tempfile.mkdtemp(prefix=WORKSPACE_PREFIX))
-            self.workspace = workspace
+            suggested = Path(tempfile.gettempdir()) / f"{WORKSPACE_PREFIX}plan" if self.plan_only else Path(tempfile.mkdtemp(prefix=WORKSPACE_PREFIX))
+            if _is_windows_mount(suggested):
+                raise SystemExit(
+                    f"Temporary workspace {suggested} resolved under /mnt; set TMPDIR to a WSL/ext4 path (e.g., ~/tmp) and retry."
+                )
+            self.workspace = suggested
             self._ephemeral = True
-            mark_workspace(self.workspace)
             self.log_path = self.workspace / "harness.log"
+            if not self.plan_only:
+                mark_workspace(self.workspace)
         self.log_path = self.workspace / "harness.log"
         self.clone_dir = self.workspace / "stelae"
         self.apps_dir = self.workspace / "apps"
@@ -241,9 +271,10 @@ class CloneSmokeHarness:
         self._shutdown_requested = False
         self._signal_exit = False
         self._original_signal_handlers: dict[int, signal.HandlersType | None] = {}
-        self._install_signal_handlers()
-        if self.heartbeat_timeout > 0:
-            self._start_heartbeat_monitor()
+        if not self.plan_only:
+            self._install_signal_handlers()
+            if self.heartbeat_timeout > 0:
+                self._start_heartbeat_monitor()
         self._log(f"Workspace: {self.workspace}")
         self._log(f"Using Python interpreter {self.python_bin}")
 
@@ -411,6 +442,67 @@ class CloneSmokeHarness:
             )
         else:
             self._log(f"Port preflight: confirmed :{self.proxy_port} is clear before restart.")
+    def _check_workspace_revision(self) -> None:
+        """Reject stale clones unless explicitly forced."""
+
+        if not self.reuse_workspace:
+            return
+        if not (self.clone_dir / ".git").exists():
+            return
+        try:
+            source_head = (
+                subprocess.check_output(["git", "-C", str(self.source_repo), "rev-parse", "HEAD"], text=True)
+                .strip()
+            )
+            workspace_head = (
+                subprocess.check_output(["git", "-C", str(self.clone_dir), "rev-parse", "HEAD"], text=True)
+                .strip()
+            )
+            behind_count_raw = subprocess.check_output(
+                ["git", "-C", str(self.clone_dir), "rev-list", "--count", f"{workspace_head}..{source_head}"],
+                text=True,
+            )
+            behind = int(behind_count_raw.strip() or "0")
+        except (subprocess.SubprocessError, ValueError, OSError):
+            return
+        if behind > 0 and not self.force_outdated:
+            raise SystemExit(
+                f"Workspace clone is {behind} commit(s) behind source. "
+                "Use --force-outdated to proceed or omit --reuse-workspace to rebuild."
+            )
+        if behind > 0:
+            self._log(f"Warning: workspace clone is {behind} commit(s) behind source (proceeding due to --force-outdated).")
+        elif behind == 0:
+            self._log("Workspace clone matches source HEAD; proceeding with reuse.")
+
+    def _emit_plan(self) -> None:
+        """Print a dry-run summary and exit."""
+
+        self._log("Plan-only mode: no commands will be executed.")
+        summary = {
+            "workspace": str(self.workspace),
+            "reuse_workspace": self.reuse_workspace,
+            "force_outdated": self.force_outdated,
+            "force_bootstrap": self.force_bootstrap,
+            "ephemeral": self._ephemeral,
+            "clone_dir": str(self.clone_dir),
+            "apps_dir": str(self.apps_dir),
+            "config_home": str(self.config_home),
+            "state_home": str(self.config_home / '.state'),
+            "pm2_home": str(self.pm2_home),
+            "client_repo": str(self.client_repo),
+            "codex_home": str(self.codex_home),
+            "proxy_port": self.proxy_port,
+            "python_bin": self.python_bin,
+            "skip_bootstrap": self.args.skip_bootstrap,
+            "restart_timeout": self.restart_timeout,
+            "restart_retries": self.restart_retries,
+            "heartbeat_timeout": self.heartbeat_timeout,
+            "capture_debug_tools": self.capture_debug_tools,
+        }
+        for key, value in summary.items():
+            self._log(f"[plan] {key}: {value}")
+        self._log("Planned stages: clone (if needed) → proxy clone (if needed) → env bootstrap → bundle install → render/restart → pytest → Codex stages → verify-clean")
 
     def _run(
         self,
@@ -554,13 +646,19 @@ class CloneSmokeHarness:
 
     # -------------------------------------------------------------------- stages
     def run(self) -> None:
+        if self.plan_only:
+            self._emit_plan()
+            return
         success = False
         try:
             if self.args.skip_bootstrap:
+                self._check_workspace_revision()
                 self._assert_bootstrap_ready()
             else:
                 self._clone_repo()
                 self._clone_proxy_repo()
+                if self.reuse_workspace:
+                    self._check_workspace_revision()
                 self._bootstrap_config_home()
                 self._copy_wrapper_release()
                 self._prepare_env_file()
@@ -1035,6 +1133,7 @@ class CloneSmokeHarness:
                 "params": {
                     "name": self.external_server,
                     "target_name": self.external_target,
+                    "dry_run": True,
                     "force": True,
                 },
             }
@@ -1043,7 +1142,7 @@ class CloneSmokeHarness:
         return textwrap.dedent(
             f"""
             Install the `{self.external_server}` descriptor under the alias `{self.external_target}` using only the `manage_stelae` MCP tool. The proxy already points at {self.clone_dir}; do not run shell commands.
-            - Call `manage_stelae` with {install_payload} and wait for the restart to finish.
+            - Call `manage_stelae` with {install_payload} (dry-run to avoid restarting the stack during this harness).
             - Once complete, call `manage_stelae` again with {verify_payload} (or another read-only verification step) to confirm the server is listed.
             - Rely on MCP responses and report the results.
             """
@@ -1055,6 +1154,7 @@ class CloneSmokeHarness:
                 "operation": "remove_server",
                 "params": {
                     "name": self.external_target,
+                    "dry_run": True,
                     "force": True,
                 },
             }
@@ -1062,7 +1162,7 @@ class CloneSmokeHarness:
         return textwrap.dedent(
             f"""
             Clean up the `{self.external_target}` installation so the sandbox returns to a clean state. Operate entirely through the MCP catalog (no shell access).
-            - Call `manage_stelae` with {remove_payload} and wait for the tool to confirm completion.
+            - Call `manage_stelae` with {remove_payload} (dry-run) and wait for the tool to confirm completion.
             - Verify the alias no longer appears in discovery (read-only checks only).
             - Summarize the outcome; do not issue shell commands.
             """
@@ -1192,6 +1292,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--codex-cli", help="Path to the codex CLI binary to run inside the sandbox")
     parser.add_argument("--codex-home", help="Optional path to mirror into CODEX_HOME inside the sandbox")
     parser.add_argument(
+        "--plan-only",
+        action="store_true",
+        help="Show planned steps, paths, and env without executing commands (dry run)",
+    )
+    parser.add_argument(
         "--capture-debug-tools",
         action="store_true",
         help="Enable FastMCP + tool_aggregator debug logs and persist per-stage snapshots alongside Codex transcripts",
@@ -1227,7 +1332,24 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--reuse-workspace",
         action="store_true",
-        help="Reuse an existing smoke workspace (identified by the marker file) instead of deleting it",
+        default=True,
+        help="Reuse an existing smoke workspace (identified by the marker file) instead of deleting it (default: on when --workspace is set)",
+    )
+    parser.add_argument(
+        "--no-reuse-workspace",
+        action="store_false",
+        dest="reuse_workspace",
+        help="Do not reuse an existing workspace; recreate it even if present",
+    )
+    parser.add_argument(
+        "--force-outdated",
+        action="store_true",
+        help="Proceed even if the reused workspace's clone is behind the source repo",
+    )
+    parser.add_argument(
+        "--force-bootstrap",
+        action="store_true",
+        help="Redo bootstrap steps (clone/install/bundle) even when reusing a workspace",
     )
     args = parser.parse_args(argv)
     if args.bootstrap_only and args.skip_bootstrap:

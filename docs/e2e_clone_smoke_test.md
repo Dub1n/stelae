@@ -92,6 +92,7 @@ For the active backlog, run logs, and troubleshooting playbooks see
 Common options:
 
 - `--workspace /tmp/stelae-smoke` – reuse a specific directory instead of `mkdtemp`.
+- `--reuse-workspace` (default when `--workspace` is set) – reuse an existing workspace and skip bootstrap by default; the harness refuses to reuse if the clone is behind the source repo unless `--force-outdated` is set. Use `--no-reuse-workspace` or `--force-bootstrap` to rebuild in place.
 - `--keep-workspace` – keep artifacts after success.
 - `--codex-cli /path/to/codex` – pin a specific Codex binary (defaults to `shutil.which("codex")`).
 - `--codex-home /path/to/.codex` – mirror a custom Codex config/auth directory into the sandbox.
@@ -100,6 +101,8 @@ Common options:
 - `--capture-debug-tools` – enable the FastMCP/tool-aggregator debug env vars, store their log files under `${WORKSPACE}/logs/`,
   add a per-stage copy to `codex-transcripts/`, and mirror the same snapshots to `dev/logs/harness/` so the artifacts survive
   even when the disposable workspace is deleted.
+- Windows-backed paths guard: if `--workspace` or the auto-chosen temp dir resolves under `/mnt/<drive>`, the harness aborts with a warning. Keep workspaces/TMPDIR on ext4 inside WSL (e.g., `~/tmp`) to avoid slow/unstable I/O.
+- `--plan-only` – dry-run mode that prints the planned steps and paths (workspace, config/state homes, ports, flags) without executing any commands.
 - `--bootstrap-only` – run the clone/bundle/bootstrap steps once, keep the workspace, and exit before restarting the stack. Pair with `--workspace … --keep-workspace` (set automatically) so subsequent runs can reuse the warmed caches.
 - `--skip-bootstrap --workspace <path> --reuse-workspace` – reuse a previously prepared smoke workspace without re-running clone/bundle setup. The harness validates that `.env`, the proxy checkout, and the workspace marker still exist, then keeps the previously assigned `PROXY_PORT` so reruns exercise the same install phase without repeating dependency downloads.
 - `--restart-timeout <seconds>` – bound each `run_restart_stelae.sh` invocation (default 90 s). When the timeout fires, the harness dumps `pm2 status`, tail snippets from `${PM2_HOME}/logs/*`, and retries up to `--restart-retries`.
@@ -153,6 +156,10 @@ The JSONL files prove exactly which MCP calls executed and are parsed by
 `stelae_lib.smoke_harness.summarize_tool_calls`. If a future change renames tools or
 alters the expected sequence, update the harness expectations and the accompanying
 unit tests (`tests/test_codex_exec_transcript.py`).
+
+**Safety note:** The install/remove prompts now set `"dry_run": true` on the `manage_stelae`
+calls to avoid triggering nested render/restart cycles during the harness run. Add a separate
+Codex-driven test (outside this harness) for full install/remove coverage when the stack is stable.
 
 ## Feedback + cleanup
 

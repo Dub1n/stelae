@@ -20,6 +20,7 @@ logs/
 *.log
 .docy.cache/
 .ai/
+var/
 
 # Environment and secrets
 .env
