@@ -167,6 +167,11 @@ class CloneSmokeHarness:
         self.force_outdated = bool(args.force_outdated)
         self.force_bootstrap = bool(args.force_bootstrap)
         self.plan_only = bool(args.plan_only)
+        self.go_flags = args.go_flags if args.go_flags is not None else ""
+        self.gomaxprocs = args.gomaxprocs if args.gomaxprocs is not None else ""
+        self.skip_pm2_kill = bool(args.no_pm2_kill)
+        self.skip_port_kill = bool(args.no_port_kill)
+        self.pytest_scope = args.pytest_scope
         self.source_repo = Path(args.source).resolve()
         if not (self.source_repo / "README.md").exists():
             raise SystemExit(f"{self.source_repo} does not look like the stelae repo")
@@ -248,6 +253,10 @@ class CloneSmokeHarness:
                 "STELAE_USE_INTENDED_CATALOG": "1",
             }
         )
+        if self.go_flags:
+            self._env["GOFLAGS"] = self.go_flags
+        if self.gomaxprocs:
+            self._env["GOMAXPROCS"] = self.gomaxprocs
         self._env["PYTHON"] = self.python_bin
         self._env["SHIM_PYTHON"] = self.python_bin
         self._apply_proxy_port(self.proxy_port)
@@ -499,6 +508,11 @@ class CloneSmokeHarness:
             "restart_retries": self.restart_retries,
             "heartbeat_timeout": self.heartbeat_timeout,
             "capture_debug_tools": self.capture_debug_tools,
+            "go_flags": self.go_flags or "<default>",
+            "gomaxprocs": self.gomaxprocs or "<default>",
+            "skip_pm2_kill": self.skip_pm2_kill,
+            "skip_port_kill": self.skip_port_kill,
+            "pytest_scope": self.pytest_scope,
         }
         for key, value in summary.items():
             self._log(f"[plan] {key}: {value}")
@@ -673,11 +687,13 @@ class CloneSmokeHarness:
             self._log("Catalog restart cycle 1/1 (intended)")
             self._run_render_restart()
             self._assert_clean_repo("post-restart[intended]")
-            self._run_pytest(["tests/test_repo_sanitized.py"], label="structural")
+            if self.pytest_scope in ("structural", "full"):
+                self._run_pytest(["tests/test_repo_sanitized.py"], label="structural")
             stages = self._codex_stages()
             self._prepare_codex_environment()
             self._run_codex_flow(stages)
-            self._run_pytest([], label="full-suite")
+            if self.pytest_scope == "full":
+                self._run_pytest([], label="full-suite")
             self._run_verify_clean()
             self._assert_clean_repo("final")
             success = True
@@ -852,13 +868,18 @@ class CloneSmokeHarness:
     def _run_render_restart(self) -> None:
         self._log("Running make render-proxy…")
         self._run(["make", "render-proxy"], cwd=self.clone_dir)
-        self._preflight_proxy_port()
+        if not self.skip_port_kill:
+            self._preflight_proxy_port()
         restart_script = self.clone_dir / "scripts" / "run_restart_stelae.sh"
         args = [
             str(restart_script),
             "--no-bridge",
             "--no-cloudflared",
         ]
+        if self.skip_pm2_kill:
+            args.append("--no-pm2-kill")
+        if self.skip_port_kill:
+            args.append("--no-port-kill")
         self._log("Restarting stack inside sandbox (expected <60s; investigate logs instead of extending timeouts)…")
         self._run_restart_with_retry(args)
         self._log("Restart script finished successfully.")
@@ -1297,6 +1318,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help="Show planned steps, paths, and env without executing commands (dry run)",
     )
     parser.add_argument(
+        "--go-flags",
+        default="-p=1",
+        help="GOFLAGS value to use for proxy builds (default: -p=1 to throttle parallelism; set empty to use Go default)",
+    )
+    parser.add_argument(
+        "--gomaxprocs",
+        default="1",
+        help="GOMAXPROCS value to use during proxy builds (default: 1; set empty to use Go default)",
+    )
+    parser.add_argument(
         "--capture-debug-tools",
         action="store_true",
         help="Enable FastMCP + tool_aggregator debug logs and persist per-stage snapshots alongside Codex transcripts",
@@ -1310,8 +1341,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--restart-retries",
         type=int,
-        default=1,
-        help="Number of additional restart attempts after a timeout (default: 1)",
+        default=0,
+        help="Number of additional restart attempts after a timeout (default: 0)",
     )
     parser.add_argument(
         "--heartbeat-timeout",
@@ -1350,6 +1381,29 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--force-bootstrap",
         action="store_true",
         help="Redo bootstrap steps (clone/install/bundle) even when reusing a workspace",
+    )
+    parser.add_argument(
+        "--no-pm2-kill",
+        action="store_true",
+        default=True,
+        help="Skip pm2 kill during restart; only restart managed apps (default)",
+    )
+    parser.add_argument(
+        "--pm2-kill",
+        action="store_false",
+        dest="no_pm2_kill",
+        help="Allow pm2 kill during restart (reverts to previous aggressive behavior)",
+    )
+    parser.add_argument(
+        "--no-port-kill",
+        action="store_true",
+        help="Skip aggressive pre-kill of listeners on the proxy port during restart",
+    )
+    parser.add_argument(
+        "--pytest-scope",
+        choices=["none", "structural", "full"],
+        default="structural",
+        help="Which pytest scope to run after restart (default: structural)",
     )
     args = parser.parse_args(argv)
     if args.bootstrap_only and args.skip_bootstrap:

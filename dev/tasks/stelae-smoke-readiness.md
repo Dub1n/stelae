@@ -72,6 +72,7 @@ Tags: `#infra`, `#tests`, `#docs`
   - Add guardrail tests around `probe_jsonrpc_initialize` and heartbeat timeouts (`tests/test_streamable_mcp.py` follow-up) once the manifest regression is covered.
   - Temporary guard: clone-harness `manage_stelae` install/remove calls now set `dry_run=true` to avoid nested render/restart churn during Codex stages; track a dedicated full-install run separately (see Follow-ups).
   - Planning aid: `--plan-only` prints the planned steps/env/paths and exits without executing commands for safe triage.
+  - Restart throttles: default `--no-pm2-kill`, optional `--no-port-kill`, and serialized Go builds (`--go-flags`, `--gomaxprocs`) are in place to reduce restart aggressiveness; pytest scope can be limited via `--pytest-scope`.
 
 ### Codex orchestration
 

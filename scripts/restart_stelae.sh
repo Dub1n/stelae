@@ -125,6 +125,7 @@ START_WATCHDOG=1
 KEEP_PM2=0
 FULL_REDEPLOY=0
 RUN_POPULATE=1
+PORT_PREKILL=1
 CATALOG_MODE_OVERRIDE=""
 for arg in "$@"; do
   case "$arg" in
@@ -132,6 +133,8 @@ for arg in "$@"; do
     --no-bridge) START_BRIDGE=0;;
     --no-watchdog) START_WATCHDOG=0;;
     --keep-pm2) KEEP_PM2=1;;
+    --no-pm2-kill) KEEP_PM2=1;;
+    --no-port-kill) PORT_PREKILL=0;;
     --full) FULL_REDEPLOY=1;;
     --skip-populate-overrides) RUN_POPULATE=0;;
     --legacy-catalog) CATALOG_MODE_OVERRIDE="legacy";;
@@ -458,13 +461,17 @@ else
   warn "--keep-pm2 set: will not kill pm2, only restart known apps"
 fi
 
-log "Killing stray listeners on :$PROXY_PORT (if any)…"
-mapfile -t PIDS < <(ss -ltnp "( sport = :$PROXY_PORT )" | awk -F',' '/pid=/{print $2}' | sed 's/pid=//' | awk '{print $1}' | sort -u)
-if [ "${#PIDS[@]}" -gt 0 ]; then
-  for pid in "${PIDS[@]}"; do kill -9 "$pid" 2>/dev/null || true; done
-  log "Killed ${#PIDS[@]} listener(s) on :$PROXY_PORT"
+if [ "$PORT_PREKILL" -eq 1 ]; then
+  log "Killing stray listeners on :$PROXY_PORT (if any)…"
+  mapfile -t PIDS < <(ss -ltnp "( sport = :$PROXY_PORT )" | awk -F',' '/pid=/{print $2}' | sed 's/pid=//' | awk '{print $1}' | sort -u)
+  if [ "${#PIDS[@]}" -gt 0 ]; then
+    for pid in "${PIDS[@]}"; do kill -9 "$pid" 2>/dev/null || true; done
+    log "Killed ${#PIDS[@]} listener(s) on :$PROXY_PORT"
+  else
+    log "No stray listeners detected on :$PROXY_PORT"
+  fi
 else
-  log "No stray listeners detected on :$PROXY_PORT"
+  warn "--no-port-kill set: skipping aggressive port pre-kill; relying on pm2 restarts"
 fi
 
 # render proxy config ----------------------------------------------------------
