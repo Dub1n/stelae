@@ -469,30 +469,33 @@ ensure_proxy_build() {
 
 validate_prebuilt_proxy() {
   if [ ! -x "$PROXY_BIN" ]; then
-    err "Proxy binary missing at $PROXY_BIN; rerun without --skip-proxy-build."
-    exit 1
+    warn "Proxy binary missing at $PROXY_BIN; rebuilding despite --skip-proxy-build."
+    return 1
   fi
   if [ ! -f "$stamp_path" ]; then
-    err "Proxy build stamp missing (expected $stamp_path); rerun without --skip-proxy-build."
-    exit 1
+    warn "Proxy build stamp missing (expected $stamp_path); rebuilding despite --skip-proxy-build."
+    return 1
   fi
   local stamp_commit current_commit
   stamp_commit=$(grep '^commit=' "$stamp_path" | head -1 | sed 's/^commit=//')
   current_commit="$(git -C "$PROXY_DIR" rev-parse HEAD 2>/dev/null || true)"
   if [ -z "$stamp_commit" ] || [ -z "$current_commit" ]; then
-    err "Unable to validate proxy commit; rerun without --skip-proxy-build."
-    exit 1
+    warn "Unable to validate proxy commit; rebuilding despite --skip-proxy-build."
+    return 1
   fi
   if [ "$stamp_commit" != "$current_commit" ]; then
-    err "Proxy binary commit ($stamp_commit) differs from source ($current_commit); rerun without --skip-proxy-build to rebuild."
-    exit 1
+    warn "Proxy binary commit ($stamp_commit) differs from source ($current_commit); rebuilding despite --skip-proxy-build."
+    return 1
   fi
   log "Reusing proxy binary built from commit $stamp_commit (stamp ok)."
+  return 0
 }
 
 # build fresh proxy binary before restarting services (or reuse if requested)
 if [ "$SKIP_PROXY_BUILD" -eq 1 ]; then
-  validate_prebuilt_proxy
+  if ! validate_prebuilt_proxy; then
+    ensure_proxy_build
+  fi
 else
   ensure_proxy_build
 fi
