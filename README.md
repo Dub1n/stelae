@@ -69,6 +69,7 @@ When the manifest lists the expected tools and PM2 shows the proxy, FastMCP brid
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) – Deep dive into config layering, catalog flow, and the intended/live snapshot model.
 - [AGENTS.md](AGENTS.md) – Operational expectations for agents working inside this repo.
 - [docs/e2e_clone_smoke_test.md](docs/e2e_clone_smoke_test.md) – Clone-smoke harness and verification steps.
+- [CONTRIBUTING.md](CONTRIBUTING.md) – Quickstart for contributors (env/restart/diag flags).
 
 ## Support & Troubleshooting
 
