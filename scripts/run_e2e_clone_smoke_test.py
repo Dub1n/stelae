@@ -174,6 +174,7 @@ class CloneSmokeHarness:
         self.pytest_scope = args.pytest_scope
         self.capture_diag_logs = bool(args.capture_diag_logs)
         self.force_no_logs = bool(args.force_no_logs)
+        self.bootstrap_build = not bool(getattr(args, "no_bootstrap_build", False))
         self.source_repo = Path(args.source).resolve()
         if not (self.source_repo / "README.md").exists():
             raise SystemExit(f"{self.source_repo} does not look like the stelae repo")
@@ -587,6 +588,7 @@ class CloneSmokeHarness:
             "reuse_workspace": self.reuse_workspace,
             "force_outdated": self.force_outdated,
             "force_bootstrap": self.force_bootstrap,
+            "bootstrap_build": self.bootstrap_build,
             "ephemeral": self._ephemeral,
             "clone_dir": str(self.clone_dir),
             "apps_dir": str(self.apps_dir),
@@ -778,6 +780,18 @@ class CloneSmokeHarness:
                 self._copy_wrapper_release()
                 self._prepare_env_file()
                 self._install_starter_bundle()
+                if self.args.bootstrap_only and self.bootstrap_build:
+                    self._log("Bootstrap-only: building proxy binary for reuse in later stages.")
+                    self._run(["make", "render-proxy"], cwd=self.clone_dir)
+                    restart_script = self.clone_dir / "scripts" / "run_restart_stelae.sh"
+                    self._run(
+                        [
+                            str(restart_script),
+                            "--no-bridge",
+                            "--no-cloudflared",
+                        ],
+                        cwd=self.clone_dir,
+                    )
             if self.args.bootstrap_only:
                 self._log(
                     f"Bootstrap-only flag set; workspace retained at {self.workspace} (rerun without --bootstrap-only to continue)."
@@ -1407,6 +1421,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--bootstrap-only",
         action="store_true",
         help="Run bootstrap/setup steps (clone, bundle install) and exit before restarting the stack",
+    )
+    parser.add_argument(
+        "--no-bootstrap-build",
+        action="store_true",
+        help="When used with --bootstrap-only, skip building/stamping the proxy binary",
     )
     parser.add_argument(
         "--skip-bootstrap",

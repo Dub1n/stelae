@@ -105,6 +105,7 @@ Common options:
 - `--plan-only` – dry-run mode that prints the planned steps and paths (workspace, config/state homes, ports, flags) without executing any commands.
 - `--capture-diag-logs` – best-effort sidecar logging (dmesg/syslog/top/vmstat/free, plus pm2 logs snapshot) to `logs/diag/` for the duration of the run. Requires ext4; aborts if dmesg/syslog cannot start unless `--force-no-logs` is set.
 - `--force-no-logs` – proceed even if diag logging cannot start (suppresses the dmesg/syslog guard).
+- `--bootstrap-only` will now build and stamp the proxy binary (unless `--no-bootstrap-build` is set) so subsequent restarts reuse it via `--skip-proxy-build`.
 - Restart throttles: `--no-pm2-kill` (default) and `--no-port-kill` avoid killing the pm2 table or stray listeners; `--pm2-kill`/default port-prekill restores the old aggressive behavior when needed. `--go-flags` (default `-p=1`) and `--gomaxprocs` (default `1`) reduce Go build parallelism; `--restart-retries` now defaults to 0.
 - Test scope: `--pytest-scope {none,structural,full}` (default `structural`) to skip the full suite unless explicitly requested.
 - Proxy build reuse: the initial restart builds `mcp-proxy` inside the sandbox. Subsequent restarts (including `manage_stelae` actions) pass `--skip-proxy-build` to `scripts/restart_stelae.sh` via `STELAE_RESTART_ARGS`, reusing the built binary. If the stamp doesn’t match the current proxy commit, the restart fails; rerun without the skip (e.g., fresh workspace/bootstrap) to rebuild.
